@@ -1,0 +1,15 @@
+.venv/
+.venv-pip/
+.env
+.env.*
+!.env.example
+.local/
+*.sqlite3
+*.sqlite3-*
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.DS_Store
