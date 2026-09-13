@@ -167,17 +167,6 @@ uv run python manage.py test backend.apps.accounts --settings=backend.config.tes
 
 Con pip, usa el mismo reemplazo de `uv run python` indicado arriba. Las pruebas crean una base separada y no modifican tu usuario local. Si cambias modelos, genera y revisa la migración correspondiente antes de comprobar que no quedan migraciones pendientes.
 
-## Problemas al arrancar
-
-| Problema | Qué revisar |
-|---|---|
-| No se encuentra `manage.py` | Abre la terminal en la raíz del proyecto. |
-| Falta Django u otra dependencia | Completa la instalación y usa el intérprete de `.venv` o `uv run`. |
-| Se exige una clave Django o no permite crear el usuario | Comprueba que existe `.env` y contiene `DJANGO_DEBUG=true` para trabajar localmente. |
-| Error de tabla inexistente | Ejecuta `manage.py migrate` con el intérprete de tu instalación. |
-| Login rechazado | Ejecuta `seed_demo_user`; si cambiaste la contraseña, usa `--reset-password`. |
-| Puerto 8000 ocupado | Detén el servidor anterior o arranca con `manage.py runserver 8001` y usa ese puerto en las peticiones. |
-
 ## Dependencias y documentación
 
 La estructura del código está en [backend](backend/README.md) y los documentos de referencia en [docs](docs/README.md). `.env`, la base SQLite y los correos locales no se suben a Git. La base y la clave Django local se guardan en `.local/` con la configuración predeterminada.
