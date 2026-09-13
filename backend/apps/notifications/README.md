@@ -1,6 +1,6 @@
-# notifications/ — Teams y contingencia por correo
+# Notifications: avisos por Teams y correo
 
-Módulo interno de SCRUM-41, sin responsable asignado en el handoff. **No tiene endpoints públicos ni rutas consumidas por el frontend.**
+Estado: pendiente de implementación (SCRUM-41). Los archivos actuales son la estructura base. El módulo enviará avisos internos; no tiene endpoints públicos. El responsable sigue sin asignar en el handoff.
 
 ## Capas y métodos previstos
 
@@ -19,6 +19,6 @@ El payload externo permite tipo de mensaje, box, tipo de riesgo, urgencia y fech
 
 `NOTIFICATIONS_ENABLED=false` desactiva envíos en desarrollo y pruebas sintéticas. Si se activa y falta configuración de Teams, se registra fallo de ese canal y se intenta correo. Si ambos fallan, retornar resultado fallido sin eliminar la alerta ni ocultar el fallo.
 
-SCRUM-41 configurará el workflow, sus propietarios de continuidad y destinatarios con la clínica. Usar la integración vigente de [Teams Workflows](https://learn.microsoft.com/en-us/microsoftteams/platform/webhooks-and-connectors/what-are-webhooks-and-connectors), encapsulando su formato de transporte. No se despliega ningún workflow ni se envía correo/Teams durante SCRUM-30.
+SCRUM-41 configurará el workflow, sus propietarios de continuidad y destinatarios con la clínica. Usar la integración vigente de [Teams Workflows](https://learn.microsoft.com/en-us/microsoftteams/platform/webhooks-and-connectors/what-are-webhooks-and-connectors), encapsulando su formato de transporte. La configuración local mantiene los envíos desactivados.
 
 Pruebas futuras: éxito Teams sin correo, timeout/rechazo Teams con correo, fallo doble, envíos deshabilitados, NULO sin envío y ausencia de información sensible.

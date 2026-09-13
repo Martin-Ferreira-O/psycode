@@ -267,12 +267,54 @@ class AuthTests(TestCase):
     def test_demo_user_command_is_idempotent(self):
         out = io.StringIO()
         call_command("seed_demo_user", stdout=out)
-        demo = User.objects.get(username="martin.demo")
+        demo = User.objects.get(username="autonoma")
+        self.assertTrue(demo.check_password("autonoma"))
+        self.assertNotEqual(demo.password, "autonoma")
+        self.assertEqual(demo.email, "autonoma@example.test")
+        self.assertEqual(demo.get_full_name(), "Equipo Autonoma")
+        demo.set_password(NEW_PASSWORD)
+        demo.save(update_fields=["password"])
         original_hash = demo.password
         call_command("seed_demo_user", stdout=out)
         demo.refresh_from_db()
         self.assertEqual(demo.password, original_hash)
         self.assertFalse(demo.is_staff or demo.is_superuser)
+
+    @override_settings(DEBUG=True)
+    def test_demo_user_login_and_password_reset(self):
+        call_command("seed_demo_user", stdout=io.StringIO())
+        response = self.client.post(PREFIX + "login", {"usuario": "autonoma", "password": "autonoma"}, format="json")
+        self.assertEqual(response.status_code, 200)
+        demo = User.objects.get(username="autonoma")
+        demo.set_password(NEW_PASSWORD)
+        demo.save(update_fields=["password"])
+        call_command("seed_demo_user", reset_password=True, stdout=io.StringIO())
+        demo.refresh_from_db()
+        self.assertTrue(demo.check_password("autonoma"))
+
+    @override_settings(DEBUG=True)
+    def test_demo_reset_refuses_other_email_or_privileged_user(self):
+        call_command("seed_demo_user", stdout=io.StringIO())
+        demo = User.objects.get(username="autonoma")
+        original_hash = demo.password
+        for changes in ({"email": "other@example.test"}, {"is_staff": True}, {"is_superuser": True}):
+            with self.subTest(changes=changes):
+                demo.email = "autonoma@example.test"
+                demo.is_staff = demo.is_superuser = False
+                for field, value in changes.items():
+                    setattr(demo, field, value)
+                demo.save()
+                with self.assertRaises(CommandError):
+                    call_command("seed_demo_user", reset_password=True)
+                demo.refresh_from_db()
+                self.assertEqual(demo.password, original_hash)
+
+    @override_settings(DEBUG=True)
+    def test_demo_user_refuses_email_collision(self):
+        User.objects.create_user(username="another", email="autonoma@example.test", password=PASSWORD)
+        with self.assertRaises(CommandError):
+            call_command("seed_demo_user")
+        self.assertFalse(User.objects.filter(username="autonoma").exists())
 
     def test_demo_user_refused_outside_debug(self):
         with self.assertRaises(CommandError):

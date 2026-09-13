@@ -1,5 +1,18 @@
-# migrations/ — Esquema SQLite de accounts
+# Migraciones de accounts
 
-Migración inicial para User UUID, RefreshSession y PasswordReset. Django genera los archivos a partir de models.py. Se ejecutan con `uv run python manage.py migrate` o `python manage.py migrate` en venv.
+Esta carpeta contiene los cambios del esquema SQLite para `User`, `RefreshSession` y `PasswordReset` (SCRUM-31).
 
-Sin rutas HTTP ni servicios. Dependencia: migraciones de auth/contenttypes de Django. No modificar una migración ya aplicada en un entorno compartido; crear una nueva. Tarea SCRUM-31; MongoDB no usa estas migraciones.
+Para aplicar las migraciones, ejecuta desde la raíz:
+
+```sh
+uv run python manage.py migrate
+```
+
+Si tu tarea cambia `models.py`, genera la migración y revisa el archivo antes de incluirlo en el cambio:
+
+```sh
+uv run python manage.py makemigrations accounts
+uv run python manage.py migrate
+```
+
+Con pip, sustituye `uv run python` por `python` en el entorno activado, o por `.venv\Scripts\python.exe` en Windows. No edites migraciones que el equipo ya haya aplicado; agrega una nueva. Estas migraciones no gestionan MongoDB.

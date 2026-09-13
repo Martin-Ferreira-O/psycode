@@ -1,8 +1,10 @@
-# alerts/ — Alertas y evaluaciones
+# Alerts: alertas y evaluaciones
 
-Responsable del registro interno, consulta, filtros y evaluación. Persistencia MongoDB mediante PyMongo. SCRUM-32 implementa persistencia; SCRUM-33 consultas; SCRUM-34 evaluación. Consumidores frontend: SCRUM-37, SCRUM-39 y SCRUM-40.
+Estado: pendiente de implementación. Los archivos actuales son la estructura base; las rutas de esta página todavía responden 404.
 
-## Rutas
+Este módulo manejará el registro, consulta, filtros y evaluación de alertas con persistencia en MongoDB. SCRUM-32 implementa persistencia; SCRUM-33 consultas; SCRUM-34 evaluación. Consumidores frontend: SCRUM-37, SCRUM-39 y SCRUM-40.
+
+## Rutas por implementar
 
 Namespace Django `alerts`:
 
@@ -12,7 +14,7 @@ Namespace Django `alerts`:
 | GET | `/api/v1/alerts/{alerta_id}` | `detail` |
 | GET, POST | `/api/v1/alerts/{alerta_id}/evaluacion` | `evaluation` |
 
-Un patrón de URL para evaluación despacha según método; no se declaran dos rutas idénticas. [Contrato completo](../../../API_CONTRACTS.md#2-alertas-y-evaluaciones). No hay creación, edición general o eliminación públicas de alertas.
+Usa un único patrón de URL para evaluación y despacha según el método HTTP. [Contrato completo](../../../API_CONTRACTS.md#2-alertas-y-evaluaciones). No hay creación, edición general o eliminación públicas de alertas.
 
 ## Capas y métodos previstos
 

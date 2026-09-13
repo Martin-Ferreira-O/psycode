@@ -1,3 +1,3 @@
-# management/ — Comandos de accounts
+# Comandos de accounts
 
-Contenedor Django de [commands](commands/README.md). No expone rutas HTTP. Los comandos usan el modelo de usuario y las reglas de autenticación de SCRUM-31.
+Los comandos de administración de usuarios están en [commands](commands/README.md). Se ejecutan desde la raíz del proyecto con `manage.py`.

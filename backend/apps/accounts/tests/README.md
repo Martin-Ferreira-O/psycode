@@ -1,7 +1,13 @@
-# tests/ — Verificación SCRUM-31
+# Pruebas de autenticación
 
-Pruebas de contratos HTTP, hashing, identidad, rotación/logout, recuperación de un solo uso, invalidación de sesiones, errores de persistencia/correo y concurrencia SQLite real. No tienen rutas propias.
+Ejecuta desde la raíz del proyecto:
 
-Ejecutar desde la raíz: `uv run python manage.py test backend.apps.accounts --settings=backend.config.test_settings`. Alternativa: el mismo comando sin `uv run` dentro del venv. No usar datos clínicos.
+```sh
+uv run python manage.py test backend.apps.accounts --settings=backend.config.test_settings
+```
 
-`test_settings` usa una base temporal de tests en `.local/test-auth.sqlite3`; Django la crea y elimina. Las pruebas de concurrencia abren conexiones independientes. El correo se simula salvo una prueba del worker que escribe en un directorio temporal privado, sin envío SMTP.
+Con pip, sustituye `uv run python` por `python` dentro del entorno activado, o por `.venv\Scripts\python.exe` en Windows PowerShell.
+
+Las pruebas cubren login, credenciales incorrectas, usuarios inactivos, renovación y cierre de sesión, recuperación de contraseña, fallos de persistencia y correo, concurrencia y creación/restablecimiento de la cuenta local.
+
+Django crea y elimina la base de pruebas `.local/test-auth.sqlite3`; la base de desarrollo se conserva. Las pruebas de concurrencia usan conexiones independientes. El correo se simula, salvo una prueba que escribe en una carpeta temporal; no se envían correos por SMTP.

@@ -1,8 +1,10 @@
-# dashboard/ — Resumen y estadísticas
+# Dashboard: resumen y estadísticas
 
-Proporciona agregaciones para SCRUM-36. El backlog asigna esa tarea al frontend; el responsable de implementar las agregaciones backend sigue sin asignar. Esta definición permite preparar ambos lados sin inventar una asignación.
+Estado: pendiente de implementación. Las rutas de esta página todavía responden 404.
 
-## Rutas
+SCRUM-36 necesita estas agregaciones para el frontend. El responsable del backend sigue sin asignar en el handoff; coordina esa asignación al abordar la tarea.
+
+## Rutas por implementar
 
 | Método | Ruta | Nombre Django |
 |---|---|---|

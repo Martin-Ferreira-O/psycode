@@ -1,6 +1,6 @@
-# config/ — Configuración y composición
+# Configuración del backend
 
-Settings Django, URLs raíz y composición explícita de accounts implementados. Configuración técnica; no contiene reglas clínicas ni consultas. Las demás apps se incluyen con patrones vacíos hasta implementar sus tareas.
+Aquí se configuran Django, las rutas raíz y la construcción del servicio de accounts. Las demás apps tienen rutas vacías hasta implementar sus tareas.
 
 ## Archivos y métodos
 
@@ -10,11 +10,11 @@ Settings Django, URLs raíz y composición explícita de accounts implementados.
 - `asgi.py` y `wsgi.py`: puntos de entrada de la aplicación.
 - `test_settings.py`: base de tests separada, correo simulado y configuración sin secretos reales.
 
-Rutas públicas: únicamente las de [API_CONTRACTS.md](../../API_CONTRACTS.md). Los patrones se definirán sin barra final; no depender de redirecciones para solicitudes POST. No se añaden admin, healthcheck ni documentación HTTP como endpoints de producto en SCRUM-30.
+Las rutas disponibles son las de autenticación. El resto de [API_CONTRACTS.md](../../API_CONTRACTS.md) está pendiente. Define las rutas sin barra final; el cliente debe usar la URL exacta, especialmente en solicitudes POST.
 
 ## Configuración
 
-| Variable | Uso / valor por defecto documental |
+| Variable | Uso |
 |---|---|
 | `DJANGO_SECRET_KEY` | Obligatorio fuera de DEBUG; en local se genera una clave persistente privada si falta |
 | `DJANGO_DEBUG` | `false`; habilitar solo localmente |
@@ -31,6 +31,6 @@ Valores de política fijados en el contrato: access 3600 segundos, refresh 24 ho
 
 ## Dependencias y tareas
 
-Puede importar implementaciones de las apps para componerlas. Las apps no importan `composition.py`. SCRUM-31 crea la base; SCRUM-32 configura MongoDB; SCRUM-41 configura notificaciones. No hay variables reales ni credenciales creadas aquí.
+Puede importar implementaciones de las apps para componerlas. Las apps no importan `composition.py`. SCRUM-31 tiene implementada la base; SCRUM-32 configura MongoDB; SCRUM-41 configura notificaciones.
 
-La instalación local guarda .env y la clave en .local, excluidos de Git. settings carga .env sin sobrescribir variables del entorno. EMAIL_BACKEND y EMAIL_FILE_PATH seleccionan archivos privados de desarrollo; EMAIL_USE_SSL complementa TLS para SMTP. Dependencias MongoDB/Teams no se conectan al arrancar. Cada proceso de correo recibe su configuración del mismo entorno y .env.
+La instalación local guarda `.env` en la raíz y la clave Django en `.local/`; ambos están excluidos de Git. settings carga .env sin sobrescribir variables del entorno. EMAIL_BACKEND y EMAIL_FILE_PATH seleccionan archivos privados de desarrollo; EMAIL_USE_SSL complementa TLS para SMTP. Dependencias MongoDB/Teams no se conectan al arrancar. Cada proceso de correo recibe su configuración del mismo entorno y .env.
