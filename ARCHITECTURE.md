@@ -106,7 +106,89 @@ Los fallos de MongoDB impiden el registro y el envío. Los fallos de notificaci�
 
 La secuencia es síncrona y acotada según el contrato. No hay transacción entre MongoDB, SQLite, Teams y correo, ni garantía de entrega exactamente una vez. Una caída entre persistir y notificar puede dejar una alerta sin aviso; la recuperación automática duradera queda fuera del backlog actual. Esta limitación debe revisarse antes de uso clínico real.
 
-## 4. Trabajo en paralelo
+## 4. Capa de frontend — dashboard e historial de alertas
+
+**Estado: diseño arquitectónico, pendiente de implementación.** La aplicación web permitirá a profesionales autenticados consultar el historial de alertas de riesgo de suicidio, revisar su detalle y registrar su evaluación. El dashboard será el punto de entrada después del inicio de sesión. Cubre SCRUM-35, 36, 37, 39 y 40; el stack frontend se definirá al activar esas tareas, según el handoff.
+
+### Ubicación y dependencias
+
+```mermaid
+flowchart TD
+    Profesional[Profesional autenticado] --> Frontend[Frontend web: dashboard e historial]
+    Frontend -->|HTTPS /api/v1/| API[Presentación API]
+    API --> Accounts[Accounts: autenticación]
+    API --> Dashboard[Dashboard: resumen y estadísticas]
+    API --> Alerts[Alerts: historial, detalle y evaluación]
+    Accounts --> SQLite[(SQLite)]
+    Dashboard --> Query[AlertQueryPort]
+    Alerts --> Query
+    Query --> MongoDB[(MongoDB)]
+    Alerts --> Write[AlertWritePort]
+    Write --> MongoDB
+```
+
+El navegador consume la API pública; las credenciales de persistencia y notificación permanecen en el backend. `backend/apps/dashboard` proporciona agregaciones; la pantalla dashboard pertenece al frontend. El servidor verifica autenticación y permisos en cada operación protegida.
+
+Estructura conceptual propuesta, sin crear código ni fijar una librería:
+
+```text
+frontend/
+  app/                navegación, composición y acceso protegido
+  features/
+    auth/             inicio, recuperación y cierre de sesión
+    dashboard/        indicadores, período y estadísticas
+    alerts/           historial, filtros, detalle y evaluación
+    evaluations/      consulta de evaluaciones registradas
+  shared/
+    api/              cliente HTTP, autenticación y errores
+    ui/               tabla, paginación, semáforo y estados de pantalla
+    formatting/       presentación de fechas y etiquetas
+```
+
+| Responsabilidad | Regla |
+|---|---|
+| Pantallas y componentes | Presentan datos, recogen acciones y muestran carga, vacío, error o éxito |
+| Coordinación por funcionalidad | Mantiene filtros, período, página y selección; solicita datos y actualiza vistas |
+| Cliente de API compartido | Construye solicitudes contractuales, interpreta envelopes y centraliza la renovación de sesión |
+| Formato de presentación | Muestra fechas en `America/Santiago` y semáforos con etiquetas además de color |
+
+Las pantallas no duplican reglas clínicas ni agregaciones. El backend determina severidad, estado, evaluación, autor y fecha de registro.
+
+### Pantallas y contratos
+
+Las rutas web son propuestas de navegación, distintas de los endpoints. Todos los endpoints de la tabla llevan el prefijo `/api/v1`.
+
+| Pantalla / ruta web propuesta | Contenido | API consumida |
+|---|---|---|
+| Autenticación `/login`, `/recuperar-password`, `/reset-password` | Inicio, recuperación y entrada al dashboard | Operaciones `/auth/*` del contrato |
+| Dashboard `/dashboard` | Total, pendientes, revisadas, conteos por semáforo y acceso visible al historial; selector semanal/mensual y fecha de referencia | `GET /dashboard/resumen` |
+| Estadísticas `/estadisticas` | Conteos diarios, total, historial del período y regreso al dashboard | `GET /dashboard/estadisticas` |
+| Historial `/alertas` | Tabla paginada, búsqueda, filtros combinables y apertura de detalle | `GET /alerts` |
+| Detalle, modal desde historial | Datos de la alerta, evaluación existente y formulario para pendientes | `GET /alerts/{alerta_id}`, `GET` y `POST /alerts/{alerta_id}/evaluacion` |
+| Registro `/evaluaciones` | Alertas revisadas, resultado, autor, fecha/hora de evaluación y acceso al detalle | `GET /alerts?revisadas=true`; evaluación incluida en cada fila |
+
+### Flujo del dashboard al historial
+
+1. Tras autenticar, cargar el resumen del período seleccionado. Las estadísticas usan el mismo `periodo` y `fecha_referencia`.
+2. «Ver historial del período» pasa `fecha_desde` y `fecha_hasta` inclusivas devueltas por el backend a `GET /alerts`. «Ver todo el historial» abre la consulta sin restricción de fechas.
+3. Cada fila muestra identificador, box, tipo de riesgo, severidad/semáforo, fecha, hora y estado de evaluación. Se respeta el orden del servidor: fecha/hora descendente y UUID ascendente en empates.
+4. Buscar con `q` por identificador, box o tipo de riesgo; combinar fechas, box y `estado_evaluacion`. Paginar en servidor con `limit`, `offset` y `total`. Al cambiar o limpiar filtros, volver a `offset=0`.
+5. Abrir el detalle conservando filtros y página al cerrar el modal. Consultar el estado actual antes de ofrecer evaluación: Correcta, Falso positivo o Neutro, enviadas con los valores exactos del contrato.
+6. Tras guardar, consultar el detalle y actualizar historial, registro de evaluaciones y agregados afectados. Ante `409`, recuperar la evaluación existente e informar que ya fue registrada. Si se pierde la respuesta de guardado, consultar su estado antes de permitir otro intento.
+
+Los gráficos usan agregaciones del período completo, no conteos de la página visible. Las alertas históricas muestran su estado actual de evaluación, no una reconstrucción de su estado en una fecha pasada.
+
+### Estado, sesión y errores
+
+- Mantener filtros y navegación durante la sesión; evitar datos clínicos, búsquedas libres y tokens en URLs o logs. No persistir respuestas clínicas en el navegador. Definir el mecanismo de almacenamiento de tokens al implementar autenticación frontend.
+- Centralizar el manejo de sesión, evitar renovaciones concurrentes y reemplazar ambos tokens al renovar. Si la sesión deja de ser válida, limpiar datos y credenciales locales y dirigir al inicio. Al salir, invocar logout y limpiar el estado local.
+- Diferenciar carga, actualización, historial vacío, filtros sin coincidencias y fallo de consulta. Un error no se presenta como cero alertas. Ofrecer reintento y descartar respuestas antiguas cuando cambien los filtros durante una petición.
+- Actualizar al entrar, cambiar filtros/período, guardar una evaluación o pulsar «Actualizar». No se promete tiempo real.
+- Permitir navegación por teclado y gestionar el foco del modal. Presentar únicamente los datos permitidos por el contrato, sin audio ni datos personales adicionales de pacientes.
+
+El frontend podrá trabajar con respuestas simuladas de [API_CONTRACTS.md](API_CONTRACTS.md) mientras las consultas backend estén pendientes. Los criterios de esta capa están en [aceptación frontend](docs/ACCEPTANCE.md#capa-frontend-dashboard-e-historial).
+
+## 5. Trabajo en paralelo
 
 | Tarea | Responsabilidad | Módulo / consumo | Responsable del handoff |
 |---|---|---|---|
@@ -126,7 +208,7 @@ El backlog asigna SCRUM-36 al frontend pero necesita agregaciones backend. Su co
 
 El frontend puede preparar respuestas simuladas con los ejemplos del contrato. Los desarrolladores backend podrán usar dobles de `AlertQueryPort`, `AlertWritePort` y `AlertNotifier`, sin esperar conexiones reales. Si varias personas editan `alerts/services.py`, coordinarán integración por métodos; no se crean módulos artificiales para evitar toda colaboración.
 
-## 5. Fuentes y mantenimiento
+## 6. Fuentes y mantenimiento
 
 Referencias consultadas para esta definición, 2026-09-12:
 
@@ -136,5 +218,3 @@ Referencias consultadas para esta definición, 2026-09-12:
 - [Simple JWT](https://django-rest-framework-simplejwt.readthedocs.io/en/stable/).
 - [Controlador oficial PyMongo](https://www.mongodb.com/docs/languages/python/pymongo-driver/current/).
 - [Teams: webhooks y Workflows](https://learn.microsoft.com/en-us/microsoftteams/platform/webhooks-and-connectors/what-are-webhooks-and-connectors).
-
-Context7 no estuvo disponible durante la revisión; se consultaron las fuentes oficiales como alternativa. El contrato y las decisiones locales prevalecen sobre los ejemplos de respuesta predeterminados de las librerías. Los criterios de aceptación están en [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md).

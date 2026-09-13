@@ -155,6 +155,8 @@ Lee tu tarea y abre el módulo y contrato correspondientes antes de modificar c�
 
 El código de este repositorio es el backend. Las tareas frontend consultan sus contratos aquí. El [handoff](HANDOFF.md) conserva las descripciones originales del backlog; para conocer lo que funciona en el código actual, usa esta tabla y los README de cada módulo.
 
+La [capa de frontend](ARCHITECTURE.md#4-capa-de-frontend--dashboard-e-historial-de-alertas) define la organización de pantallas, el dashboard y el acceso al historial de alertas de riesgo de suicidio. Es un diseño pendiente de implementación; el stack frontend todavía no está definido.
+
 ## Comprobar los cambios
 
 Ejecuta desde la raíz:

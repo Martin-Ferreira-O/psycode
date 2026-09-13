@@ -62,6 +62,24 @@ Estos son criterios especificados, **no pruebas ejecutadas ni funcionalidades ya
 | Notificación | NULO o envíos deshabilitados | Resultado omitido y cero intentos |
 | Privacidad | Notificación y logs | Ausencia de pacientes, audio, descripción libre, métodos operativos y secretos |
 
+## Capa frontend: dashboard e historial
+
+Ampliación arquitectónica solicitada el 2026-09-12. Son criterios para implementación futura, no pruebas ejecutadas.
+
+| Escenario | Resultado esperado |
+|---|---|
+| Inicio de sesión válido | Acceso al dashboard; navegación protegida y permisos comprobados en backend |
+| Seleccionar semana o mes | Resumen y estadísticas consultan el mismo período y fecha de referencia |
+| Abrir historial del período | Listado usa las fechas inclusivas devueltas por el dashboard |
+| Abrir todo el historial | Consulta sin restricción de fechas |
+| Consultar historial | Filas con identificador, box, riesgo, severidad, fecha/hora y estado; orden y paginación del servidor |
+| Combinar o limpiar filtros | Parámetros contractuales; offset vuelve a cero; respuestas antiguas no sustituyen la consulta vigente |
+| Abrir y cerrar detalle | Se conservan filtros y página; semáforo con texto y modal accesible por teclado |
+| Guardar evaluación | Actualizar detalle, listado, registro y agregados; autor y fecha asignados por backend |
+| Conflicto o respuesta de guardado perdida | Consultar evaluación existente, sin sobrescribir ni repetir automáticamente el POST |
+| Historial vacío o error de consulta | Estados diferentes; el error ofrece reintento y no muestra cero alertas como dato válido |
+| Cerrar sesión o perder autenticación | Limpiar datos y credenciales locales; volver al inicio de sesión |
+
 ## Cierre de fase
 
 ### Verificación realizada el 2026-09-12
