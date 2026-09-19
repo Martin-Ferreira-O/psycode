@@ -1,0 +1,329 @@
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard de alertas</title>
+
+    <link rel="stylesheet" href="{% static 'web/css/styles.css' %}">
+    <link rel="stylesheet" href="{% static 'web/css/dashboard.css' %}">
+    <link rel="stylesheet" href="{% static 'web/css/alertas.css' %}">
+</head>
+
+<body>
+    <div class="aplicacion">
+        <aside class="barra-lateral">
+            <div class="marca">
+                <div class="marca-icono">P</div>
+                <div>
+                    <strong>Psycode</strong>
+                    <span>Portal de alertas</span>
+                </div>
+            </div>
+
+            <nav class="navegacion">
+                <a href="/dashboard" class="enlace-menu activo">Dashboard</a>
+                <a href="/evaluaciones" class="enlace-menu">
+                    Registro de evaluaciones
+                </a>
+            </nav>
+
+            <a href="#" class="cerrar-sesion">Cerrar sesión</a>
+        </aside>
+
+        <main class="contenido-dashboard">
+            <header class="cabecera-dashboard">
+                <div>
+                    <span class="subtitulo">Panel principal</span>
+                    <h1>Dashboard de alertas</h1>
+                    <p>Consulta, filtra y evalúa las alertas detectadas.</p>
+                </div>
+
+                <div class="usuario">
+                    <div class="usuario-icono">S</div>
+                    <div>
+                        <strong>Supervisor</strong>
+                        <span>Cuenta institucional</span>
+                    </div>
+                </div>
+            </header>
+
+            <section class="tarjetas-resumen">
+                <a href="/estadisticas?tipo=total" class="tarjeta-resumen tarjeta-acceso">
+                    <div class="resumen-superior">
+                        <span class="resumen-enlace">Ver estadísticas →</span>
+                    </div>
+                    <span class="resumen-etiqueta">Alertas registradas</span>
+                    <strong id="totalAlertas" class="resumen-numero">0</strong>
+                </a>
+
+                <article class="tarjeta-resumen tarjeta-contador">
+                    <div class="resumen-superior" aria-hidden="true"></div>
+                    <span class="resumen-etiqueta">Pendientes</span>
+                    <strong id="totalPendientes" class="resumen-numero">0</strong>
+                </article>
+
+                <article class="tarjeta-resumen tarjeta-contador">
+                    <div class="resumen-superior" aria-hidden="true"></div>
+                    <span class="resumen-etiqueta">Revisadas</span>
+                    <strong id="totalRevisadas" class="resumen-numero">0</strong>
+                </article>
+            </section>
+
+            <section id="historial-alertas" class="seccion-historial">
+                <header class="cabecera-historial">
+                    <div>
+                        <h2>Historial de alertas</h2>
+                        <p>Consulta, filtra y revisa las detecciones.</p>
+                    </div>
+
+                    <button type="button" id="botonActualizar" class="boton-principal">
+                        Actualizar
+                    </button>
+                </header>
+
+                <div class="panel-filtros">
+                    <div class="campo campo-busqueda">
+                        <label for="buscar">Buscar</label>
+                        <input
+                            type="search"
+                            id="buscar"
+                            placeholder="ID, box o tipo de riesgo"
+                        >
+                    </div>
+
+                    <div class="campo">
+                        <label for="filtroBox">Box</label>
+                        <select id="filtroBox">
+                            <option value="">Todos</option>
+                            <option value="box-1">Box 01</option>
+                            <option value="box-2">Box 02</option>
+                            <option value="box-3">Box 03</option>
+                            <option value="box-4">Box 04</option>
+                            <option value="box-5">Box 05</option>
+                        </select>
+                    </div>
+
+                    <div class="campo">
+                        <label for="filtroEstado">Estado</label>
+                        <select id="filtroEstado">
+                            <option value="">Todos</option>
+                            <option value="pendiente">Pendiente</option>
+                            <option value="correcta">Correcta</option>
+                            <option value="falso_positivo">Falso positivo</option>
+                            <option value="neutro">Neutro</option>
+                        </select>
+                    </div>
+
+                    <div class="campo">
+                        <label for="fechaDesde">Desde</label>
+                        <input type="date" id="fechaDesde">
+                    </div>
+
+                    <div class="campo">
+                        <label for="fechaHasta">Hasta</label>
+                        <input type="date" id="fechaHasta">
+                    </div>
+
+                    <button type="button" id="limpiarFiltros" class="boton-secundario">
+                        Limpiar
+                    </button>
+                </div>
+
+                <section class="panel-alertas">
+                    <div class="panel-cabecera">
+                        <div>
+                            <h2>Alertas registradas</h2>
+                            <p id="resultadoTexto">Cargando alertas...</p>
+                        </div>
+                    </div>
+
+                    <div id="estadoVacio" class="estado-vacio" hidden>
+                        <strong>No se encontraron alertas</strong>
+                        <p>Prueba modificando o limpiando los filtros.</p>
+                    </div>
+
+                    <div id="tablaContenedor" class="tabla-contenedor">
+                        <table class="tabla-alertas">
+                            <thead>
+                                <tr>
+                                    <th>Alerta</th>
+                                    <th>Box</th>
+                                    <th>Tipo</th>
+                                    <th>Nivel</th>
+                                    <th>Fecha</th>
+                                    <th>Hora</th>
+                                    <th>Estado</th>
+                                    <th>Acción</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tablaAlertas"></tbody>
+                        </table>
+                    </div>
+
+                    <footer id="paginacion" class="paginacion">
+                        <span id="textoPaginacion"></span>
+
+                        <div class="botones-paginacion">
+                            <button type="button" id="paginaAnterior">
+                                Anterior
+                            </button>
+
+                            <div id="numerosPagina"></div>
+
+                            <button type="button" id="paginaSiguiente">
+                                Siguiente
+                            </button>
+                        </div>
+                    </footer>
+                </section>
+            </section>
+
+            <section class="aviso-notificacion">
+                <div>
+                    <strong>Canal de notificación</strong>
+                    <p>
+                        La última alerta fue enviada al supervisor correspondiente.
+                    </p>
+                </div>
+                <span>Correo enviado</span>
+            </section>
+        </main>
+    </div>
+
+    <div
+        id="modalDetalle"
+        class="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="tituloModal"
+        hidden
+    >
+        <div class="modal-fondo" data-cerrar-modal></div>
+
+        <section class="modal-contenido">
+            <header class="modal-cabecera">
+                <div>
+                    <span class="subtitulo">Detalle de alerta</span>
+                    <h2 id="tituloModal">Alerta</h2>
+                </div>
+
+                <button
+                    type="button"
+                    class="boton-cerrar"
+                    data-cerrar-modal
+                    aria-label="Cerrar"
+                >
+                    ×
+                </button>
+            </header>
+
+            <div class="detalle-grid">
+                <div class="detalle-item">
+                    <span>Box</span>
+                    <strong id="detalleBox"></strong>
+                </div>
+
+                <div class="detalle-item">
+                    <span>Tipo de riesgo</span>
+                    <strong id="detalleTipo"></strong>
+                </div>
+
+                <div class="detalle-item">
+                    <span>Nivel</span>
+                    <strong id="detalleNivel"></strong>
+                </div>
+
+                <div class="detalle-item">
+                    <span>Fecha y hora</span>
+                    <strong id="detalleFecha"></strong>
+                </div>
+
+                <div class="detalle-item">
+                    <span>Estado</span>
+                    <strong id="detalleEstado"></strong>
+                </div>
+
+                <div class="detalle-item">
+                    <span>Sesión</span>
+                    <strong id="detalleSesion"></strong>
+                </div>
+            </div>
+
+            <section id="formularioEvaluacion" class="seccion-evaluacion">
+                <h3>Evaluar detección</h3>
+                <p>La evaluación se puede registrar una sola vez.</p>
+
+                <div class="opciones-evaluacion">
+                    <label>
+                        <input type="radio" name="evaluacion" value="correcta">
+                        <span>
+                            <strong>Correcta</strong>
+                            La detección corresponde a una alerta real.
+                        </span>
+                    </label>
+
+                    <label>
+                        <input
+                            type="radio"
+                            name="evaluacion"
+                            value="falso_positivo"
+                        >
+                        <span>
+                            <strong>Falso positivo</strong>
+                            La detección corresponde a un error del modelo.
+                        </span>
+                    </label>
+
+                    <label>
+                        <input type="radio" name="evaluacion" value="neutro">
+                        <span>
+                            <strong>Neutro</strong>
+                            No es posible confirmar la detección.
+                        </span>
+                    </label>
+                </div>
+
+                <p id="mensajeEvaluacion" class="mensaje-evaluacion"></p>
+
+                <button type="button" id="guardarEvaluacion" class="boton-principal">
+                    Guardar evaluación
+                </button>
+            </section>
+
+            <section
+                id="evaluacionRegistrada"
+                class="seccion-evaluacion evaluacion-registrada"
+                hidden
+            >
+                <h3>Evaluación registrada</h3>
+
+                <div class="detalle-grid">
+                    <div class="detalle-item">
+                        <span>Resultado</span>
+                        <strong id="resultadoEvaluacion"></strong>
+                    </div>
+
+                    <div class="detalle-item">
+                        <span>Evaluado por</span>
+                        <strong id="evaluadoPor"></strong>
+                    </div>
+
+                    <div class="detalle-item">
+                        <span>Fecha de evaluación</span>
+                        <strong id="fechaEvaluacion"></strong>
+                    </div>
+                </div>
+
+                <p class="aviso-bloqueado">
+                    Esta evaluación ya fue guardada y no puede modificarse.
+                </p>
+            </section>
+        </section>
+    </div>
+
+    <script src="{% static 'web/js/dashboard.js' %}"></script>
+</body>
+</html>

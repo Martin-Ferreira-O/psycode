@@ -61,12 +61,29 @@ INSTALLED_APPS = [
     "backend.apps.alerts.apps.AlertsConfig",
     "backend.apps.dashboard.apps.DashboardConfig",
     "backend.apps.notifications.apps.NotificationsConfig",
+    "django.contrib.staticfiles",
+    "backend.apps.web.apps.WebConfig",
 ]
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
 ]
+
+TEMPLATES = [
+    {
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.request",
+            ],
+        },
+    },
+]
+
+STATIC_URL = "static/"
 ROOT_URLCONF = "backend.config.urls"
 WSGI_APPLICATION = "backend.config.wsgi.application"
 ASGI_APPLICATION = "backend.config.asgi.application"
