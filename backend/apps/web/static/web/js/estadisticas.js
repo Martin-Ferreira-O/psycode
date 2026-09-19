@@ -123,8 +123,8 @@ function cambiarPeriodo(nuevoPeriodo) {
 
     botonDescargar.textContent =
         periodoActual === "semana"
-            ? "↓ Obtener registro de semana"
-            : "↓ Obtener registro de mes";
+            ? " Obtener registro de semana"
+            : " Obtener registro de mes";
 
     dibujarGrafico();
 }
