@@ -9,6 +9,7 @@ urlpatterns = [
     path("api/v1/auth/", include((patterns(accounts_service), "accounts"))),
     path("api/v1/", include("backend.apps.alerts.urls")),
     path("api/v1/dashboard/", include("backend.apps.dashboard.urls")),
+    path("", include("backend.apps.web.urls")),
     re_path(r"^.*$", not_found),
 ]
 
