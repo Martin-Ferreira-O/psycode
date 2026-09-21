@@ -1,3 +1,8 @@
+const token = localStorage.getItem("access_token");
+if (!token) {
+  window.location.href = "/";
+}
+
 const resultadosEvaluacion = [
     "correcta",
     "falso_positivo",
@@ -489,6 +494,32 @@ document.addEventListener("keydown", (evento) => {
         cerrarDetalle();
     }
 });
+
+const botonLogout = document.getElementById("logout-btn") || document.querySelector(".cerrar-sesion");
+
+if (botonLogout) {
+  botonLogout.addEventListener("click", (e) => {
+    e.preventDefault();
+
+    const refreshToken = localStorage.getItem("refresh_token");
+    const accessToken = localStorage.getItem("access_token");
+
+    if (refreshToken) {
+      fetch("/api/v1/auth/logout", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${accessToken}`
+        },
+        body: JSON.stringify({ refresh_token: refreshToken })
+      }).catch(() => {});
+    }
+
+    localStorage.clear();
+    sessionStorage.clear();
+    window.location.replace("/");
+  });
+}
 
 actualizarTarjetas();
 renderizarTabla();

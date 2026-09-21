@@ -2,7 +2,7 @@ from django.shortcuts import redirect, render
 
 
 def inicio(request):
-    return redirect("web:dashboard")
+    return render(request, "web/login.html")
 
 
 def dashboard(request):
@@ -15,6 +15,7 @@ def estadisticas(request):
 
 def alertas(request):
     return redirect("/dashboard#historial-alertas")
+
 
 def evaluaciones(request):
     return render(request, "web/evaluaciones.html")

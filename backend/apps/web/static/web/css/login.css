@@ -1,0 +1,304 @@
+:root {
+  --azul-oscuro: #12284b;
+  --azul: #2b5278;
+  --azul-claro: #e8f0f7;
+  --fondo: #f3f6f9;
+  --blanco: #ffffff;
+  --texto: #172033;
+  --texto-secundario: #64748b;
+  --borde: #dce3eb;
+  --radius-lg: 16px;
+  --radius-md: 10px;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+body {
+  background-color: var(--fondo);
+  color: var(--texto);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.login-wrapper {
+  width: 100%;
+  max-width: 410px;
+}
+
+.login-card {
+  background-color: var(--blanco);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 10px 25px -5px rgba(18, 40, 75, 0.1);
+  border: 1px solid var(--borde);
+  overflow: hidden;
+}
+
+/* Header superior oscuro */
+/* Cabecera superior */
+.login-card-header {
+  background-color: var(--azul-institucional, #112d4e);
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border-top-left-radius: var(--radius-lg, 12px);
+  border-top-right-radius: var(--radius-lg, 12px);
+}
+
+/* Contenedor del logo */
+.header-icon-box {
+  background: transparent;
+  height: 48px;              /* Un poco más alto para ver el logo con detalle */
+  width: auto;
+  max-width: 130px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+/* Imagen del logo */
+.header-logo {
+  height: 100%;
+  width: auto;
+  object-fit: contain;
+  display: block;
+}
+
+/* Textos de la cabecera en blanco */
+.header-text {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.header-text h2 {
+  color: #ffffff !important;   /* Título en blanco puro */
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin: 0;
+  line-height: 1.25;
+}
+
+.header-text span {
+  color: rgba(255, 255, 255, 0.85); /* Subtítulo blanco suave */
+  font-size: 0.82rem;
+  margin-top: 2px;
+}
+
+.header-text h2 {
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.header-text span {
+  font-size: 0.85rem;
+  color: #94a3b8;
+}
+
+/* Cuerpo */
+.login-card-body {
+  padding: 30px 24px 22px 24px;
+}
+
+.login-title {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--texto);
+  margin-bottom: 6px;
+}
+
+.login-subtitle {
+  font-size: 0.92rem;
+  color: var(--texto-secundario);
+  margin-bottom: 22px;
+}
+
+.form-group {
+  margin-bottom: 18px;
+}
+
+.form-group label {
+  display: block;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--texto);
+  margin-bottom: 8px;
+}
+
+.password-label-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.password-label-row label {
+  margin-bottom: 0;
+}
+
+.forgot-link {
+  font-size: 0.84rem;
+  color: var(--azul);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.forgot-link:hover {
+  text-decoration: underline;
+}
+
+input[type="text"],
+input[type="password"] {
+  width: 100%;
+  padding: 12px 14px;
+  font-size: 0.92rem;
+  border: 1px solid var(--borde);
+  border-radius: var(--radius-md);
+  outline: none;
+  background-color: #f8fafc;
+  color: var(--texto);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+input[type="text"]:focus,
+input[type="password"]:focus {
+  border-color: var(--azul);
+  background-color: var(--blanco);
+  box-shadow: 0 0 0 3px rgba(43, 82, 120, 0.15);
+}
+
+.password-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.password-input-wrapper input {
+  padding-right: 42px;
+}
+
+.toggle-password-btn {
+  position: absolute;
+  right: 12px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+}
+
+.toggle-password-btn svg {
+  width: 19px;
+  height: 19px;
+  stroke: var(--texto-secundario);
+}
+
+.btn-primary {
+  width: 100%;
+  background-color: var(--azul-oscuro);
+  color: var(--blanco);
+  border: none;
+  padding: 13px;
+  font-size: 0.98rem;
+  font-weight: 700;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 10px;
+  transition: background-color 0.2s;
+}
+
+.btn-primary:hover {
+  background-color: var(--azul);
+}
+
+.btn-primary:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.login-card-footer {
+  text-align: center;
+  font-size: 0.82rem;
+  color: var(--texto-secundario);
+  margin-top: 24px;
+}
+
+.alert-box {
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+  margin-bottom: 16px;
+  background-color: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+.alert-box.success {
+  background-color: #dcfce7;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+
+/* Modal Recuperación */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(18, 40, 75, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 100;
+}
+
+.modal-card {
+  background: var(--blanco);
+  width: 100%;
+  max-width: 390px;
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.modal-header h3 {
+  font-size: 1.15rem;
+  color: var(--texto);
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 1.4rem;
+  cursor: pointer;
+  color: var(--texto-secundario);
+}
+
+.modal-desc {
+  font-size: 0.88rem;
+  color: var(--texto-secundario);
+  margin-bottom: 16px;
+}

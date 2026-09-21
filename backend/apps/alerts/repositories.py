@@ -16,7 +16,7 @@ from .documents import alerta_a_documento, documento_a_alerta, evaluacion_a_docu
 from .domain import Alerta, DomainError, Evaluacion, EstadoEvaluacion, normalizar_uuid, validar_alerta
 from .exceptions import AlertAlreadyExists, AlertNotFound, EvaluationAlreadyRegistered
 from .mongo import schema_path
-from .ports import AlertQueryPort, AlertWritePort
+from .ports import AlertQueryFilters, AlertQueryPort, AlertWritePort
 
 
 class AlertsRepository(AlertWritePort, AlertQueryPort):
@@ -98,6 +98,53 @@ class AlertsRepository(AlertWritePort, AlertQueryPort):
         if documento is None:
             raise AlertNotFound(ident)
         return documento_a_alerta(documento)
+
+    def list_alerts(self, filters: AlertQueryFilters) -> tuple[list[Alerta], int]:
+        query: dict[str, any] = {}
+
+        if filters.box:
+            query["box"] = filters.box
+
+        if filters.estado_evaluacion:
+            query["estado_evaluacion"] = filters.estado_evaluacion
+
+        if filters.revisadas is not None:
+            if filters.revisadas:
+                query["estado_evaluacion"] = {"$ne": EstadoEvaluacion.PENDIENTE.value}
+            else:
+                query["estado_evaluacion"] = EstadoEvaluacion.PENDIENTE.value
+
+        fecha_cond: dict[str, any] = {}
+        if filters.fecha_desde_utc:
+            fecha_cond["$gte"] = filters.fecha_desde_utc
+        if filters.fecha_hasta_utc:
+            fecha_cond["$lt"] = filters.fecha_hasta_utc
+        if fecha_cond:
+            query["fecha_hora"] = fecha_cond
+
+        if filters.q:
+            import re
+            patron = {"$regex": re.escape(filters.q.strip()), "$options": "i"}
+            query["$or"] = [
+                {"alerta_id": patron},
+                {"box": patron},
+                {"tipo_riesgo": patron},
+            ]
+
+        try:
+            col = self._alerts()
+            total = col.count_documents(query)
+            cursor = (
+                col.find(query, {"_id": 0})
+                .sort([("fecha_hora", -1), ("alerta_id", 1)])
+                .skip(filters.offset)
+                .limit(filters.limit)
+            )
+            documentos = list(cursor)
+        except PyMongoError:
+            raise PersistenceUnavailable() from None
+
+        return [documento_a_alerta(doc) for doc in documentos], total
 
     def record_evaluation(self, alerta_id: str, evaluation: Evaluacion) -> Evaluacion:
         ident = normalizar_uuid(alerta_id, "alerta_id")

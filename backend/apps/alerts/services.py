@@ -57,6 +57,12 @@ class AlertsService:
         except PersistenceUnavailable:
             raise
 
+    def list_alerts(self, filters):
+        try:
+            return self.store.list_alerts(filters)
+        except PersistenceUnavailable:
+            raise
+
     def record_evaluation(self, alerta_id, resultado, usuario_id, usuario):
         try:
             ident = normalizar_uuid(alerta_id, "alerta_id")
