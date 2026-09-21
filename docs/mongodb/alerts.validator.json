@@ -1,0 +1,170 @@
+{
+  "collection": "alerts",
+  "validationLevel": "strict",
+  "validationAction": "error",
+  "validator": {
+    "$and": [
+      {
+        "$jsonSchema": {
+          "bsonType": "object",
+          "required": [
+            "alerta_id",
+            "box",
+            "tipo_riesgo",
+            "nivel_severidad",
+            "semaforo",
+            "fecha_hora",
+            "estado_evaluacion",
+            "evaluacion",
+            "sesion_id",
+            "descripcion",
+            "trazabilidad"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "_id": { "bsonType": "objectId" },
+            "alerta_id": {
+              "bsonType": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "description": "Identificador público inmutable. UUID canónico en minúsculas; no es el ObjectId interno."
+            },
+            "box": {
+              "bsonType": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "description": "Identificador del box clínico. Atributo, no una colección ni una clave foránea."
+            },
+            "tipo_riesgo": {
+              "bsonType": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "description": "Tipo de riesgo recibido ya clasificado. Sin catálogo cerrado inventado en esta fase."
+            },
+            "nivel_severidad": {
+              "bsonType": ["int", "long"],
+              "minimum": 0,
+              "maximum": 7,
+              "description": "Gradiente clínico 0–7 del Anexo A. No booleano."
+            },
+            "semaforo": {
+              "enum": ["NULO", "BAJO", "MEDIO", "ALTO"],
+              "description": "Derivado de nivel_severidad. No es una segunda fuente de autoridad."
+            },
+            "fecha_hora": {
+              "bsonType": "date",
+              "description": "Instante UTC de detección, no de evaluación."
+            },
+            "estado_evaluacion": {
+              "enum": ["pendiente", "correcta", "falso_positivo", "neutro"]
+            },
+            "evaluacion": {
+              "bsonType": ["object", "null"],
+              "description": "Evaluación única incrustada. null si y solo si estado_evaluacion es pendiente.",
+              "required": [
+                "alerta_id",
+                "evaluacion",
+                "usuario_id",
+                "usuario",
+                "fecha_hora",
+                "estado_evaluacion"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "alerta_id": {
+                  "bsonType": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                },
+                "evaluacion": {
+                  "enum": ["correcta", "falso_positivo", "neutro"]
+                },
+                "usuario_id": {
+                  "bsonType": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                  "description": "UUID del profesional en SQLite al evaluar. Copia de trazabilidad, no un join."
+                },
+                "usuario": {
+                  "bsonType": "string",
+                  "minLength": 1,
+                  "maxLength": 150,
+                  "description": "Nombre de usuario visible al evaluar. No es correo."
+                },
+                "fecha_hora": {
+                  "bsonType": "date",
+                  "description": "Instante UTC asignado por el servidor al registrar la evaluación."
+                },
+                "estado_evaluacion": {
+                  "enum": ["correcta", "falso_positivo", "neutro"]
+                }
+              }
+            },
+            "sesion_id": {
+              "bsonType": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "description": "Referencia opaca a la sesión clínica externa. No es la sesión JWT."
+            },
+            "descripcion": {
+              "bsonType": ["string", "null"],
+              "maxLength": 500,
+              "description": "Texto opcional de la alerta. Ausente en el alta se normaliza a null. No es transcripción."
+            },
+            "trazabilidad": {
+              "bsonType": "object",
+              "required": ["registrada_en", "actualizada_en", "origen"],
+              "additionalProperties": false,
+              "properties": {
+                "registrada_en": { "bsonType": "date" },
+                "actualizada_en": { "bsonType": "date" },
+                "origen": {
+                  "bsonType": "string",
+                  "minLength": 1,
+                  "maxLength": 100
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "$expr": {
+          "$and": [
+            {
+              "$eq": [
+                "$semaforo",
+                {
+                  "$switch": {
+                    "branches": [
+                      { "case": { "$eq": ["$nivel_severidad", 0] }, "then": "NULO" },
+                      { "case": { "$in": ["$nivel_severidad", [1, 2]] }, "then": "BAJO" },
+                      { "case": { "$in": ["$nivel_severidad", [3, 4]] }, "then": "MEDIO" },
+                      { "case": { "$in": ["$nivel_severidad", [5, 6, 7]] }, "then": "ALTO" }
+                    ],
+                    "default": "INVALIDO"
+                  }
+                }
+              ]
+            },
+            {
+              "$eq": [
+                { "$eq": ["$estado_evaluacion", "pendiente"] },
+                { "$eq": ["$evaluacion", null] }
+              ]
+            },
+            {
+              "$or": [
+                { "$eq": ["$evaluacion", null] },
+                {
+                  "$and": [
+                    { "$eq": ["$evaluacion.alerta_id", "$alerta_id"] },
+                    { "$eq": ["$evaluacion.evaluacion", "$estado_evaluacion"] },
+                    { "$eq": ["$evaluacion.estado_evaluacion", "$estado_evaluacion"] }
+                  ]
+                }
+              ]
+            },
+            { "$gte": ["$trazabilidad.actualizada_en", "$trazabilidad.registrada_en"] }
+          ]
+        }
+      }
+    ]
+  }
+}
