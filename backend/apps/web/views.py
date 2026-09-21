@@ -15,3 +15,6 @@ def estadisticas(request):
 
 def alertas(request):
     return redirect("/dashboard#historial-alertas")
+
+def evaluaciones(request):
+    return render(request, "web/evaluaciones.html")
