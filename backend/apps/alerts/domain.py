@@ -212,6 +212,60 @@ def alerta_nueva(
     return alerta
 
 
+def parse_estado_evaluacion(valor: object) -> EstadoEvaluacion:
+    if isinstance(valor, EstadoEvaluacion):
+        return valor
+    if isinstance(valor, str):
+        try:
+            return EstadoEvaluacion(valor)
+        except ValueError:
+            pass
+    raise DomainError("estado_evaluacion inválido.")
+
+
+def parse_semaforo(valor: object) -> Semaforo:
+    if isinstance(valor, Semaforo):
+        return valor
+    if isinstance(valor, str):
+        try:
+            return Semaforo(valor)
+        except ValueError:
+            pass
+    raise DomainError("semaforo inválido.")
+
+
+def alerta_rehidratada(
+    *,
+    alerta_id: object,
+    box: object,
+    tipo_riesgo: object,
+    nivel_severidad: object,
+    semaforo: object,
+    fecha_hora: object,
+    estado_evaluacion: object,
+    evaluacion: Evaluacion | None,
+    sesion_id: object,
+    descripcion: object,
+    trazabilidad: Trazabilidad,
+) -> Alerta:
+    """Reconstruye una alerta ya persistida. No cambia semáforo ni estado: solo valida invariantes."""
+    alerta = Alerta(
+        alerta_id=normalizar_uuid(alerta_id, "alerta_id"),
+        box=_texto_obligatorio(box, "box", BOX_LONGITUD),
+        tipo_riesgo=_texto_obligatorio(tipo_riesgo, "tipo_riesgo", TIPO_RIESGO_LONGITUD),
+        nivel_severidad=_severidad(nivel_severidad),
+        semaforo=parse_semaforo(semaforo),
+        fecha_hora=_utc(fecha_hora, "fecha_hora"),
+        estado_evaluacion=parse_estado_evaluacion(estado_evaluacion),
+        evaluacion=evaluacion,
+        sesion_id=normalizar_uuid(sesion_id, "sesion_id"),
+        descripcion=_descripcion(descripcion),
+        trazabilidad=trazabilidad,
+    )
+    validar_alerta(alerta)
+    return alerta
+
+
 def alerta_con_evaluacion(alerta: Alerta, evaluacion: Evaluacion, actualizada_en: datetime) -> Alerta:
     if alerta.estado_evaluacion != EstadoEvaluacion.PENDIENTE or alerta.evaluacion is not None:
         raise DomainError("La alerta ya tiene una evaluación registrada.")
@@ -262,11 +316,17 @@ def validar_alerta(alerta: Alerta) -> None:
 
 
 def _severidad(valor: object) -> int:
-    if isinstance(valor, bool) or not isinstance(valor, int):
+    if isinstance(valor, bool) or isinstance(valor, float):
         raise DomainError("nivel_severidad debe ser un entero 0–7, no un booleano ni otro tipo.")
-    if not SEVERIDAD_MIN <= valor <= SEVERIDAD_MAX:
+    if isinstance(valor, int):
+        numero = valor
+    elif type(valor).__name__ in {"Int32", "Int64"}:
+        numero = int(valor)
+    else:
+        raise DomainError("nivel_severidad debe ser un entero 0–7, no un booleano ni otro tipo.")
+    if not SEVERIDAD_MIN <= numero <= SEVERIDAD_MAX:
         raise DomainError("nivel_severidad debe estar entre 0 y 7 inclusive.")
-    return valor
+    return numero
 
 
 def _estado_registrable(valor: object) -> EstadoEvaluacion:
