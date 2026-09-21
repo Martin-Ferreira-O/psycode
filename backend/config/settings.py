@@ -122,6 +122,12 @@ SIMPLE_JWT = {
     "AUTH_HEADER_TYPES": ("Bearer",),
     "ISSUER": "psycode-api",
 }
+MONGODB_URI = os.getenv("MONGODB_URI", "").strip()
+MONGODB_DATABASE = os.getenv("MONGODB_DATABASE", "psycode").strip() or "psycode"
+# Un proceso Django de clínica, baja concurrencia: pool por defecto de PyMongo.
+# 5s para fallar rápido y responder 503 en lugar de colgar el request.
+MONGODB_SERVER_SELECTION_TIMEOUT_MS = 5000
+
 # Rotación propia transaccional en RefreshSession; no combinar con blacklist app.
 PASSWORD_RESET_LIFETIME = timedelta(hours=1)
 EMAIL_DELIVERY_TIMEOUT = 10

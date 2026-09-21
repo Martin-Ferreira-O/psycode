@@ -1,0 +1,113 @@
+{
+  "collection": "audit_events",
+  "validationLevel": "strict",
+  "validationAction": "error",
+  "validator": {
+    "$jsonSchema": {
+      "bsonType": "object",
+      "required": [
+        "event_id",
+        "timestamp",
+        "action",
+        "outcome",
+        "actor_id",
+        "alerta_id",
+        "channel",
+        "contingencia",
+        "motivo",
+        "error_code",
+        "duration_ms",
+        "intentos"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "_id": { "bsonType": "objectId" },
+        "event_id": {
+          "bsonType": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+          "description": "Identificador del evento de bitácora. Distinto de alerta_id."
+        },
+        "timestamp": {
+          "bsonType": "date",
+          "description": "Instante UTC en que el backend registró el evento."
+        },
+        "action": {
+          "enum": ["alerts.register", "alerts.evaluate", "notifications.send"],
+          "description": "Solo eventos del dominio persistido en MongoDB. La autenticación permanece en el log de Django."
+        },
+        "outcome": {
+          "enum": ["success", "failure", "skipped"]
+        },
+        "actor_id": {
+          "description": "UUID del profesional autenticado. null en registro interno o envío automático. Nunca correo ni nombre.",
+          "oneOf": [
+            { "bsonType": "null" },
+            {
+              "bsonType": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+            }
+          ]
+        },
+        "alerta_id": {
+          "bsonType": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+          "description": "Referencia lógica a alerts.alerta_id. No hay join ni transacción con SQLite."
+        },
+        "channel": {
+          "enum": ["teams", "email", null],
+          "description": "Canal que aceptó el aviso; null si ninguno o si la acción no es un envío."
+        },
+        "contingencia": {
+          "bsonType": ["bool", "null"],
+          "description": "true si se intentó correo por fallo de Teams. null fuera de notifications.send."
+        },
+        "motivo": {
+          "enum": ["sin_riesgo", "deshabilitada", "ningun_canal_acepto", null]
+        },
+        "error_code": {
+          "description": "Código estable. Nunca el cuerpo libre de error del proveedor ni secretos.",
+          "oneOf": [
+            { "bsonType": "null" },
+            {
+              "bsonType": "string",
+              "pattern": "^[A-Z][A-Z0-9_]{1,78}$"
+            }
+          ]
+        },
+        "duration_ms": {
+          "description": "Duración total del envío en milisegundos. null fuera de notifications.send.",
+          "oneOf": [
+            { "bsonType": "null" },
+            { "bsonType": ["int", "long"], "minimum": 0 }
+          ]
+        },
+        "intentos": {
+          "bsonType": "array",
+          "description": "Intentos de notificación en orden. Vacío si la acción no envía avisos.",
+          "items": {
+            "bsonType": "object",
+            "required": ["canal", "resultado", "error_code", "duracion_ms"],
+            "additionalProperties": false,
+            "properties": {
+              "canal": { "enum": ["teams", "email"] },
+              "resultado": { "enum": ["aceptado", "fallido"] },
+              "error_code": {
+                "oneOf": [
+                  { "bsonType": "null" },
+                  {
+                    "bsonType": "string",
+                    "pattern": "^[A-Z][A-Z0-9_]{1,78}$"
+                  }
+                ]
+              },
+              "duracion_ms": {
+                "bsonType": ["int", "long"],
+                "minimum": 0
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
