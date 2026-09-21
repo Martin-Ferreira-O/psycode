@@ -1,6 +1,6 @@
 # Arquitectura — Psycode API
 
-**Estado:** arquitectura SCRUM-30 conservada; Martin activó SCRUM-31 y la generación de las apps. Accounts y la base Django están implementados. El resto continúa como diseño futuro. Nombre técnico `psycode-api`; API pública `/api/v1/`. Ver [implementación SCRUM-31](docs/SCRUM-31.md).
+**Estado:** arquitectura SCRUM-30 conservada; Martin activó SCRUM-31 y la generación de las apps. Accounts y la base Django están implementados. El esquema MongoDB está documentado; persistencia, consultas, evaluación y notificaciones siguen pendientes de implementación. Nombre técnico `psycode-api`; API pública `/api/v1/`. Ver [implementación SCRUM-31](docs/SCRUM-31.md) y [esquema MongoDB](docs/MONGODB.md).
 
 ## 1. Decisión y alcance
 
@@ -82,7 +82,9 @@ Refresh y revocaciones se almacenan en SQLite. La sesión de autenticación no e
 
 ### MongoDB
 
-Colección `alerts`, con `alerta_id` UUID serializado canónicamente como string e índice único. Fechas almacenadas como fechas UTC, serializadas ISO 8601. `semaforo` se deriva de `nivel_severidad`; no se permite una segunda fuente contradictoria. Las evaluaciones se incrustan como objeto único `evaluacion` o `null` en el mismo documento.
+Esquema, invariantes, índices y datos prohibidos: [docs/MONGODB.md](docs/MONGODB.md). Dos colecciones en la base `psycode`: `alerts` (negocio) y `audit_events` (bitácora de alta, evaluación y envío). No hay colecciones de sesiones, boxes, pacientes ni usuarios.
+
+Colección `alerts`, con `alerta_id` UUID serializado canónicamente como string e índice único. Fechas almacenadas como fechas UTC, serializadas ISO 8601. `semaforo` se deriva de `nivel_severidad`; no se permite una segunda fuente contradictoria. Las evaluaciones se incrustan como objeto único `evaluacion` o `null` en el mismo documento. `box` y `sesion_id` son referencias (string y UUID); la sesión clínica no es la sesión JWT.
 
 Una evaluación guarda UUID del profesional y una copia de su identificador visible (`usuario`) al evaluar. No depende de una consulta posterior a SQLite para reconstruir la trazabilidad. El actor llega del contexto autenticado, nunca del JSON enviado por el frontend.
 
@@ -102,7 +104,7 @@ Entrada interna validada
 
 El contrato de registro se define para SCRUM-32/41; no implica crear un productor de alertas. Los datos de prueba invocarán el registro con envío deshabilitado por defecto. No habrá `POST /alerts` público en esta fase.
 
-Los fallos de MongoDB impiden el registro y el envío. Los fallos de notificación no revierten una alerta guardada. La auditoría técnica usa eventos estructurados en el sistema de logging de Django; la trazabilidad de evaluación se conserva además en el documento. Un fallo del destino de logs debe dirigirse al log de error local, nunca presentarse como prueba de entrega.
+Los fallos de MongoDB impiden el registro y el envío. Los fallos de notificación no revierten una alerta guardada. La auditoría técnica se emite en el logger `psycode.audit`. Los eventos `alerts.register`, `alerts.evaluate` y `notifications.send` se persisten además en `audit_events`; los de autenticación permanecen solo en el log. Un fallo al escribir la bitácora no revierte la alerta y se dirige al log de error local, nunca como prueba de entrega.
 
 La secuencia es síncrona y acotada según el contrato. No hay transacción entre MongoDB, SQLite, Teams y correo, ni garantía de entrega exactamente una vez. Una caída entre persistir y notificar puede dejar una alerta sin aviso; la recuperación automática duradera queda fuera del backlog actual. Esta limitación debe revisarse antes de uso clínico real.
 

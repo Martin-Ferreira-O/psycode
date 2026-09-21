@@ -13,7 +13,7 @@ No necesita `urls.py`, vistas ni modelos de alerta. Recibe datos del caso de uso
 
 ## Contrato y comportamiento
 
-Ver [contrato interno único](../../../API_CONTRACTS.md#4-registro-y-notificaciones-contratos-internos). Teams primero; correo si Teams falla. Plazo máximo total de 10 segundos por intento/canal, un intento por canal, sin reintentos automáticos en esta versión. Auditar resultado, duración y contingencia; distinguir aceptación por proveedor de lectura por una persona.
+Ver [contrato interno único](../../../API_CONTRACTS.md#4-registro-y-notificaciones-contratos-internos). Teams primero; correo si Teams falla. Plazo máximo total de 10 segundos por intento/canal, un intento por canal, sin reintentos automáticos en esta versión. Auditar resultado, duración y contingencia en el logger y en `audit_events` ([esquema](../../../docs/MONGODB.md)); distinguir aceptación por proveedor de lectura por una persona.
 
 El payload externo permite tipo de mensaje, box, tipo de riesgo, urgencia y fecha/hora. No incluye UUID del paciente, nombres, sesión, descripción libre, audio, transcripción ni detalles operativos. `alerta_id` acompaña el contexto interno de auditoría, no el cuerpo enviado.
 

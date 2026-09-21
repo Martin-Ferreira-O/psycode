@@ -2,7 +2,7 @@
 
 Estado: pendiente de implementación. Los archivos actuales son la estructura base; las rutas de esta página todavía responden 404.
 
-Este módulo manejará el registro, consulta, filtros y evaluación de alertas con persistencia en MongoDB. SCRUM-32 implementa persistencia; SCRUM-33 consultas; SCRUM-34 evaluación. Consumidores frontend: SCRUM-37, SCRUM-39 y SCRUM-40.
+Este módulo manejará el registro, consulta, filtros y evaluación de alertas con persistencia en MongoDB. El esquema de colecciones, invariantes y datos prohibidos está en [MONGODB.md](../../../docs/MONGODB.md). `domain.py` fija semáforo, estados y la evaluación incrustada. SCRUM-32 implementa persistencia; SCRUM-33 consultas; SCRUM-34 evaluación. Consumidores frontend: SCRUM-37, SCRUM-39 y SCRUM-40.
 
 ## Rutas por implementar
 
@@ -20,7 +20,7 @@ Usa un único patrón de URL para evaluación y despacha según el método HTTP.
 
 - API: `urls.py`, `views.py`, `serializers.py`; usa serialización explícita, no `ModelSerializer` sobre MongoDB.
 - Aplicación: `AlertsService.register_alert`, `list_alerts`, `get_alert`, `record_evaluation`, `get_evaluation`.
-- Dominio: `domain.py` define alerta, evaluación, filtros y reglas: una evaluación por alerta, severidad 0–7 y semáforo derivado provisional.
+- Dominio: `domain.py` define alerta, evaluación y reglas: una evaluación por alerta, severidad 0–7, semáforo derivado provisional e invariantes del documento MongoDB. Pruebas en [tests](tests/README.md).
 - Puertos: `ports.py` define `AlertQueryPort`, `AlertWritePort`, `AlertNotifier` según [arquitectura](../../../ARCHITECTURE.md).
 - Infraestructura: `repositories.py` implementa consultas y escrituras en MongoDB. No se crean modelos ORM Django para estas colecciones.
 

@@ -148,7 +148,7 @@ Lee tu tarea y abre el módulo y contrato correspondientes antes de modificar c�
 |---|---|---|
 | SCRUM-30: arquitectura | [Arquitectura](ARCHITECTURE.md) y [contratos](API_CONTRACTS.md) | Documentados |
 | SCRUM-31 / SCRUM-35: autenticación backend / frontend | [Accounts](backend/apps/accounts/README.md) y [contrato de autenticación](API_CONTRACTS.md#1-autenticación) | Disponible |
-| SCRUM-32 / 33 / 34: persistencia, consulta y evaluación | [Alerts](backend/apps/alerts/README.md) y [contrato de alertas](API_CONTRACTS.md#2-alertas-y-evaluaciones) | Pendiente |
+| SCRUM-32 / 33 / 34: persistencia, consulta y evaluación | [Alerts](backend/apps/alerts/README.md), [esquema MongoDB](docs/MONGODB.md) y [contrato de alertas](API_CONTRACTS.md#2-alertas-y-evaluaciones) | Esquema documentado; persistencia pendiente |
 | SCRUM-36: dashboard | [Dashboard](backend/apps/dashboard/README.md) y [contrato dashboard](API_CONTRACTS.md#3-dashboard) | Pendiente |
 | SCRUM-37 / 39 / 40: historial, detalle y registro en frontend | [Alerts](backend/apps/alerts/README.md) y [contrato de alertas](API_CONTRACTS.md#2-alertas-y-evaluaciones) | Pendiente |
 | SCRUM-41: notificaciones | [Notifications](backend/apps/notifications/README.md) y [contrato interno](API_CONTRACTS.md#4-registro-y-notificaciones-contratos-internos) | Pendiente |
@@ -164,7 +164,7 @@ Ejecuta desde la raíz:
 ```sh
 uv run python manage.py check
 uv run python manage.py makemigrations --check --dry-run
-uv run python manage.py test backend.apps.accounts --settings=backend.config.test_settings
+uv run python manage.py test backend.apps.accounts backend.apps.alerts --settings=backend.config.test_settings
 ```
 
 Con pip, usa el mismo reemplazo de `uv run python` indicado arriba. Las pruebas crean una base separada y no modifican tu usuario local. Si cambias modelos, genera y revisa la migración correspondiente antes de comprobar que no quedan migraciones pendientes.

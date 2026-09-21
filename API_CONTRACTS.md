@@ -235,7 +235,7 @@ Errores: `400 AUTH_INVALID_RESET_TOKEN` por inválido, expirado, usado o sustitu
 
 ## 2. Alertas y evaluaciones
 
-SCRUM-32, 33, 34, 37, 39 y 40. Todas requieren autenticación. No hay creación, modificación general ni borrado públicos de alertas.
+SCRUM-32, 33, 34, 37, 39 y 40. Todas requieren autenticación. No hay creación, modificación general ni borrado públicos de alertas. Persistencia: [esquema MongoDB](docs/MONGODB.md).
 
 ### Esquemas
 
