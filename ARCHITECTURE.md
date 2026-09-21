@@ -1,6 +1,6 @@
 # Arquitectura — Psycode API
 
-**Estado:** arquitectura SCRUM-30 conservada; Martin activó SCRUM-31 y la generación de las apps. Accounts y la base Django están implementados. El esquema MongoDB está documentado; persistencia, consultas, evaluación y notificaciones siguen pendientes de implementación. Nombre técnico `psycode-api`; API pública `/api/v1/`. Ver [implementación SCRUM-31](docs/SCRUM-31.md) y [esquema MongoDB](docs/MONGODB.md).
+**Estado:** arquitectura SCRUM-30 conservada. Accounts (SCRUM-31) y persistencia MongoDB de alertas (SCRUM-32) están implementados. Consultas HTTP, evaluación pública y notificaciones siguen pendientes. Nombre técnico `psycode-api`; API pública `/api/v1/`. Ver [SCRUM-31](docs/SCRUM-31.md), [SCRUM-32](docs/SCRUM-32.md) y [esquema MongoDB](docs/MONGODB.md).
 
 ## 1. Decisión y alcance
 

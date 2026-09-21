@@ -1,6 +1,6 @@
 # Backend
 
-El backend es un único proyecto Django. `accounts` tiene implementada la autenticación de SCRUM-31. `alerts`, `dashboard` y `notifications` tienen archivos base y están pendientes de implementación.
+El backend es un único proyecto Django. `accounts` tiene implementada la autenticación de SCRUM-31. `alerts` persiste en MongoDB (SCRUM-32) sin rutas HTTP todavía. `dashboard` y `notifications` tienen archivos base pendientes.
 
 Para instalar, crear el usuario local y arrancar, sigue el [README principal](../README.md#primera-instalación). Ejecuta los comandos desde la raíz, donde está `manage.py`.
 

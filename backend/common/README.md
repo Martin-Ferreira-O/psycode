@@ -6,7 +6,8 @@ Contiene únicamente comportamientos transversales. No tiene rutas HTTP ni depen
 
 - `responses.py`: `success_response(data, message, status)` agrega la estructura de respuesta y la fecha UTC; `204` no tiene cuerpo.
 - `errors.py`: ServiceError, error_body y exception_handler traducen errores de aplicación, validación y framework al contrato; handlers JSON de 400/404/500.
-- `audit.py`: AuditWriter.record(action, outcome, actor_id=None, error_code=None) mediante logging estructurado. Solo admite campos explícitos, sin cuerpos de solicitudes ni secretos.
+- `audit.py`: AuditWriter.record(action, outcome, actor_id=None, error_code=None, alerta_id=None) mediante logging estructurado. Solo admite campos explícitos, sin cuerpos de solicitudes ni secretos.
+- `errors.py`: `PersistenceUnavailable` (503) cuando SQLite o MongoDB no responden.
 
 El contrato previsto de un evento técnico tiene `event_id` UUID, `timestamp` UTC, `action`, `outcome` (`success`, `failure` o `skipped`), y, cuando corresponda, `actor_id`, `alerta_id`, `channel`, `error_code`. Para notificaciones incluye duración y si se usó contingencia. Los nombres de evento previstos son `auth.login`, `auth.refresh`, `auth.logout`, `auth.password_reset`, `alerts.register`, `alerts.evaluate`, `notifications.send`.
 

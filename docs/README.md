@@ -6,6 +6,7 @@ Para instalar y probar el backend, sigue el [README principal](../README.md). Pa
 |---|---|
 | [MONGODB.md](MONGODB.md) | Colecciones, documentos, índices, relaciones, estados y datos que no se persisten. Artefactos en [mongodb/](mongodb/). |
 | [SCRUM-31.md](SCRUM-31.md) | Detalles de autenticación, correo y verificaciones de la entrega original. Las credenciales actuales están en el README principal. |
+| [SCRUM-32.md](SCRUM-32.md) | Conexión MongoDB, repositorio de alertas, comando de datos sintéticos y verificación. |
 | [ACCEPTANCE.md](ACCEPTANCE.md) | Criterios de revisión de SCRUM-30 y escenarios previstos para las siguientes tareas. |
 | [SOURCE_NOTES.md](SOURCE_NOTES.md) | Diferencias entre los insumos originales y límites de interpretación de la matriz. |
 | `Matriz-lenguaje-ideacion-suicida.xlsx` | Matriz original del cliente: gradiente clínico, frases, características NLP, lenguaje profesional, evidencia y reglas de uso. |

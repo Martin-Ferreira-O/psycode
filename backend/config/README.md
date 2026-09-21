@@ -6,7 +6,7 @@ Aquí se configuran Django, las rutas raíz y la construcción del servicio de a
 
 - `settings.py`: configuración por entorno; secretos leídos del entorno, nunca escritos en documentación.
 - `urls.py`: monta `accounts`, `alerts` y `dashboard` bajo `/api/v1/`.
-- `composition.py`: accounts_service construye AccountsService con AccountsRepository y EmailClient. AlertsService y DashboardService siguen pendientes.
+- `composition.py`: `accounts_service` y `alerts_service` / `alerts_repository`. DashboardService sigue pendiente.
 - `asgi.py` y `wsgi.py`: puntos de entrada de la aplicación.
 - `test_settings.py`: base de tests separada, correo simulado y configuración sin secretos reales.
 
@@ -31,6 +31,6 @@ Valores de política fijados en el contrato: access 3600 segundos, refresh 24 ho
 
 ## Dependencias y tareas
 
-Puede importar implementaciones de las apps para componerlas. Las apps no importan `composition.py`. SCRUM-31 tiene implementada la base; SCRUM-32 configura MongoDB; SCRUM-41 configura notificaciones.
+Puede importar implementaciones de las apps para componerlas. Las apps no importan `composition.py`. SCRUM-31 tiene implementada la base; SCRUM-32 conecta MongoDB al usar el repositorio, no al arrancar; SCRUM-41 configura notificaciones.
 
-La instalación local guarda `.env` en la raíz y la clave Django en `.local/`; ambos están excluidos de Git. settings carga .env sin sobrescribir variables del entorno. EMAIL_BACKEND y EMAIL_FILE_PATH seleccionan archivos privados de desarrollo; EMAIL_USE_SSL complementa TLS para SMTP. Dependencias MongoDB/Teams no se conectan al arrancar. Cada proceso de correo recibe su configuración del mismo entorno y .env.
+La instalación local guarda `.env` en la raíz y la clave Django en `.local/`; ambos están excluidos de Git. settings carga .env sin sobrescribir variables del entorno. EMAIL_BACKEND y EMAIL_FILE_PATH seleccionan archivos privados de desarrollo; EMAIL_USE_SSL complementa TLS para SMTP. MongoDB no se conecta al arrancar. Cada proceso de correo recibe su configuración del mismo entorno y .env.

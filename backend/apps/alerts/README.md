@@ -1,8 +1,8 @@
 # Alerts: alertas y evaluaciones
 
-Estado: pendiente de implementación. Los archivos actuales son la estructura base; las rutas de esta página todavía responden 404.
+Estado: persistencia MongoDB implementada (SCRUM-32). Las rutas HTTP de esta página todavía responden 404 (SCRUM-33 / 34).
 
-Este módulo manejará el registro, consulta, filtros y evaluación de alertas con persistencia en MongoDB. El esquema de colecciones, invariantes y datos prohibidos está en [MONGODB.md](../../../docs/MONGODB.md). `domain.py` fija semáforo, estados y la evaluación incrustada. SCRUM-32 implementa persistencia; SCRUM-33 consultas; SCRUM-34 evaluación. Consumidores frontend: SCRUM-37, SCRUM-39 y SCRUM-40.
+El esquema de colecciones, invariantes y datos prohibidos está en [MONGODB.md](../../../docs/MONGODB.md). `domain.py` fija semáforo, estados y la evaluación incrustada. `repositories.py` persiste y consulta por `alerta_id`. Datos sintéticos: [seed_demo_alerts](management/commands/README.md). SCRUM-33 consultas HTTP; SCRUM-34 evaluación pública. Consumidores frontend: SCRUM-37, SCRUM-39 y SCRUM-40.
 
 ## Rutas por implementar
 
@@ -21,8 +21,9 @@ Usa un único patrón de URL para evaluación y despacha según el método HTTP.
 - API: `urls.py`, `views.py`, `serializers.py`; usa serialización explícita, no `ModelSerializer` sobre MongoDB.
 - Aplicación: `AlertsService.register_alert`, `list_alerts`, `get_alert`, `record_evaluation`, `get_evaluation`.
 - Dominio: `domain.py` define alerta, evaluación y reglas: una evaluación por alerta, severidad 0–7, semáforo derivado provisional e invariantes del documento MongoDB. Pruebas en [tests](tests/README.md).
-- Puertos: `ports.py` define `AlertQueryPort`, `AlertWritePort`, `AlertNotifier` según [arquitectura](../../../ARCHITECTURE.md).
-- Infraestructura: `repositories.py` implementa consultas y escrituras en MongoDB. No se crean modelos ORM Django para estas colecciones.
+- Puertos: `ports.py` define `AlertQueryPort` y `AlertWritePort`. `AlertNotifier` pertenece a SCRUM-41.
+- Infraestructura: `mongo.py` (cliente perezoso), `documents.py` (mapeo sin audio ni ObjectId público) y `repositories.py` (alta, get y evaluación atómica). No hay modelos ORM Django para estas colecciones.
+- Comando: `seed_demo_alerts` crea cinco alertas de prueba y verifica la relectura. Requiere MongoDB y `DJANGO_DEBUG=true`.
 
 ## Integración y trazabilidad
 
@@ -32,4 +33,4 @@ Los repositorios devuelven DTO, nunca cursores. La evaluación incrustada incluy
 
 Dashboard consume `AlertQueryPort`. El registro frontend de evaluaciones usa listado con `revisadas=true` y el objeto `evaluacion` incluido, evitando una consulta por fila.
 
-Pruebas futuras: filtros AND, orden estable, página vacía, UUID inválido/inexistente, fallo de persistencia, dos evaluaciones simultáneas y registro sin envío de datos sintéticos.
+Pruebas actuales en [tests](tests/README.md): mapeo, duplicados, evaluación atómica, variedad del seed y conexión fallida. La integración contra MongoDB real se activa con `PSYCODE_TEST_MONGODB_URI`. Filtros HTTP y página quedan para SCRUM-33.

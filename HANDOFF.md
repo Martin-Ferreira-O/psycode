@@ -166,7 +166,7 @@ Implementar la conexión del backend con MongoDB y la estructura necesaria para 
 
 *Requerimientos relacionados: RF-11 y RF-18.*
 
-**Notas:** campos de la alerta en `API_CONTRACTS.md` (§2). Esquema de colecciones, índices y datos prohibidos en `docs/MONGODB.md`.
+**Notas:** campos de la alerta en `API_CONTRACTS.md` (§2). Esquema en `docs/MONGODB.md`. Persistencia local en [docs/SCRUM-32.md](docs/SCRUM-32.md): conexión PyMongo, repositorio y `seed_demo_alerts`. Las rutas HTTP de consulta/evaluación siguen pendientes.
 
 ---
 
