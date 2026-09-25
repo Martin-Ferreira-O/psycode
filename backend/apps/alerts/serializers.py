@@ -45,6 +45,21 @@ class AlertQueryFilterSerializer(serializers.Serializer):
         return attrs
 
 
+class EvaluacionCreateSerializer(serializers.Serializer):
+    evaluacion = serializers.ChoiceField(
+        choices=["correcta", "falso_positivo", "neutro"],
+        required=True,
+    )
+
+    def validate(self, attrs):
+        campos_extra = set(self.initial_data) - {"evaluacion"}
+        if campos_extra:
+            raise serializers.ValidationError(
+                {"non_field_errors": ["Solo se permite el campo evaluacion."]}
+            )
+        return attrs
+
+
 class EvaluacionPublicSerializer(serializers.Serializer):
     alerta_id = serializers.CharField()
     evaluacion = serializers.CharField()
