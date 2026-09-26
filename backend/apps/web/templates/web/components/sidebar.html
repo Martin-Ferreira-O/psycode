@@ -1,0 +1,30 @@
+<aside class="barra-lateral">
+    <div class="marca">
+        <div class="marca-icono">P</div>
+
+        <div>
+            <strong>Psycode</strong>
+            <span>Portal de alertas</span>
+        </div>
+    </div>
+
+    <nav class="navegacion" aria-label="Navegación principal">
+        <a
+            href="{% url 'web:dashboard' %}"
+            class="enlace-menu{% if seccion_activa == 'dashboard' %} activo{% endif %}"
+            {% if seccion_activa == "dashboard" %}aria-current="page"{% endif %}
+        >
+            Dashboard
+        </a>
+
+        <a
+            href="{% url 'web:evaluaciones' %}"
+            class="enlace-menu{% if seccion_activa == 'evaluaciones' %} activo{% endif %}"
+            {% if seccion_activa == "evaluaciones" %}aria-current="page"{% endif %}
+        >
+            Registro de evaluaciones
+        </a>
+    </nav>
+
+    {% include "web/components/logout_button.html" %}
+</aside>

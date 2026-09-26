@@ -1,26 +1,12 @@
 if (!verificarSesion()) {
     throw new Error("Sesión no válida");
 }
-
-
 let evaluaciones = [];
-
-
 const elementos = {
     tabla: document.querySelector("#tablaEvaluaciones"),
-
-    resultadoTexto: document.querySelector(
-        "#resultadoEvaluaciones"
-    ),
-
-    estadoVacio: document.querySelector(
-        "#estadoVacioEvaluaciones"
-    ),
-
-    tablaContenedor: document.querySelector(
-        "#tablaEvaluacionesContenedor"
-    ),
-
+    resultadoTexto: document.querySelector("#resultadoEvaluaciones"),
+    estadoVacio: document.querySelector("#estadoVacioEvaluaciones"),
+    tablaContenedor: document.querySelector("#tablaEvaluacionesContenedor"),
     modal: document.querySelector("#modalDetalle"),
 
     tituloModal: document.querySelector("#tituloModal"),
@@ -31,18 +17,10 @@ const elementos = {
     detalleFecha: document.querySelector("#detalleFecha"),
     detalleHora: document.querySelector("#detalleHora"),
     detalleEstado: document.querySelector("#detalleEstado"),
-
-    resultadoEvaluacion: document.querySelector(
-        "#resultadoEvaluacion"
-    ),
-
+    resultadoEvaluacion: document.querySelector("#resultadoEvaluacion"),
     evaluadoPor: document.querySelector("#evaluadoPor"),
-
-    fechaEvaluacion: document.querySelector(
-        "#fechaEvaluacion"
-    ),
+    fechaEvaluacion: document.querySelector("#fechaEvaluacion"),
 };
-
 
 function obtenerRegistroSistema(resultado) {
     const registros = {
@@ -53,7 +31,6 @@ function obtenerRegistroSistema(resultado) {
 
     return registros[resultado] || "Indeterminada";
 }
-
 
 function renderizarEvaluaciones() {
     elementos.resultadoTexto.textContent =
@@ -78,9 +55,7 @@ function renderizarEvaluaciones() {
             return `
                 <tr>
                     <td>
-                        <strong>
-                            ${alerta.alerta_id}
-                        </strong>
+                        <strong>${alerta.alerta_id}</strong>
                     </td>
 
                     <td>
@@ -104,15 +79,11 @@ function renderizarEvaluaciones() {
                     <td>
                         <div class="fecha-evaluacion-tabla">
                             <span>
-                                ${formatearFecha(
-                                    alerta.evaluacion?.fecha_hora
-                                )}
+                                ${formatearFecha(alerta.evaluacion?.fecha_hora)}
                             </span>
-
                             <small>
-                                ${formatearHora(
-                                    alerta.evaluacion?.fecha_hora
-                                )}
+
+                                ${formatearHora(alerta.evaluacion?.fecha_hora)}
                             </small>
                         </div>
                     </td>
@@ -131,17 +102,12 @@ function renderizarEvaluaciones() {
         })
         .join("");
 
-    document
-        .querySelectorAll(".boton-ver-detalle")
-        .forEach((boton) => {
-            boton.addEventListener("click", () => {
-                abrirDetalle(
-                    boton.dataset.alerta
-                );
-            });
+    document.querySelectorAll(".boton-ver-detalle").forEach((boton) => {
+        boton.addEventListener("click", () => {
+            abrirDetalle(boton.dataset.alerta);
         });
+    });
 }
-
 
 function abrirDetalle(alertaId) {
     const alerta = evaluaciones.find(
@@ -154,50 +120,34 @@ function abrirDetalle(alertaId) {
 
     const resultado = obtenerResultado(alerta);
 
-    elementos.tituloModal.textContent =
-        alerta.alerta_id;
-
-    elementos.detalleBox.textContent =
-        formatearBox(alerta.box);
-
-    elementos.detalleTipo.textContent =
-        formatearTipoRiesgo(alerta.tipo_riesgo);
-
-    elementos.detalleNivel.textContent =
-        etiquetaNivel(alerta);
-
-    elementos.detalleFecha.textContent =
-        formatearFecha(alerta.fecha_hora);
-
-    elementos.detalleHora.textContent =
-        formatearHora(alerta.fecha_hora);
-
-    elementos.detalleEstado.textContent =
-        "Revisada";
-
+    elementos.tituloModal.textContent = alerta.alerta_id;
+    elementos.detalleBox.textContent = formatearBox(alerta.box);
+    elementos.detalleTipo.textContent = formatearTipoRiesgo(
+        alerta.tipo_riesgo
+    );
+    elementos.detalleNivel.textContent = etiquetaNivel(alerta);
+    elementos.detalleFecha.textContent = formatearFecha(
+        alerta.fecha_hora
+    );
+    elementos.detalleHora.textContent = formatearHora(
+        alerta.fecha_hora
+    );
+    elementos.detalleEstado.textContent = "Revisada";
     elementos.resultadoEvaluacion.textContent =
         obtenerEtiquetaEvaluacion(resultado);
 
     elementos.evaluadoPor.textContent =
-        alerta.evaluacion?.usuario || "—";
-
+        alerta.evaluacion?.usuario || "No disponible";
     elementos.fechaEvaluacion.textContent =
-        `${formatearFecha(
-            alerta.evaluacion?.fecha_hora
-        )} · ${formatearHora(
-            alerta.evaluacion?.fecha_hora
-        )}`;
+        `${formatearFecha(alerta.evaluacion?.fecha_hora)} · ` +
+        `${formatearHora(alerta.evaluacion?.fecha_hora)}`;
 
     elementos.modal.hidden = false;
+    document.body.classList.add("modal-abierto");
 
-    document.body.classList.add(
-        "modal-abierto"
+    const botonCerrar = elementos.modal.querySelector(
+        ".boton-cerrar"
     );
-
-    const botonCerrar =
-        elementos.modal.querySelector(
-            ".boton-cerrar"
-        );
 
     if (botonCerrar) {
         botonCerrar.focus();
@@ -207,10 +157,7 @@ function abrirDetalle(alertaId) {
 
 function cerrarDetalle() {
     elementos.modal.hidden = true;
-
-    document.body.classList.remove(
-        "modal-abierto"
-    );
+    document.body.classList.remove("modal-abierto");
 }
 
 
@@ -238,7 +185,6 @@ async function cargarEvaluaciones() {
         }
 
         evaluaciones = data.data?.items ?? [];
-
         renderizarEvaluaciones();
     } catch (error) {
         console.error(
@@ -253,46 +199,20 @@ async function cargarEvaluaciones() {
             "No fue posible cargar las evaluaciones.";
     }
 }
-
-
-document
-    .querySelectorAll("[data-cerrar-modal]")
-    .forEach((elemento) => {
+document.querySelectorAll("[data-cerrar-modal]").forEach(
+    (elemento) => {
         elemento.addEventListener(
             "click",
             cerrarDetalle
         );
-    });
-
-
-document.addEventListener(
-    "keydown",
-    (evento) => {
-        if (
-            evento.key === "Escape" &&
-            !elementos.modal.hidden
-        ) {
-            cerrarDetalle();
-        }
     }
 );
-
-
-const botonCerrarSesion = document.querySelector(
-    ".cerrar-sesion"
-);
-
-
-if (botonCerrarSesion) {
-    botonCerrarSesion.addEventListener(
-        "click",
-        async (event) => {
-            event.preventDefault();
-
-            await cerrarSesion();
-        }
-    );
-}
-
-
+document.addEventListener("keydown", (evento) => {
+    if (
+        evento.key === "Escape" &&
+        !elementos.modal.hidden
+    ) {
+        cerrarDetalle();
+    }
+});
 cargarEvaluaciones();

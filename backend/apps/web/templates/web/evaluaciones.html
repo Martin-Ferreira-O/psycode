@@ -16,36 +16,7 @@
 
 <body>
     <div class="aplicacion">
-        <aside class="barra-lateral">
-            <div class="marca">
-                <div class="marca-icono">P</div>
-
-                <div>
-                    <strong>Psycode</strong>
-                    <span>Portal de alertas</span>
-                </div>
-            </div>
-
-            <nav class="navegacion">
-                <a
-                    href="{% url 'web:dashboard' %}"
-                    class="enlace-menu"
-                >
-                    Dashboard
-                </a>
-
-                <a
-                    href="{% url 'web:evaluaciones' %}"
-                    class="enlace-menu activo"
-                >
-                    Registro de evaluaciones
-                </a>
-            </nav>
-
-            <a href="#" class="cerrar-sesion">
-                Cerrar sesión
-            </a>
-        </aside>
+        {% include "web/components/sidebar.html" with seccion_activa="evaluaciones" %}
         <main class="contenido-dashboard">
 
             <header class="cabecera-dashboard">
@@ -228,6 +199,7 @@
     </div>
 
     <script src="{% static 'web/js/api.js' %}"></script>
+    <script src="{% static 'web/js/components.js' %}"></script>
     <script src="{% static 'web/js/utils.js' %}"></script>
     <script src="{% static 'web/js/evaluaciones.js' %}"></script>
 </body>

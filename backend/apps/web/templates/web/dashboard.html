@@ -14,24 +14,7 @@
 
 <body>
     <div class="aplicacion">
-        <aside class="barra-lateral">
-            <div class="marca">
-                <div class="marca-icono">P</div>
-                <div>
-                    <strong>Psycode</strong>
-                    <span>Portal de alertas</span>
-                </div>
-            </div>
-
-            <nav class="navegacion">
-                <a href="/dashboard" class="enlace-menu activo">Dashboard</a>
-                <a href="/evaluaciones" class="enlace-menu">
-                    Registro de evaluaciones
-                </a>
-            </nav>
-
-            <a href="/" class="cerrar-sesion" onclick="localStorage.removeItem('access_token'); localStorage.removeItem('refresh_token');">Cerrar sesión</a>
-        </aside>
+        {% include "web/components/sidebar.html" with seccion_activa="dashboard" %}
 
         <main class="contenido-dashboard">
             <header class="cabecera-dashboard">
@@ -51,7 +34,7 @@
             </header>
 
             <section class="tarjetas-resumen">
-                <a href="/estadisticas?tipo=total" class="tarjeta-resumen tarjeta-acceso">
+                <a href="{% url 'web:estadisticas' %}?tipo=total" class="tarjeta-resumen tarjeta-acceso">
                     <div class="resumen-superior">
                         <span class="resumen-enlace">Ver estadísticas</span>
                     </div>
@@ -184,9 +167,7 @@
             <section class="aviso-notificacion">
                 <div>
                     <strong>Canal de notificación</strong>
-                    <p>
-                        La última alerta fue enviada al supervisor correspondiente.
-                    </p>
+                    <p>La última alerta fue enviada al supervisor correspondiente.</p>
                 </div>
                 <span>Correo enviado</span>
             </section>
@@ -216,7 +197,7 @@
                     data-cerrar-modal
                     aria-label="Cerrar"
                 >
-                    x
+                    X
                 </button>
             </header>
 
@@ -225,17 +206,14 @@
                     <span>Box</span>
                     <strong id="detalleBox"></strong>
                 </div>
-
                 <div class="detalle-item">
                     <span>Tipo de riesgo</span>
                     <strong id="detalleTipo"></strong>
                 </div>
-
                 <div class="detalle-item">
                     <span>Nivel</span>
                     <strong id="detalleNivel"></strong>
                 </div>
-
                 <div class="detalle-item">
                     <span>Fecha y hora</span>
                     <strong id="detalleFecha"></strong>
@@ -251,7 +229,6 @@
                     <strong id="detalleSesion"></strong>
                 </div>
             </div>
-
             <section id="formularioEvaluacion" class="seccion-evaluacion">
                 <h3>Evaluar detección</h3>
                 <p>La evaluación se puede registrar una sola vez.</p>
@@ -323,7 +300,8 @@
             </section>
         </section>
     </div>
-
+    <script src="{% static 'web/js/api.js' %}"></script>
+    <script src="{% static 'web/js/components.js' %}"></script>
     <script src="{% static 'web/js/dashboard.js' %}"></script>
 </body>
 </html>
