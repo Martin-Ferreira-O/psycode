@@ -55,6 +55,7 @@ if not DEBUG and origin.scheme != "https":
 INSTALLED_APPS = [
     "django.contrib.auth",
     "django.contrib.contenttypes",
+    "django.contrib.sessions",
     "corsheaders",
     "rest_framework",
     "backend.apps.accounts.apps.AccountsConfig",
@@ -66,6 +67,7 @@ INSTALLED_APPS = [
 ]
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
 ]
@@ -93,7 +95,11 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 DATABASES = {"default": {
     "ENGINE": "django.db.backends.sqlite3",
     "NAME": local_path("SQLITE_PATH", ".local/db.sqlite3"),
-    "OPTIONS": {"timeout": 10, "transaction_mode": "IMMEDIATE"},
+    "OPTIONS": {
+        "timeout": 30,
+        "transaction_mode": "DEFERRED",
+        "init_command": "PRAGMA journal_mode=WAL; PRAGMA busy_timeout = 30000;",
+    },
 }}
 DATABASES["default"]["NAME"].parent.mkdir(parents=True, exist_ok=True)
 LANGUAGE_CODE = "es-cl"

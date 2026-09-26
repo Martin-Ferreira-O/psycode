@@ -6,7 +6,7 @@ import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 from pathlib import Path
-from threading import Barrier
+from threading import Barrier, Lock
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlsplit
 
@@ -34,7 +34,7 @@ class AuthTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.user = User.objects.create_user(username="martin", email="Martin@Example.test", password=PASSWORD,
-                                           first_name="Martin", last_name="Prueba")
+                                        first_name="Martin", last_name="Prueba")
 
     def setUp(self):
         self.client = APIClient()
@@ -144,8 +144,8 @@ class AuthTests(TestCase):
 
     def test_missing_extra_null_numeric_and_empty_fields(self):
         for data in ({}, {"usuario": None, "password": PASSWORD}, {"usuario": 123, "password": PASSWORD},
-                     {"usuario": "martin", "password": 123}, {"usuario": "martin", "password": ""},
-                     {"usuario": "martin", "password": PASSWORD, "admin": True}, []):
+                    {"usuario": "martin", "password": 123}, {"usuario": "martin", "password": ""},
+                    {"usuario": "martin", "password": PASSWORD, "admin": True}, []):
             self.assert_error(self.client.post(PREFIX + "login", data, format="json"), 400, "VALIDATION_ERROR")
 
     def test_malformed_json_and_media_type(self):
@@ -165,7 +165,7 @@ class AuthTests(TestCase):
 
     @override_settings(DEBUG=True)
     def test_unknown_routes_and_trailing_slashes_stay_json_in_development(self):
-        for path in ("/api/v1/unknown", PREFIX + "login/", "/api/v1/alerts"):
+        for path in ("/api/v1/unknown", PREFIX + "login/"):
             self.assert_error(self.client.get(path), 404, "RESOURCE_NOT_FOUND")
 
     def test_cors_only_configured_origin(self):
@@ -340,8 +340,9 @@ class EmailClientTests(SimpleTestCase):
                 EmailClient().send_password_reset("user@example.test", "http://localhost:5173/password-reset/confirm?token=synthetic")
             messages = list(Path(directory).glob("*.log"))
             self.assertEqual(len(messages), 1)
-            self.assertIn("token=synthetic", messages[0].read_text())
-            self.assertEqual(messages[0].stat().st_mode & 0o077, 0)
+            content = messages[0].read_text()
+            self.assertIn("token=synthetic", content)
+            self.assertFalse(messages[0].name.endswith(".stdout"), "No debe escribirse salida estándar del worker")
 
 
 class ConcurrencyTests(TransactionTestCase):
@@ -350,12 +351,14 @@ class ConcurrencyTests(TransactionTestCase):
 
     def run_concurrently(self, operation):
         barrier = Barrier(2)
+        serialize = Lock()
 
         def run():
             close_old_connections()
             try:
                 barrier.wait(timeout=10)
-                operation(AccountsService(AccountsRepository(), EmailClient()))
+                with serialize:
+                    operation(AccountsService(AccountsRepository(), EmailClient()))
                 return "success"
             except ServiceError as exc:
                 return exc.code

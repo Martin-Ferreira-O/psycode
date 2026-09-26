@@ -3,7 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 from uuid import UUID
 
-from django.test import SimpleTestCase
+from django.test import TestCase
 from rest_framework.test import APIClient
 
 from backend.apps.alerts.domain import Evaluacion, EstadoEvaluacion
@@ -28,7 +28,7 @@ def evaluation(result="correcta"):
     )
 
 
-class EvaluationViewTests(SimpleTestCase):
+class EvaluationViewTests(TestCase):
     def setUp(self):
         self.client = APIClient()
         self.user = SimpleNamespace(id=USUARIO_ID, username="psicologo", is_authenticated=True)
