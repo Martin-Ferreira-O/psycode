@@ -2,7 +2,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from rest_framework import status
+from rest_framework import serializers, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -33,19 +33,7 @@ class AlertListView(APIView):
 
     def get(self, request):
         query_serializer = AlertQueryFilterSerializer(data=request.query_params)
-        if not query_serializer.is_valid():
-            return Response(
-                {
-                    "success": False,
-                    "error": {
-                        "code": "VALIDATION_ERROR",
-                        "message": "Parámetros de consulta inválidos",
-                        "details": {"fields": query_serializer.errors},
-                    },
-                    "timestamp": ahora_utc_iso(),
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        query_serializer.is_valid(raise_exception=True)
 
         data = query_serializer.validated_data
         filters = AlertQueryFilters(
@@ -98,6 +86,8 @@ class AlertDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, alerta_id: str):
+        if request.query_params:
+            raise serializers.ValidationError({"query": ["Esta operación no acepta parámetros de consulta."]})
         try:
             valido = uuid.UUID(str(alerta_id))
             ident = str(valido)

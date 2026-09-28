@@ -165,8 +165,9 @@ class AuthTests(TestCase):
 
     @override_settings(DEBUG=True)
     def test_unknown_routes_and_trailing_slashes_stay_json_in_development(self):
-        for path in ("/api/v1/unknown", PREFIX + "login/", "/api/v1/alerts"):
+        for path in ("/api/v1/unknown", PREFIX + "login/"):
             self.assert_error(self.client.get(path), 404, "RESOURCE_NOT_FOUND")
+        self.assert_error(self.client.get("/api/v1/alerts"), 401, "AUTH_REQUIRED")
 
     def test_cors_only_configured_origin(self):
         allowed = self.client.options(PREFIX + "login", HTTP_ORIGIN="http://localhost:5173", HTTP_ACCESS_CONTROL_REQUEST_METHOD="POST", HTTP_ACCESS_CONTROL_REQUEST_HEADERS="content-type,authorization")

@@ -14,6 +14,15 @@ class UTCDateTimeField(serializers.DateTimeField):
         super().__init__(format="%Y-%m-%dT%H:%M:%SZ", default_timezone=timezone.utc, **kwargs)
 
 
+class StrictQueryBooleanField(serializers.BooleanField):
+    def to_internal_value(self, data):
+        if data == "true" or data is True:
+            return True
+        if data == "false" or data is False:
+            return False
+        self.fail("invalid", input=data)
+
+
 class AlertQueryFilterSerializer(serializers.Serializer):
     q = serializers.CharField(required=False, max_length=100)
     fecha_desde = serializers.DateField(required=False)
@@ -23,9 +32,20 @@ class AlertQueryFilterSerializer(serializers.Serializer):
         choices=["pendiente", "correcta", "falso_positivo", "neutro"],
         required=False,
     )
-    revisadas = serializers.BooleanField(required=False)
+    revisadas = StrictQueryBooleanField(required=False)
     limit = serializers.IntegerField(required=False, default=50, min_value=1, max_value=100)
     offset = serializers.IntegerField(required=False, default=0, min_value=0)
+
+    def to_internal_value(self, data):
+        errors = {}
+        for key in data:
+            if key not in self.fields:
+                errors[key] = ["Parámetro de consulta no reconocido."]
+            elif hasattr(data, "getlist") and len(data.getlist(key)) != 1:
+                errors[key] = ["Parámetro de consulta repetido."]
+        if errors:
+            raise serializers.ValidationError(errors)
+        return super().to_internal_value(data)
 
     def validate(self, attrs):
         desde = attrs.get("fecha_desde")

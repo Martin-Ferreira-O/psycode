@@ -1,11 +1,16 @@
 """Contrato HTTP de alertas: fechas UTC y filtros de consulta."""
 
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
+from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
 from django.test import SimpleTestCase
+from rest_framework.test import APIClient
 
 from backend.apps.alerts.domain import alerta_con_evaluacion, evaluacion_nueva
+from backend.apps.alerts.ports import AlertQueryFilters
+from backend.apps.alerts.repositories import AlertsRepository
 from backend.apps.alerts.serializers import AlertQueryFilterSerializer, AlertaDetailSerializer, AlertaListItemSerializer
 
 from .test_persistence import alta_pendiente
@@ -50,3 +55,77 @@ class AlertDateTests(SimpleTestCase):
         serializer = AlertQueryFilterSerializer(data={"fecha_hasta": "9999-12-31"})
         self.assertTrue(serializer.is_valid(), serializer.errors)
         self.assertIsNone(serializer.validated_data["fecha_hasta_utc"])
+
+
+class AlertFilterTests(SimpleTestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.client.force_authenticate(user=SimpleNamespace(is_authenticated=True))
+
+    def assert_validation_error(self, path, field):
+        with patch("backend.apps.alerts.views.get_service") as service:
+            response = self.client.get(path)
+        self.assertEqual(response.status_code, 400, response.content)
+        self.assertEqual(set(response.data), {"success", "error", "timestamp"})
+        self.assertFalse(response.data["success"])
+        self.assertEqual(response.data["error"]["code"], "VALIDATION_ERROR")
+        self.assertIn(field, response.data["error"]["details"]["fields"])
+        service.assert_not_called()
+
+    def test_parametros_desconocidos_repetidos_e_invalidos(self):
+        for path, field in (
+            ("/api/v1/alerts?desconocido=1", "desconocido"),
+            ("/api/v1/alerts?box=a&box=b", "box"),
+            ("/api/v1/alerts?revisadas=true&revisadas=false", "revisadas"),
+            ("/api/v1/alerts?revisadas=1", "revisadas"),
+            ("/api/v1/alerts?estado_evaluacion=otra", "estado_evaluacion"),
+            ("/api/v1/alerts?limit=0", "limit"),
+            ("/api/v1/alerts?fecha_hasta=fecha", "fecha_hasta"),
+            ("/api/v1/alerts?fecha_desde=2026-09-13&fecha_hasta=2026-09-12", "fecha_desde"),
+        ):
+            with self.subTest(path=path):
+                self.assert_validation_error(path, field)
+
+    def test_detalle_rechaza_parametros_de_consulta(self):
+        self.assert_validation_error("/api/v1/alerts/11111111-1111-4111-8111-111111111111?foo=1", "query")
+
+    def test_fecha_extrema_llega_al_servicio_sin_error_interno(self):
+        with patch("backend.apps.alerts.views.get_service") as get_service:
+            get_service.return_value.list_alerts.return_value = ([], 0)
+            response = self.client.get("/api/v1/alerts?fecha_desde=9999-12-31&fecha_hasta=9999-12-31")
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.data["data"]["total"], 0)
+        filters = get_service.return_value.list_alerts.call_args.args[0]
+        self.assertIsNotNone(filters.fecha_desde_utc)
+        self.assertIsNone(filters.fecha_hasta_utc)
+
+    def test_estado_y_revisadas_se_combinan_con_and(self):
+        store = AlertsRepository()
+        cases = (
+            ("correcta", True, [{"estado_evaluacion": "correcta"}, {"estado_evaluacion": {"$ne": "pendiente"}}]),
+            ("pendiente", True, [{"estado_evaluacion": "pendiente"}, {"estado_evaluacion": {"$ne": "pendiente"}}]),
+            ("correcta", False, [{"estado_evaluacion": "correcta"}, {"estado_evaluacion": "pendiente"}]),
+        )
+        for estado, revisadas, clauses in cases:
+            with self.subTest(estado=estado, revisadas=revisadas), patch.object(store, "_alerts") as collection:
+                collection.return_value.count_documents.return_value = 0
+                collection.return_value.find.return_value.sort.return_value.skip.return_value.limit.return_value = []
+                store.list_alerts(AlertQueryFilters(estado_evaluacion=estado, revisadas=revisadas))
+                query = collection.return_value.count_documents.call_args.args[0]
+                self.assertEqual(query, {"$and": clauses})
+                collection.return_value.find.assert_called_once_with(query, {"_id": 0})
+
+    def test_estado_revisadas_y_otros_filtros_conservan_and(self):
+        store = AlertsRepository()
+        with patch.object(store, "_alerts") as collection:
+            collection.return_value.count_documents.return_value = 0
+            collection.return_value.find.return_value.sort.return_value.skip.return_value.limit.return_value = []
+            store.list_alerts(AlertQueryFilters(box="box-3", estado_evaluacion="correcta", revisadas=True, q="riesgo"))
+            query = collection.return_value.count_documents.call_args.args[0]
+        self.assertEqual(query["box"], "box-3")
+        self.assertEqual(query["$and"], [{"estado_evaluacion": "correcta"}, {"estado_evaluacion": {"$ne": "pendiente"}}])
+        self.assertEqual(query["$or"], [
+            {"alerta_id": {"$regex": "riesgo", "$options": "i"}},
+            {"box": {"$regex": "riesgo", "$options": "i"}},
+            {"tipo_riesgo": {"$regex": "riesgo", "$options": "i"}},
+        ])
