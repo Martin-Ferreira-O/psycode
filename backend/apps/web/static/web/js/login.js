@@ -5,8 +5,6 @@ document.addEventListener("DOMContentLoaded", () => {
   const passwordInput = document.getElementById("password");
   const toggleBtn = document.getElementById("toggle-password");
   const submitBtn = document.getElementById("submit-btn");
-  const btnText = submitBtn.querySelector(".btn-text");
-  const btnLoader = submitBtn.querySelector(".btn-loader");
   const alertBox = document.getElementById("alert-box");
 
   // Elementos Modal Recuperación
@@ -27,48 +25,49 @@ document.addEventListener("DOMContentLoaded", () => {
   // Envío Formulario Login
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
-    hideAlert(alertBox);
+    if (submitBtn.disabled) return;
+    limpiarEstado(alertBox);
 
     const usuario = usernameInput.value.trim();
     const password = passwordInput.value;
 
     // Validación previa
     if (!usuario || !password) {
-      showAlert(alertBox, "Por favor, ingresa tu correo y contraseña.");
+      mostrarEstado(alertBox, "error", "Por favor, ingresa tu correo y contraseña.");
       return;
     }
 
-    setLoading(submitBtn, btnText, btnLoader, true);
+    establecerCargaBoton(submitBtn, true, "Iniciando sesión…");
+    mostrarCarga(alertBox, "Iniciando sesión…");
 
     try {
-      const response = await fetch("/api/v1/auth/login", {
+      const data = await solicitarJson("/api/v1/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ usuario, password }),
       });
 
-      const data = await response.json();
-
-      if (response.ok && data.success) {
-        if (data.data?.access_token) {
-          localStorage.setItem("access_token", data.data.access_token);
-          localStorage.setItem("refresh_token", data.data.refresh_token);
-        }
-        window.location.href = "/dashboard";
-      } else {
-        showAlert(alertBox, data.message || "Credenciales incorrectas. Inténtalo de nuevo.");
-      }
+      if (!data.access_token || !data.refresh_token) throw new ErrorSolicitud();
+      localStorage.setItem("access_token", data.access_token);
+      localStorage.setItem("refresh_token", data.refresh_token);
+      window.location.href = "/dashboard";
     } catch (error) {
-      showAlert(alertBox, "Error de conexión con el servidor. Inténtalo más tarde.");
+      mostrarError(alertBox, error, {
+        mensajes: {
+          401: "Usuario o contraseña incorrectos. Revisa tus datos e inténtalo de nuevo.",
+          403: "Tu cuenta no está habilitada para iniciar sesión. Contacta al administrador.",
+        },
+        reintentar: () => form.requestSubmit(),
+      });
     } finally {
-      setLoading(submitBtn, btnText, btnLoader, false);
+      establecerCargaBoton(submitBtn, false);
     }
   });
 
   // Manejo Modal de Recuperación
   forgotLink.addEventListener("click", (e) => {
     e.preventDefault();
-    hideAlert(recoveryAlert);
+    limpiarEstado(recoveryAlert);
     recoveryModal.style.display = "flex";
   });
 
@@ -78,57 +77,34 @@ document.addEventListener("DOMContentLoaded", () => {
 
   recoveryForm.addEventListener("submit", async (e) => {
     e.preventDefault();
-    hideAlert(recoveryAlert);
+    if (recoverySubmitBtn.disabled) return;
+    limpiarEstado(recoveryAlert);
 
     const usuario = recoveryInput.value.trim();
     if (!usuario) {
-      showAlert(recoveryAlert, "Por favor, ingresa tu correo institucional.");
+      mostrarEstado(recoveryAlert, "error", "Por favor, ingresa tu correo institucional.");
       return;
     }
 
-    const rText = recoverySubmitBtn.querySelector(".btn-text");
-    const rLoader = recoverySubmitBtn.querySelector(".btn-loader");
-    setLoading(recoverySubmitBtn, rText, rLoader, true);
+    establecerCargaBoton(recoverySubmitBtn, true, "Enviando…");
 
     try {
-      const response = await fetch("/api/v1/auth/password-reset", {
+      await solicitarJson("/api/v1/auth/password-reset", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-       body: JSON.stringify({ correo: usuario })
+        body: JSON.stringify({ correo: usuario }),
       });
 
-      const data = await response.json();
-
-      if (response.ok && data.success) {
-        showAlert(
-          recoveryAlert, 
-          "Si el usuario existe, se enviaron instrucciones de recuperación a su correo.", 
-          true
-        );
-        recoveryForm.reset();
-      } else {
-        showAlert(recoveryAlert, data.message || "No fue posible iniciar el proceso de recuperación.");
-      }
+      mostrarEstado(
+        recoveryAlert, "exito",
+        "Si el usuario existe, se enviaron instrucciones de recuperación a su correo."
+      );
+      recoveryForm.reset();
     } catch (error) {
-      showAlert(recoveryAlert, "Error de conexión con el servidor.");
+      mostrarError(recoveryAlert, error);
     } finally {
-      setLoading(recoverySubmitBtn, rText, rLoader, false);
+      establecerCargaBoton(recoverySubmitBtn, false);
     }
   });
 
-  function showAlert(targetBox, message, isSuccess = false) {
-    targetBox.textContent = message;
-    targetBox.style.display = "block";
-    targetBox.className = isSuccess ? "alert-box success" : "alert-box";
-  }
-
-  function hideAlert(targetBox) {
-    targetBox.style.display = "none";
-  }
-
-  function setLoading(btn, textEl, loaderEl, isLoading) {
-    btn.disabled = isLoading;
-    textEl.style.display = isLoading ? "none" : "inline";
-    loaderEl.style.display = isLoading ? "inline" : "none";
-  }
 });

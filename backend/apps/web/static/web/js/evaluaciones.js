@@ -2,6 +2,7 @@ if (!verificarSesion()) {
     throw new Error("Sesión no válida");
 }
 let evaluaciones = [];
+let cargandoEvaluaciones = false;
 const elementos = {
     tabla: document.querySelector("#tablaEvaluaciones"),
     resultadoTexto: document.querySelector("#resultadoEvaluaciones"),
@@ -39,13 +40,13 @@ function renderizarEvaluaciones() {
         `${evaluaciones.length === 1 ? "" : "s"}`;
 
     if (evaluaciones.length === 0) {
-        elementos.estadoVacio.hidden = false;
+        mostrarVacio(elementos.estadoVacio, "Todavía no existen alertas evaluadas.");
         elementos.tablaContenedor.hidden = true;
         elementos.tabla.innerHTML = "";
         return;
     }
 
-    elementos.estadoVacio.hidden = true;
+    limpiarEstado(elementos.estadoVacio);
     elementos.tablaContenedor.hidden = false;
 
     elementos.tabla.innerHTML = evaluaciones
@@ -162,41 +163,28 @@ function cerrarDetalle() {
 
 
 async function cargarEvaluaciones() {
-    elementos.resultadoTexto.textContent =
-        "Cargando evaluaciones...";
+    if (cargandoEvaluaciones) return;
+    cargandoEvaluaciones = true;
+    mostrarCarga(elementos.estadoVacio, "Cargando evaluaciones…");
+    elementos.resultadoTexto.textContent = "Consultando evaluaciones…";
+    elementos.tablaContenedor.hidden = true;
+    elementos.tablaContenedor.setAttribute("aria-busy", "true");
 
     try {
-        const response = await apiGet(
-            "/api/v1/alerts?revisadas=true"
-        );
-
-        if (!response) {
-            return;
-        }
-
-        const data = await response.json();
-
-        if (!response.ok || !data.success) {
-            throw new Error(
-                data?.error?.message ||
-                data?.message ||
-                "No fue posible cargar las evaluaciones."
-            );
-        }
-
-        evaluaciones = data.data?.items ?? [];
+        const data = await apiGetDatos("/api/v1/alerts?revisadas=true");
+        // Una respuesta incompleta tampoco significa que no existan registros.
+        if (!Array.isArray(data?.items)) throw new ErrorSolicitud();
+        evaluaciones = data.items;
         renderizarEvaluaciones();
     } catch (error) {
-        console.error(
-            "Error al cargar evaluaciones:",
-            error
-        );
-
-        evaluaciones = [];
-        renderizarEvaluaciones();
-
-        elementos.resultadoTexto.textContent =
-            "No fue posible cargar las evaluaciones.";
+        elementos.resultadoTexto.textContent = "No se pudieron consultar las evaluaciones.";
+        mostrarError(elementos.estadoVacio, error, {
+            mensajes: { 404: "No encontramos el registro de evaluaciones solicitado." },
+            reintentar: cargarEvaluaciones,
+        });
+    } finally {
+        cargandoEvaluaciones = false;
+        elementos.tablaContenedor.removeAttribute("aria-busy");
     }
 }
 document.querySelectorAll("[data-cerrar-modal]").forEach(

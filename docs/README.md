@@ -15,3 +15,5 @@ Para instalar y probar el backend, sigue el [README principal](../README.md). Pa
 La matriz se usa provisionalmente para la severidad de alertas según el Anexo A de [API_CONTRACTS.md](../API_CONTRACTS.md). Antes de modificar esa clasificación, lee las observaciones de `SOURCE_NOTES.md`: no debe asumirse una equivalencia exacta con C-SSRS. El sistema no diagnostica; la clasificación necesita validación clínica antes de usarse en producción.
 
 El Excel y su transcripción se conservan como referencias originales. Los documentos de entrega registran el estado de su fecha; los README de los módulos describen el estado actual del código.
+
+- [SCRUM-46 — Estados y errores comunes del frontend](SCRUM-46.md): helpers, integración, alcance y verificación.
