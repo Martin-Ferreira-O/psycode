@@ -105,14 +105,18 @@ class AlertsRepository(AlertWritePort, AlertQueryPort):
         if filters.box:
             query["box"] = filters.box
 
+        estados = []
         if filters.estado_evaluacion:
-            query["estado_evaluacion"] = filters.estado_evaluacion
-
+            estados.append({"estado_evaluacion": filters.estado_evaluacion})
         if filters.revisadas is not None:
-            if filters.revisadas:
-                query["estado_evaluacion"] = {"$ne": EstadoEvaluacion.PENDIENTE.value}
-            else:
-                query["estado_evaluacion"] = EstadoEvaluacion.PENDIENTE.value
+            estados.append({"estado_evaluacion": (
+                {"$ne": EstadoEvaluacion.PENDIENTE.value}
+                if filters.revisadas else EstadoEvaluacion.PENDIENTE.value
+            )})
+        if len(estados) == 1:
+            query.update(estados[0])
+        elif estados:
+            query["$and"] = estados
 
         fecha_cond: dict[str, any] = {}
         if filters.fecha_desde_utc:
