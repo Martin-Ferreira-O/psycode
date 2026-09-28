@@ -1,10 +1,17 @@
 """Contratos de validación de alerts; ver API_CONTRACTS.md."""
 import zoneinfo
-from datetime import datetime, time, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 
 from rest_framework import serializers
 
 ZONA_SANTIAGO = zoneinfo.ZoneInfo("America/Santiago")
+
+
+class UTCDateTimeField(serializers.DateTimeField):
+    """Transporta el instante en UTC antes de añadir el sufijo Z."""
+
+    def __init__(self, **kwargs):
+        super().__init__(format="%Y-%m-%dT%H:%M:%SZ", default_timezone=timezone.utc, **kwargs)
 
 
 class AlertQueryFilterSerializer(serializers.Serializer):
@@ -27,17 +34,19 @@ class AlertQueryFilterSerializer(serializers.Serializer):
         if desde and hasta and desde > hasta:
             raise serializers.ValidationError({"fecha_desde": "fecha_desde no puede ser posterior a fecha_hasta."})
 
-        if desde:
-            inicio_local = datetime.combine(desde, time.min, tzinfo=ZONA_SANTIAGO)
-            attrs["fecha_desde_utc"] = inicio_local.astimezone(zoneinfo.ZoneInfo("UTC"))
-        else:
-            attrs["fecha_desde_utc"] = None
-
-        if hasta:
-            fin_local = datetime.combine(hasta + timedelta(days=1), time.min, tzinfo=ZONA_SANTIAGO)
-            attrs["fecha_hasta_utc"] = fin_local.astimezone(zoneinfo.ZoneInfo("UTC"))
-        else:
-            attrs["fecha_hasta_utc"] = None
+        try:
+            attrs["fecha_desde_utc"] = (
+                datetime.combine(desde, time.min, tzinfo=ZONA_SANTIAGO).astimezone(timezone.utc)
+                if desde else None
+            )
+            # El último día representable no tiene un sucesor: el límite superior
+            # queda abierto y por tanto incluye todos sus instantes posibles.
+            attrs["fecha_hasta_utc"] = (
+                datetime.combine(hasta + timedelta(days=1), time.min, tzinfo=ZONA_SANTIAGO).astimezone(timezone.utc)
+                if hasta and hasta != date.max else None
+            )
+        except (OverflowError, ValueError) as exc:
+            raise serializers.ValidationError({"fecha_desde": "Rango de fechas fuera de los límites admitidos."}) from exc
 
         if "q" in attrs:
             attrs["q"] = attrs["q"].strip()
@@ -50,7 +59,7 @@ class EvaluacionPublicSerializer(serializers.Serializer):
     evaluacion = serializers.CharField()
     usuario_id = serializers.CharField()
     usuario = serializers.CharField()
-    fecha_hora = serializers.DateTimeField(format="%Y-%m-%dT%H:%M:%SZ")
+    fecha_hora = UTCDateTimeField()
     estado_evaluacion = serializers.CharField()
 
 
@@ -60,7 +69,7 @@ class AlertaListItemSerializer(serializers.Serializer):
     tipo_riesgo = serializers.CharField()
     nivel_severidad = serializers.IntegerField()
     semaforo = serializers.SerializerMethodField()
-    fecha_hora = serializers.DateTimeField(format="%Y-%m-%dT%H:%M:%SZ")
+    fecha_hora = UTCDateTimeField()
     estado_evaluacion = serializers.CharField()
     evaluacion = EvaluacionPublicSerializer(allow_null=True)
 
@@ -69,8 +78,8 @@ class AlertaListItemSerializer(serializers.Serializer):
 
 
 class TrazabilidadSerializer(serializers.Serializer):
-    registrada_en = serializers.DateTimeField(format="%Y-%m-%dT%H:%M:%SZ")
-    actualizada_en = serializers.DateTimeField(format="%Y-%m-%dT%H:%M:%SZ")
+    registrada_en = UTCDateTimeField()
+    actualizada_en = UTCDateTimeField()
     origen = serializers.CharField()
 
 
