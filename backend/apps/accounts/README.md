@@ -32,7 +32,7 @@ UUID y `usuario` autenticados se pasan a evaluaciones como contexto. Ninguna API
 
 Autenticar con usuario o correo; los correos son únicos y normalizados a minúsculas. Los nombres de usuario no contienen `@`, evitando ambigüedad con correos. Usuarios desactivados no pueden autenticar ni renovar tokens. Cada petición protegida comprueba usuario activo.
 
-Logout revoca el refresh presentado; el frontend elimina sus tokens. El access ya emitido puede seguir válido hasta expirar, como establece el contrato. Recuperación usa tokens distintos de JWT, opacos, de un solo uso y 1 hora de vigencia. El enlace apunta a `FRONTEND_ORIGIN` y la futura pantalla `/password-reset/confirm?token=...`; es un enlace de navegación, no una API nueva.
+Logout revoca el refresh presentado; el frontend elimina sus tokens. El access ya emitido puede seguir válido hasta expirar, como establece el contrato. Recuperación usa tokens distintos de JWT, opacos, de un solo uso y 1 hora de vigencia. El enlace apunta a `FRONTEND_BASE_URL` y `PASSWORD_RESET_PATH`; es un enlace de navegación, no una API nueva. La respuesta pública es genérica para cuentas registradas, inexistentes e inactivas.
 
 Pruebas implementadas en [tests](tests/README.md): credenciales inválidas, inactividad, renovación/reutilización concurrente, cierre, token de recuperación vencido/usado, falta de sesión, cambio de contraseña y fallos. [seed_demo_user](management/commands/README.md) crea el usuario local del equipo.
 

@@ -151,7 +151,7 @@ Para comprobar la sesión, envía `GET http://127.0.0.1:8000/api/v1/auth/me`. En
 
 El token vence en una hora y solo se puede usar una vez. Al cambiar la contraseña, vuelve a iniciar sesión: los tokens de sesión anteriores dejan de servir. La contraseña nueva debe cumplir los validadores de la aplicación; el comando de usuario local permite restaurar la contraseña sencilla de prueba.
 
-La pantalla web de recuperación está pendiente del frontend. Para configurar correo SMTP, consulta [SCRUM-31](docs/SCRUM-31.md#correo-y-configuración).
+La pantalla web de recuperación está pendiente del frontend. Para configurar archivos locales o SMTP, consulta [SCRUM-31](docs/SCRUM-31.md#correo-y-configuración) y [la cuenta técnica de pruebas](docs/SMTP_TEST_ACCOUNT.md).
 
 ## Ubicar tu tarea de Jira
 

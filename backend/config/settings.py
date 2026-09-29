@@ -44,13 +44,19 @@ if len(SECRET_KEY) < 50:
     raise ImproperlyConfigured("DJANGO_SECRET_KEY debe tener al menos 50 caracteres.")
 
 ALLOWED_HOSTS = [v.strip() for v in os.getenv("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1,[::1]").split(",") if v.strip()]
-FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "http://localhost:5173").rstrip("/")
-origin = urlsplit(FRONTEND_ORIGIN)
+FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL", os.getenv("FRONTEND_ORIGIN", "http://localhost:3000")).rstrip("/")
+origin = urlsplit(FRONTEND_BASE_URL)
 if (origin.scheme not in {"http", "https"} or not origin.netloc or origin.path
         or origin.query or origin.fragment or origin.username or origin.password):
-    raise ImproperlyConfigured("FRONTEND_ORIGIN debe ser un origen HTTP(S), sin ruta ni credenciales.")
+    raise ImproperlyConfigured("FRONTEND_BASE_URL debe ser un origen HTTP(S), sin ruta ni credenciales.")
 if not DEBUG and origin.scheme != "https":
-    raise ImproperlyConfigured("FRONTEND_ORIGIN debe usar HTTPS fuera de desarrollo.")
+    raise ImproperlyConfigured("FRONTEND_BASE_URL debe usar HTTPS fuera de desarrollo.")
+FRONTEND_ORIGIN = FRONTEND_BASE_URL
+PASSWORD_RESET_PATH = os.getenv("PASSWORD_RESET_PATH", "/password-reset/confirm")
+if (not PASSWORD_RESET_PATH.startswith("/") or PASSWORD_RESET_PATH.startswith("//")
+        or urlsplit(PASSWORD_RESET_PATH).query or urlsplit(PASSWORD_RESET_PATH).fragment
+        or urlsplit(PASSWORD_RESET_PATH).netloc):
+    raise ImproperlyConfigured("PASSWORD_RESET_PATH debe ser una ruta absoluta sin consulta ni fragmento.")
 
 INSTALLED_APPS = [
     "django.contrib.auth",
@@ -130,18 +136,40 @@ MONGODB_SERVER_SELECTION_TIMEOUT_MS = 5000
 
 # Rotación propia transaccional en RefreshSession; no combinar con blacklist app.
 PASSWORD_RESET_LIFETIME = timedelta(hours=1)
-EMAIL_DELIVERY_TIMEOUT = 10
-EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", "django.core.mail.backends.filebased.EmailBackend" if DEBUG else "django.core.mail.backends.smtp.EmailBackend")
+def positive_int(name, default):
+    try:
+        value = int(os.getenv(name, str(default)))
+    except ValueError:
+        raise ImproperlyConfigured(f"{name} debe ser un entero positivo.") from None
+    if value <= 0:
+        raise ImproperlyConfigured(f"{name} debe ser un entero positivo.")
+    return value
+
+
+EMAIL_DELIVERY_TIMEOUT = positive_int("EMAIL_TIMEOUT_SECONDS", 10)
+PASSWORD_RESET_RATE_LIMIT_MAX = positive_int("PASSWORD_RESET_RATE_LIMIT_MAX", 5)
+PASSWORD_RESET_RATE_LIMIT_WINDOW_SECONDS = positive_int("PASSWORD_RESET_RATE_LIMIT_WINDOW_SECONDS", 900)
+EMAIL_BACKEND_CHOICE = os.getenv("EMAIL_BACKEND", "file" if DEBUG else "smtp")
+EMAIL_BACKEND_CHOICE = {
+    "django.core.mail.backends.filebased.EmailBackend": "file",
+    "django.core.mail.backends.smtp.EmailBackend": "smtp",
+}.get(EMAIL_BACKEND_CHOICE, EMAIL_BACKEND_CHOICE)
+EMAIL_BACKEND = {"file": "django.core.mail.backends.filebased.EmailBackend",
+                 "smtp": "django.core.mail.backends.smtp.EmailBackend"}.get(EMAIL_BACKEND_CHOICE)
+if EMAIL_BACKEND is None:
+    raise ImproperlyConfigured("EMAIL_BACKEND debe ser file o smtp.")
 EMAIL_FILE_PATH = local_path("EMAIL_FILE_PATH", ".local/emails")
-EMAIL_HOST = os.getenv("EMAIL_HOST", "")
-EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
-EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
-EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
-EMAIL_USE_TLS = env_bool("EMAIL_USE_TLS", True)
-EMAIL_USE_SSL = env_bool("EMAIL_USE_SSL", False)
+EMAIL_HOST = os.getenv("SMTP_HOST", os.getenv("EMAIL_HOST", ""))
+EMAIL_PORT = positive_int("SMTP_PORT", os.getenv("EMAIL_PORT", "587"))
+EMAIL_HOST_USER = os.getenv("SMTP_USERNAME", os.getenv("EMAIL_HOST_USER", ""))
+EMAIL_HOST_PASSWORD = os.getenv("SMTP_PASSWORD", os.getenv("EMAIL_HOST_PASSWORD", ""))
+EMAIL_USE_TLS = env_bool("SMTP_USE_TLS", env_bool("EMAIL_USE_TLS", True))
+EMAIL_USE_SSL = False
 EMAIL_TIMEOUT = EMAIL_DELIVERY_TIMEOUT
-DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "psycode@example.test")
-CORS_ALLOWED_ORIGINS = [FRONTEND_ORIGIN]
+DEFAULT_FROM_EMAIL = os.getenv("EMAIL_FROM", os.getenv("DEFAULT_FROM_EMAIL", "no-reply@psycode.local"))
+if EMAIL_BACKEND_CHOICE == "smtp" and (not EMAIL_HOST or not DEFAULT_FROM_EMAIL):
+    raise ImproperlyConfigured("SMTP_HOST y EMAIL_FROM son obligatorios para SMTP.")
+CORS_ALLOWED_ORIGINS = [FRONTEND_BASE_URL]
 CORS_ALLOW_CREDENTIALS = False
 CORS_URLS_REGEX = r"^/api/v1/.*$"
 SECURE_SSL_REDIRECT = not DEBUG

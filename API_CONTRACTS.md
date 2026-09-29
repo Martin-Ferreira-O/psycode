@@ -199,16 +199,16 @@ Respuesta 202:
 {
   "success": true,
   "data": {},
-  "message": "Instrucciones enviadas",
+  "message": "Si el correo está registrado, recibirás las instrucciones para recuperar tu contraseña.",
   "timestamp": "2026-09-12T15:30:00Z"
 }
 ~~~
 
-Validar existencia y estado activo; emitir token opaco de recuperación distinto del JWT. Enlace frontend `/password-reset/confirm?token=...` relativo a FRONTEND_ORIGIN. No devolver token en respuesta ni logs.
+Normalizar correo y aplicar límites por IP y correo; comprobar existencia y estado activo internamente. Solo entonces emitir token opaco de recuperación distinto del JWT. Enlace frontend configurable con `FRONTEND_BASE_URL` y `PASSWORD_RESET_PATH`. No devolver token en respuesta ni logs. Solicitudes repetidas para el mismo correo durante la ventana no reemplazan el token vigente.
 
-202 conserva el borrador: indica aceptación del correo por el transporte, no entrega al destinatario ni existencia de una cola. Envío síncrono con plazo total máximo de 10 segundos.
+202 y el mismo mensaje se devuelven para correo registrado, inexistente e inactivo. El envío es síncrono con plazo máximo configurable. 202 no garantiza recepción por el destinatario.
 
-Errores específicos: `404 AUTH_USER_NOT_FOUND`, `403 AUTH_USER_INACTIVE`, `503 PASSWORD_RESET_DELIVERY_FAILED` por fallo/timeout del correo. Mantener 404 revela si una cuenta existe: se conserva por compatibilidad y debe revisarse antes de producción.
+Al superar el límite se responde `429 PASSWORD_RESET_RATE_LIMITED` sin información sobre la cuenta. Un fallo de entrega elimina el token emitido y conserva la respuesta pública 202; el tiempo de una entrega SMTP puede variar respecto a una solicitud sin entrega.
 
 ### POST /api/v1/auth/password-reset/confirm
 

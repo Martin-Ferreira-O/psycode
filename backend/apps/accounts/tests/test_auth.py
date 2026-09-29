@@ -20,7 +20,7 @@ from rest_framework.test import APIClient
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from backend.apps.accounts.clients import EmailClient
-from backend.apps.accounts.models import PasswordReset, RefreshSession, User
+from backend.apps.accounts.models import PasswordReset, PasswordResetRateLimit, RefreshSession, User
 from backend.apps.accounts.repositories import AccountsRepository
 from backend.apps.accounts.services import AccountsService, reset_digest
 from backend.common.errors import ServiceError
@@ -165,8 +165,9 @@ class AuthTests(TestCase):
 
     @override_settings(DEBUG=True)
     def test_unknown_routes_and_trailing_slashes_stay_json_in_development(self):
-        for path in ("/api/v1/unknown", PREFIX + "login/", "/api/v1/alerts"):
+        for path in ("/api/v1/unknown", PREFIX + "login/"):
             self.assert_error(self.client.get(path), 404, "RESOURCE_NOT_FOUND")
+        self.assert_error(self.client.get("/api/v1/alerts"), 401, "AUTH_REQUIRED")
 
     def test_cors_only_configured_origin(self):
         allowed = self.client.options(PREFIX + "login", HTTP_ORIGIN="http://localhost:5173", HTTP_ACCESS_CONTROL_REQUEST_METHOD="POST", HTTP_ACCESS_CONTROL_REQUEST_HEADERS="content-type,authorization")
@@ -186,14 +187,15 @@ class AuthTests(TestCase):
         self.assert_error(response, 500, "INTERNAL_ERROR")
         self.assertNotIn("private-token", response.content.decode())
 
-    def test_reset_stores_digest_and_invalidates_previous_request(self):
+    def test_reset_stores_digest_and_does_not_replace_during_window(self):
         first = self.request_reset()
-        second = self.request_reset()
+        with patch.object(EmailClient, "send_password_reset") as sender:
+            response = self.client.post(PREFIX + "password-reset", {"correo": " MARTIN@EXAMPLE.TEST "}, format="json")
+        self.assertEqual(response.status_code, 202)
+        sender.assert_not_called()
         record = PasswordReset.objects.get(user=self.user)
-        self.assertEqual(record.token_hash, reset_digest(second))
-        self.assertNotEqual(record.token_hash, second)
-        self.assert_error(self.confirm(first), 400, "AUTH_INVALID_RESET_TOKEN")
-        self.assertEqual(self.confirm(second).status_code, 200)
+        self.assertEqual(record.token_hash, reset_digest(first))
+        self.assertEqual(self.confirm(first).status_code, 200)
 
     def test_reset_confirm_changes_password_and_invalidates_all_old_tokens(self):
         pair = self.login()
@@ -227,10 +229,19 @@ class AuthTests(TestCase):
         self.assert_error(self.client.post(PREFIX + "refresh", {"refresh_token": pair["refresh_token"]}, format="json"), 401, "AUTH_INVALID_REFRESH_TOKEN")
 
     def test_reset_unknown_inactive_and_invalid_email(self):
-        for email, status, code in (("missing@example.test", 404, "AUTH_USER_NOT_FOUND"), ("bad", 400, "VALIDATION_ERROR")):
-            self.assert_error(self.client.post(PREFIX + "password-reset", {"correo": email}, format="json"), status, code)
+        with patch.object(EmailClient, "send_password_reset") as sender:
+            unknown = self.client.post(PREFIX + "password-reset", {"correo": "missing@example.test"}, format="json")
+        self.assertEqual(unknown.status_code, 202)
+        sender.assert_not_called()
+        self.assertFalse(PasswordReset.objects.exists())
+        self.assert_error(self.client.post(PREFIX + "password-reset", {"correo": "bad"}, format="json"), 400, "VALIDATION_ERROR")
         User.objects.filter(pk=self.user.pk).update(is_active=False)
-        self.assert_error(self.client.post(PREFIX + "password-reset", {"correo": self.user.email}, format="json"), 403, "AUTH_USER_INACTIVE")
+        with patch.object(EmailClient, "send_password_reset") as sender:
+            inactive = self.client.post(PREFIX + "password-reset", {"correo": self.user.email}, format="json")
+        self.assertEqual(inactive.status_code, 202)
+        self.assertEqual(inactive.data["message"], unknown.data["message"])
+        sender.assert_not_called()
+        self.assertFalse(PasswordReset.objects.exists())
 
     def test_reset_cannot_confirm_for_deactivated_user(self):
         token = self.request_reset()
@@ -240,14 +251,61 @@ class AuthTests(TestCase):
     def test_email_failure_discards_only_failed_reset(self):
         with patch.object(EmailClient, "send_password_reset", side_effect=ServiceError("PASSWORD_RESET_DELIVERY_FAILED", "No enviado", 503)):
             response = self.client.post(PREFIX + "password-reset", {"correo": self.user.email}, format="json")
-        self.assert_error(response, 503, "PASSWORD_RESET_DELIVERY_FAILED")
+        self.assertEqual(response.status_code, 202)
         self.assertFalse(PasswordReset.objects.exists())
 
     def test_failed_older_email_does_not_delete_newer_reset(self):
         old = self.request_reset()
+        PasswordResetRateLimit.objects.all().delete()
         new = self.request_reset()
         AccountsRepository().discard_reset(reset_digest(old))
         self.assertEqual(PasswordReset.objects.get(user=self.user).token_hash, reset_digest(new))
+
+    @override_settings(PASSWORD_RESET_RATE_LIMIT_MAX=2)
+    def test_reset_rate_limits_email_and_ip_without_disclosing_account(self):
+        with patch.object(EmailClient, "send_password_reset") as sender:
+            first = self.client.post(PREFIX + "password-reset", {"correo": self.user.email}, format="json", REMOTE_ADDR="192.0.2.1")
+            second = self.client.post(PREFIX + "password-reset", {"correo": " MARTIN@EXAMPLE.TEST "}, format="json", REMOTE_ADDR="192.0.2.2")
+            limited = self.client.post(PREFIX + "password-reset", {"correo": self.user.email}, format="json", REMOTE_ADDR="192.0.2.3")
+        self.assertEqual(first.status_code, second.status_code)
+        self.assertEqual(first.data["message"], second.data["message"])
+        self.assertEqual(limited.status_code, 429)
+        self.assertEqual(sender.call_count, 1)
+        with patch.object(EmailClient, "send_password_reset") as sender:
+            self.client.post(PREFIX + "password-reset", {"correo": "other@example.test"}, format="json", REMOTE_ADDR="192.0.2.4")
+            self.client.post(PREFIX + "password-reset", {"correo": "missing@example.test"}, format="json", REMOTE_ADDR="192.0.2.4")
+            ip_limited = self.client.post(PREFIX + "password-reset", {"correo": "third@example.test"}, format="json", REMOTE_ADDR="192.0.2.4")
+        self.assertEqual(ip_limited.status_code, 429)
+        sender.assert_not_called()
+
+    @override_settings(FRONTEND_BASE_URL="https://app.example.test", PASSWORD_RESET_PATH="/password-reset/confirm")
+    def test_reset_link_uses_frontend_configuration(self):
+        with patch.object(EmailClient, "send_password_reset") as sender:
+            self.client.post(PREFIX + "password-reset", {"correo": self.user.email}, format="json")
+        link = sender.call_args.args[1]
+        self.assertEqual(urlsplit(link).scheme, "https")
+        self.assertEqual(urlsplit(link).netloc, "app.example.test")
+        self.assertEqual(urlsplit(link).path, "/password-reset/confirm")
+        self.assertIn("token", parse_qs(urlsplit(link).query))
+
+    @override_settings(PASSWORD_RESET_RATE_LIMIT_MAX=1, PASSWORD_RESET_RATE_LIMIT_WINDOW_SECONDS=60)
+    def test_reset_window_expires(self):
+        with patch.object(EmailClient, "send_password_reset") as sender:
+            self.client.post(PREFIX + "password-reset", {"correo": self.user.email}, format="json")
+            limited = self.client.post(PREFIX + "password-reset", {"correo": self.user.email}, format="json")
+            self.assertEqual(limited.status_code, 429)
+            PasswordResetRateLimit.objects.update(window_started_at=timezone.now() - timedelta(seconds=61))
+            renewed = self.client.post(PREFIX + "password-reset", {"correo": self.user.email}, format="json")
+        self.assertEqual(renewed.status_code, 202)
+        self.assertEqual(sender.call_count, 2)
+
+    def test_missing_email_does_not_create_local_message(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.dict(os.environ, {"EMAIL_BACKEND": "file", "EMAIL_FILE_PATH": directory}):
+                response = self.client.post(PREFIX + "password-reset", {"correo": "absent@example.test"}, format="json")
+            self.assertEqual(response.status_code, 202)
+            self.assertEqual(list(Path(directory).iterdir()), [])
+        self.assertFalse(PasswordReset.objects.exists())
 
     def test_password_change_rolls_back_if_session_revocation_fails(self):
         token = self.request_reset()

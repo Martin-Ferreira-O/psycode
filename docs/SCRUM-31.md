@@ -24,11 +24,15 @@ El servicio termina la transacción antes de enviar correo. EmailClient inicia e
 
 ## Correo y configuración
 
-Desarrollo usa backend filebased de Django: archivos en .local/emails con permisos privados, sin SMTP. Estos archivos contienen tokens y se excluyen de Git. El frontend del enlace todavía no está implementado; copiar el token para probar la confirmación por API.
+Desarrollo usa `EMAIL_BACKEND=file`: archivos en `.local/emails` con permisos privados, sin SMTP. Estos archivos contienen tokens y se excluyen de Git. El enlace usa `FRONTEND_BASE_URL` y `PASSWORD_RESET_PATH`; el frontend debe servir esa pantalla. Hasta entonces, copiar el token para probar la confirmación por API.
 
-Para correo real, configurar EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend, host, puerto, usuario, contraseña, remitente y TLS/SSL en .env. No habilitar ambos TLS y SSL. Fuera de DEBUG se exige secreto largo y origen frontend HTTPS, con redirección HTTPS. La configuración del proxy y entrega SMTP real no se han desplegado ni verificado en esta tarea.
+Para correo real, configurar `EMAIL_BACKEND=smtp`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USE_TLS`, `SMTP_USERNAME`, `SMTP_PASSWORD` y `EMAIL_FROM` como secretos o variables del entorno. Para Gmail de pruebas usar `smtp.gmail.com`, puerto `587` y TLS. Fuera de DEBUG se exige secreto largo y origen frontend HTTPS, con redirección HTTPS. La configuración del proxy y entrega SMTP real requieren el ambiente y una cuenta técnica habilitada.
 
-Se conserva AUTH_USER_NOT_FOUND (404) según el contrato, con la exposición de existencia de cuentas ya documentada. No se agregan roles ni páginas frontend. Las apps futuras responden 404 hasta tener rutas implementadas.
+La API responde 202 con el mismo mensaje para correos registrados, inexistentes e inactivos. Si el envío falla, elimina el token y conserva esa respuesta. Los contadores persistidos en SQLite limitan IP y correo normalizado; solo la primera solicitud admitida por correo dentro de la ventana emite token. No se agregan roles ni páginas frontend.
+
+Las respuestas aceptadas tienen un mínimo de 0,5 segundos para reducir diferencias evidentes con el backend de archivos. SMTP sigue siendo síncrono: la latencia de red puede revelar diferencias de tiempo y el límite máximo evita que la solicitud quede bloqueada indefinidamente. Para ocultar por completo esa diferencia en producción se requerirá una cola de entregas.
+
+La preparación y titularidad de la [cuenta técnica de Gmail](SMTP_TEST_ACCOUNT.md) están pendientes de designación por el equipo. El remitente o relay institucional definitivo depende del cliente.
 
 ## Pruebas y reproducción
 
