@@ -148,3 +148,7 @@ window.addEventListener(
         verificarSesion();
     }
 );
+// Mantiene apiGet/apiPost compatibles con consumidores que necesitan Response.
+async function apiGetDatos(url, opciones = {}) {
+    return solicitarJson(url, { ...opciones, method: "GET" }, apiRequest);
+}

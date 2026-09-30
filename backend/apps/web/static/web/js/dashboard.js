@@ -178,8 +178,15 @@ function renderizarTabla() {
         `${filtradas.length === 1 ? "" : "s"} encontrada` +
         `${filtradas.length === 1 ? "" : "s"}`;
 
-    elementos.estadoVacio.hidden =
-        filtradas.length !== 0;
+    if (filtradas.length === 0) {
+        const hayFiltros = [elementos.buscar, elementos.box, elementos.estado,
+            elementos.desde, elementos.hasta].some(control => control.value.trim());
+        mostrarVacio(elementos.estadoVacio, hayFiltros
+            ? "No hay alertas que coincidan con los filtros. Prueba con otros criterios."
+            : "Todavía no hay alertas registradas.");
+    } else {
+        limpiarEstado(elementos.estadoVacio);
+    }
     elementos.tablaContenedor.hidden =
         filtradas.length === 0;
     elementos.paginacion.hidden =
@@ -362,8 +369,7 @@ function completarDetalle(alerta) {
         "#mensajeEvaluacion"
     );
 
-    mensaje.textContent = "";
-    mensaje.className = "mensaje-evaluacion";
+    limpiarEstado(mensaje);
 
     if (alerta.evaluacion) {
         document.querySelector(
@@ -432,11 +438,7 @@ function guardarEvaluacion() {
     );
 
     if (!opcionSeleccionada) {
-        mensaje.textContent =
-            "Selecciona una opción antes de guardar.";
-
-        mensaje.className =
-            "mensaje-evaluacion error";
+        mostrarEstado(mensaje, "error", "Selecciona una opción antes de guardar.");
 
         return;
     }
