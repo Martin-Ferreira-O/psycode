@@ -19,3 +19,7 @@ def alertas(request):
 
 def evaluaciones(request):
     return render(request, "web/evaluaciones.html")
+
+
+def password_reset_confirm(request):
+    return render(request, "web/password_reset_confirm.html")
