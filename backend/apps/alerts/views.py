@@ -7,13 +7,15 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from backend.common.errors import PersistenceUnavailable
+from backend.common.errors import PersistenceUnavailable, ServiceError
 
-from .exceptions import AlertNotFound
+from .exceptions import AlertNotFound, EvaluationAlreadyRegistered
 from .ports import AlertQueryFilters
 from .repositories import AlertsRepository
 from .serializers import (
     AlertQueryFilterSerializer,
+    EvaluacionCreateSerializer,
+    EvaluacionPublicSerializer,
     AlertaDetailSerializer,
     AlertaListItemSerializer,
 )
@@ -144,4 +146,72 @@ class AlertDetailView(APIView):
                 "timestamp": ahora_utc_iso(),
             },
             status=status.HTTP_200_OK,
+        )
+
+
+class AlertEvaluationView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, alerta_id: str):
+        try:
+            alerta = get_service().get_alert(alerta_id)
+        except AlertNotFound:
+            raise ServiceError(
+                "ALERTA_NO_ENCONTRADA",
+                "La alerta especificada no existe",
+                404,
+                {"alerta_id": alerta_id},
+            ) from None
+        if alerta.evaluacion is None:
+            raise ServiceError(
+                "EVALUACION_NO_ENCONTRADA",
+                "La alerta todavía no tiene una evaluación",
+                404,
+                {"alerta_id": alerta.alerta_id},
+            )
+
+        return Response(
+            {
+                "success": True,
+                "data": EvaluacionPublicSerializer(alerta.evaluacion).data,
+                "message": "Evaluación de alerta",
+                "timestamp": ahora_utc_iso(),
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    def post(self, request, alerta_id: str):
+        serializer = EvaluacionCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            evaluacion = get_service().record_evaluation(
+                alerta_id,
+                serializer.validated_data["evaluacion"],
+                str(request.user.pk),
+                request.user.username,
+            )
+        except AlertNotFound:
+            raise ServiceError(
+                "ALERTA_NO_ENCONTRADA",
+                "La alerta especificada no existe",
+                404,
+                {"alerta_id": alerta_id},
+            ) from None
+        except EvaluationAlreadyRegistered:
+            raise ServiceError(
+                "EVALUACION_YA_REGISTRADA",
+                "La alerta ya tiene una evaluación",
+                409,
+                {"alerta_id": alerta_id},
+            ) from None
+
+        return Response(
+            {
+                "success": True,
+                "data": EvaluacionPublicSerializer(evaluacion).data,
+                "message": "Evaluación registrada",
+                "timestamp": ahora_utc_iso(),
+            },
+            status=status.HTTP_201_CREATED,
+            headers={"Location": f"/api/v1/alerts/{evaluacion.alerta_id}/evaluacion"},
         )

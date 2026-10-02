@@ -35,9 +35,9 @@ function obtenerRegistroSistema(resultado) {
 
 function renderizarEvaluaciones() {
     elementos.resultadoTexto.textContent =
-        `${evaluaciones.length} evaluación` +
-        `${evaluaciones.length === 1 ? "" : "es"} registrada` +
-        `${evaluaciones.length === 1 ? "" : "s"}`;
+        evaluaciones.length === 1
+            ? "1 evaluación registrada"
+            : `${evaluaciones.length} evaluaciones registradas`;
 
     if (evaluaciones.length === 0) {
         mostrarVacio(elementos.estadoVacio, "Todavía no existen alertas evaluadas.");
@@ -56,7 +56,7 @@ function renderizarEvaluaciones() {
             return `
                 <tr>
                     <td>
-                        <strong>${alerta.alerta_id}</strong>
+                        <strong>${codigoAlertaVisible(alerta.alerta_id)}</strong>
                     </td>
 
                     <td>
@@ -121,7 +121,7 @@ function abrirDetalle(alertaId) {
 
     const resultado = obtenerResultado(alerta);
 
-    elementos.tituloModal.textContent = alerta.alerta_id;
+    elementos.tituloModal.textContent = codigoAlertaVisible(alerta.alerta_id);
     elementos.detalleBox.textContent = formatearBox(alerta.box);
     elementos.detalleTipo.textContent = formatearTipoRiesgo(
         alerta.tipo_riesgo

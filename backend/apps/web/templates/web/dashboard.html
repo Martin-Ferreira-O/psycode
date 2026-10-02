@@ -43,17 +43,21 @@
                     <strong id="totalAlertas" class="resumen-numero">0</strong>
                 </a>
 
-                <article class="tarjeta-resumen tarjeta-contador">
-                    <div class="resumen-superior" aria-hidden="true"></div>
+                <a href="{% url 'web:dashboard' %}?estado_evaluacion=pendiente#historial-alertas" class="tarjeta-resumen tarjeta-contador tarjeta-acceso">
+                    <div class="resumen-superior">
+                        <span class="resumen-enlace">Ver historial</span>
+                    </div>
                     <span class="resumen-etiqueta">Pendientes</span>
                     <strong id="totalPendientes" class="resumen-numero">0</strong>
-                </article>
+                </a>
 
-                <article class="tarjeta-resumen tarjeta-contador">
-                    <div class="resumen-superior" aria-hidden="true"></div>
+                <a href="{% url 'web:dashboard' %}?revisadas=true#historial-alertas" class="tarjeta-resumen tarjeta-contador tarjeta-acceso">
+                    <div class="resumen-superior">
+                        <span class="resumen-enlace">Ver historial</span>
+                    </div>
                     <span class="resumen-etiqueta">Revisadas</span>
                     <strong id="totalRevisadas" class="resumen-numero">0</strong>
-                </article>
+                </a>
             </section>
 
             <section id="historial-alertas" class="seccion-historial">
@@ -95,6 +99,7 @@
                         <select id="filtroEstado">
                             <option value="">Todos</option>
                             <option value="pendiente">Pendiente</option>
+                            <option value="__revisadas__">Revisadas</option>
                             <option value="correcta">Correcta</option>
                             <option value="falso_positivo">Falso positivo</option>
                             <option value="neutro">Neutro</option>
@@ -202,6 +207,8 @@
                 </button>
             </header>
 
+            <p id="estadoDetalle" class="mensaje-evaluacion" role="status" hidden></p>
+
             <div class="detalle-grid">
                 <div class="detalle-item">
                     <span>Box</span>
@@ -305,6 +312,7 @@
     <script src="{% static 'web/js/estados.js' %}"></script>
     <script src="{% static 'web/js/api.js' %}"></script>
     <script src="{% static 'web/js/components.js' %}"></script>
-    <script src="{% static 'web/js/dashboard.js' %}"></script>
+    <script src="{% static 'web/js/utils.js' %}?v=2"></script>
+    <script src="{% static 'web/js/dashboard.js' %}?v=2"></script>
 </body>
 </html>

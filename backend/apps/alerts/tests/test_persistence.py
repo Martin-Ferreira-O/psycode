@@ -3,11 +3,13 @@ import io
 import os
 import unittest
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import SimpleTestCase, override_settings
 from pymongo.errors import DuplicateKeyError
+from rest_framework.test import APIClient
 
 from backend.apps.alerts.demo import DEMO_ALERTS, EVALUADOR_ID, EVALUADOR_USUARIO, ORIGEN
 from backend.apps.alerts.documents import CAMPOS_ALERTA, CAMPOS_PROHIBIDOS, alerta_a_documento, documento_a_alerta
@@ -248,3 +250,46 @@ class MongoIntegrationTests(SimpleTestCase):
         evento = self.store._db()["audit_events"].find_one({"alerta_id": spec["alerta_id"], "action": "alerts.evaluate"})
         self.assertIsNotNone(evento)
         self.assertEqual(evento["actor_id"], EVALUADOR_ID)
+
+    def test_api_real_lista_todas_y_registra_evaluacion(self):
+        spec = DEMO_ALERTS[0]
+        AlertsService(self.store).register_alert(
+            alerta_id=spec["alerta_id"],
+            box=spec["box"],
+            tipo_riesgo=spec["tipo_riesgo"],
+            nivel_severidad=spec["nivel_severidad"],
+            fecha_hora=spec["fecha_hora"],
+            sesion_id=spec["sesion_id"],
+            origen=ORIGEN,
+            descripcion=spec["descripcion"],
+        )
+        client = APIClient()
+        client.force_authenticate(
+            user=SimpleNamespace(
+                is_authenticated=True,
+                pk=EVALUADOR_ID,
+                username=EVALUADOR_USUARIO,
+            )
+        )
+
+        lista = client.get("/api/v1/alerts?limit=50&offset=0")
+        self.assertEqual(lista.status_code, 200, lista.content)
+        self.assertEqual(lista.data["data"]["total"], 1)
+        self.assertEqual(len(lista.data["data"]["items"]), 1)
+
+        response = client.post(
+            f"/api/v1/alerts/{spec['alerta_id']}/evaluacion",
+            {"evaluacion": "correcta"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertEqual(response.data["data"]["usuario_id"], EVALUADOR_ID)
+
+        detalle = client.get(f"/api/v1/alerts/{spec['alerta_id']}/evaluacion")
+        self.assertEqual(detalle.status_code, 200, detalle.content)
+        self.assertEqual(detalle.data["data"]["evaluacion"], "correcta")
+
+        revisadas = client.get("/api/v1/alerts?revisadas=true&limit=50&offset=0")
+        pendientes = client.get("/api/v1/alerts?revisadas=false&limit=50&offset=0")
+        self.assertEqual(revisadas.data["data"]["total"], 1)
+        self.assertEqual(pendientes.data["data"]["total"], 0)

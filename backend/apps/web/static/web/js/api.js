@@ -37,6 +37,52 @@ function verificarSesion() {
     return true;
 }
 
+let solicitudRenovacion = null;
+
+async function renovarSesion() {
+    const refreshToken = obtenerRefreshToken();
+    if (!refreshToken) {
+        return false;
+    }
+
+    if (!solicitudRenovacion) {
+        solicitudRenovacion = (async () => {
+            try {
+                const response = await fetch("/api/v1/auth/refresh", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Accept: "application/json",
+                    },
+                    body: JSON.stringify({ refresh_token: refreshToken }),
+                });
+                if ([400, 401, 403].includes(response.status)) {
+                    return false;
+                }
+                if (!response.ok) {
+                    return null;
+                }
+
+                const body = await response.json();
+                const tokens = body.data;
+                if (!body.success || !tokens?.access_token || !tokens?.refresh_token) {
+                    return false;
+                }
+
+                localStorage.setItem("access_token", tokens.access_token);
+                localStorage.setItem("refresh_token", tokens.refresh_token);
+                return true;
+            } catch (error) {
+                return null;
+            } finally {
+                solicitudRenovacion = null;
+            }
+        })();
+    }
+
+    return solicitudRenovacion;
+}
+
 
 async function apiRequest(url, opciones = {}) {
     const token = obtenerAccessToken();
@@ -62,14 +108,25 @@ async function apiRequest(url, opciones = {}) {
         );
     }
 
-    const response = await fetch(url, {
-        ...opciones,
-        headers,
-    });
+    const response = await fetch(url, { ...opciones, headers });
 
     if (response.status === 401) {
-        redirigirAlLogin();
-        return null;
+        const renovada = obtenerAccessToken() !== token
+            ? true
+            : await renovarSesion();
+        if (renovada === true) {
+            headers.set("Authorization", `Bearer ${obtenerAccessToken()}`);
+            const reintentada = await fetch(url, { ...opciones, headers });
+            if (reintentada.status === 401) {
+                redirigirAlLogin();
+                return null;
+            }
+            return reintentada;
+        }
+        if (renovada === false) {
+            redirigirAlLogin();
+            return null;
+        }
     }
 
     return response;

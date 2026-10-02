@@ -2,12 +2,6 @@ if (!verificarSesion()) {
     throw new Error("Sesión no válida");
 }
 
-const resultadosEvaluacion = [
-    "correcta",
-    "falso_positivo",
-    "neutro",
-];
-
 const etiquetas = {
     riesgo_suicida: "Riesgo suicida",
     vulneracion_derechos: "Vulneración de derechos",
@@ -16,43 +10,6 @@ const etiquetas = {
     falso_positivo: "Falso positivo",
     neutro: "Neutro",
 };
-
-const alertas = Array.from({ length: 20}, (_, indice) => {
-    const numero = 84 - indice;
-    const pendiente = indice < 2;
-    const resultado = pendiente
-        ? null
-        : resultadosEvaluacion[
-            (indice - 2) % resultadosEvaluacion.length
-        ];
-
-    const dia = 8 - Math.floor(indice / 5);
-    const hora = 17 - (indice % 6);
-    const minutos = String((indice * 7) % 60).padStart(2, "0");
-
-    return {
-        alerta_id: `ALT-2026-${String(numero).padStart(3, "0")}`,
-        box: `box-${(indice % 5) + 1}`,
-        tipo_riesgo:
-            indice % 2 === 0
-                ? "riesgo_suicida"
-                : "vulneracion_derechos",
-        nivel_severidad: [3, 2, 1][indice % 3],
-        fecha_hora:
-            `2026-09-${String(dia).padStart(2, "0")}` +
-            `T${String(hora).padStart(2, "0")}:${minutos}:00Z`,
-        estado_evaluacion: pendiente ? "pendiente" : resultado,
-        sesion_id:
-            `SES-2026-${String(350 + indice).padStart(3, "0")}`,
-        evaluacion: pendiente
-            ? null
-            : {
-                resultado,
-                usuario: "psicologo",
-                fecha_hora: "2026-09-12T15:10:00Z",
-            },
-    };
-});
 
 const elementos = {
     total: document.querySelector("#totalAlertas"),
@@ -75,399 +32,311 @@ const elementos = {
     anterior: document.querySelector("#paginaAnterior"),
     siguiente: document.querySelector("#paginaSiguiente"),
     modal: document.querySelector("#modalDetalle"),
+    estadoDetalle: document.querySelector("#estadoDetalle"),
     guardar: document.querySelector("#guardarEvaluacion"),
 };
 
 let paginaActual = 1;
 const registrosPorPagina = 10;
+let alertas = [];
+let totalAlertas = 0;
+let totalCoincidencias = 0;
+let offsetActual = 0;
+let solicitudLista = 0;
+let solicitudDetalle = 0;
+let solicitudResumen = null;
+let resumenCargado = false;
+let temporizadorBusqueda;
 let alertaSeleccionada = null;
 
-function formatearBox(box) {
-    const numero = box.split("-")[1];
-    return `Box ${String(numero).padStart(2, "0")}`;
+async function cargarResumenAlertas(forzar = false) {
+    if (solicitudResumen) return solicitudResumen;
+    if (resumenCargado && !forzar) return;
+    if (!resumenCargado) {
+        elementos.total.textContent = "—";
+        elementos.pendientes.textContent = "—";
+        elementos.revisadas.textContent = "—";
+    }
+
+    solicitudResumen = (async () => {
+        try {
+            const [pendientes, revisadas] = await Promise.all([
+                apiGetDatos("/api/v1/alerts?revisadas=false&limit=1&offset=0"),
+                apiGetDatos("/api/v1/alerts?revisadas=true&limit=1&offset=0"),
+            ]);
+            if (!Number.isInteger(pendientes.total) || !Number.isInteger(revisadas.total)) {
+                throw new ErrorSolicitud();
+            }
+
+            elementos.pendientes.textContent = String(pendientes.total);
+            elementos.revisadas.textContent = String(revisadas.total);
+            elementos.total.textContent = String(pendientes.total + revisadas.total);
+            resumenCargado = true;
+        } catch (error) {
+            if (!resumenCargado) {
+                elementos.total.textContent = "—";
+                elementos.pendientes.textContent = "—";
+                elementos.revisadas.textContent = "—";
+            }
+        }
+    })();
+
+    try {
+        await solicitudResumen;
+    } finally {
+        solicitudResumen = null;
+    }
 }
 
-function formatearFecha(fecha) {
-    return new Intl.DateTimeFormat("es-CL", {
-        dateStyle: "medium",
-        timeZone: "America/Santiago",
-    }).format(new Date(fecha));
-}
-
-function formatearHora(fecha) {
-    return new Intl.DateTimeFormat("es-CL", {
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false,
-        timeZone: "America/Santiago",
-    }).format(new Date(fecha));
-}
-
-function etiquetaNivel(nivel) {
-    return {
-        1: "Baja",
-        2: "Media",
-        3: "Alta",
-    }[nivel];
-}
-
-function actualizarTarjetas() {
-    const pendientes = alertas.filter(
-        (alerta) => alerta.estado_evaluacion === "pendiente"
-    ).length;
-
-    elementos.total.textContent = alertas.length;
-    elementos.pendientes.textContent = pendientes;
-    elementos.revisadas.textContent =
-        alertas.length - pendientes;
-}
-
-function obtenerAlertasFiltradas() {
-    const busqueda =
-        elementos.buscar.value.trim().toLowerCase();
-
-    return alertas.filter((alerta) => {
-        const texto = [
-            alerta.alerta_id,
-            alerta.box,
-            etiquetas[alerta.tipo_riesgo],
-        ]
-            .join(" ")
-            .toLowerCase();
-
-        const fecha = alerta.fecha_hora.slice(0, 10);
-
-        return (
-            (!busqueda || texto.includes(busqueda)) &&
-            (!elementos.box.value ||
-                alerta.box === elementos.box.value) &&
-            (!elementos.estado.value ||
-                alerta.estado_evaluacion ===
-                    elementos.estado.value) &&
-            (!elementos.desde.value ||
-                fecha >= elementos.desde.value) &&
-            (!elementos.hasta.value ||
-                fecha <= elementos.hasta.value)
-        );
+function construirUrlAlertas(offsetSolicitado) {
+    const parametros = new URLSearchParams({
+        limit: String(registrosPorPagina),
+        offset: String(offsetSolicitado),
     });
+    const busqueda = elementos.buscar.value.trim();
+    const codigoUuid = Object.entries(codigosAlerta)
+        .find(([, codigo]) => codigo.toLowerCase() === busqueda.toLowerCase())?.[0];
+    const estado = elementos.estado.value;
+
+    if (busqueda) parametros.set("q", codigoUuid || busqueda);
+    if (elementos.box.value) parametros.set("box", elementos.box.value);
+    if (estado === "__revisadas__") {
+        parametros.set("revisadas", "true");
+    } else if (estado) {
+        parametros.set("estado_evaluacion", estado);
+    }
+    if (elementos.desde.value) parametros.set("fecha_desde", elementos.desde.value);
+    if (elementos.hasta.value) parametros.set("fecha_hasta", elementos.hasta.value);
+
+    return `/api/v1/alerts?${parametros.toString()}`;
+}
+
+async function cargarAlertas(offsetSolicitado = 0) {
+    const idSolicitud = ++solicitudLista;
+    elementos.resultadoTexto.textContent = "Consultando alertas…";
+    mostrarCarga(elementos.estadoVacio, "Cargando alertas…");
+    elementos.tablaContenedor.hidden = true;
+    elementos.paginacion.hidden = true;
+
+    try {
+        const data = await apiGetDatos(construirUrlAlertas(offsetSolicitado));
+        if (!Array.isArray(data?.items) || !Number.isInteger(data.total)) {
+            throw new ErrorSolicitud();
+        }
+        if (idSolicitud !== solicitudLista) return;
+
+        alertas = data.items;
+        totalCoincidencias = data.total;
+        offsetActual = data.offset;
+        paginaActual = Math.floor(offsetActual / registrosPorPagina) + 1;
+        renderizarTabla();
+    } catch (error) {
+        if (idSolicitud !== solicitudLista) return;
+        elementos.resultadoTexto.textContent = "No se pudieron consultar las alertas.";
+        elementos.tablaContenedor.hidden = true;
+        elementos.paginacion.hidden = true;
+        mostrarError(elementos.estadoVacio, error, {
+            mensajes: { 404: "No encontramos las alertas solicitadas." },
+            reintentar: () => cargarAlertas(offsetSolicitado),
+        });
+    }
+}
+
+function crearCelda(texto, clase = "", descripcion = "") {
+    const celda = document.createElement("td");
+    if (!clase) {
+        celda.textContent = texto || "—";
+        return celda;
+    }
+
+    const etiqueta = document.createElement("span");
+    etiqueta.className = clase;
+    etiqueta.textContent = texto || "—";
+    if (descripcion) {
+        etiqueta.title = descripcion;
+        etiqueta.setAttribute("aria-label", descripcion);
+    }
+    celda.append(etiqueta);
+    return celda;
 }
 
 function renderizarTabla() {
-    const filtradas = obtenerAlertasFiltradas();
-    const totalPaginas = Math.max(
-        1,
-        Math.ceil(
-            filtradas.length / registrosPorPagina
-        )
-    );
-
-    if (paginaActual > totalPaginas) {
-        paginaActual = totalPaginas;
-    }
-
-    const inicio =
-        (paginaActual - 1) * registrosPorPagina;
-
-    const alertasPagina = filtradas.slice(
-        inicio,
-        inicio + registrosPorPagina
-    );
+    const totalPaginas = Math.ceil(totalCoincidencias / registrosPorPagina);
+    const primero = totalCoincidencias === 0 ? 0 : offsetActual + 1;
+    const final = Math.min(offsetActual + alertas.length, totalCoincidencias);
 
     elementos.resultadoTexto.textContent =
-        `${filtradas.length} alerta` +
-        `${filtradas.length === 1 ? "" : "s"} encontrada` +
-        `${filtradas.length === 1 ? "" : "s"}`;
+        `${totalCoincidencias} alerta${totalCoincidencias === 1 ? "" : "s"} encontrada${totalCoincidencias === 1 ? "" : "s"}`;
 
-    if (filtradas.length === 0) {
+    if (totalCoincidencias === 0) {
         const hayFiltros = [elementos.buscar, elementos.box, elementos.estado,
-            elementos.desde, elementos.hasta].some(control => control.value.trim());
+            elementos.desde, elementos.hasta].some((control) => control.value.trim());
         mostrarVacio(elementos.estadoVacio, hayFiltros
             ? "No hay alertas que coincidan con los filtros. Prueba con otros criterios."
             : "Todavía no hay alertas registradas.");
     } else {
         limpiarEstado(elementos.estadoVacio);
     }
-    elementos.tablaContenedor.hidden =
-        filtradas.length === 0;
-    elementos.paginacion.hidden =
-        filtradas.length === 0;
+    elementos.tablaContenedor.hidden = totalCoincidencias === 0;
+    elementos.paginacion.hidden = totalCoincidencias === 0;
 
-    elementos.tabla.innerHTML = alertasPagina
-        .map(
-            (alerta) => `
-                <tr>
-                    <td>
-                        <strong>${alerta.alerta_id}</strong>
-                    </td>
+    const filas = document.createDocumentFragment();
+    alertas.forEach((alerta) => {
+        const nivel = String(alerta.semaforo || "").toLowerCase();
+        const estado = alerta.estado_evaluacion === "pendiente"
+            ? "estado-pendiente"
+            : "estado-revisada";
+        const fila = document.createElement("tr");
+        fila.append(
+            crearCelda(codigoAlertaVisible(alerta.alerta_id), "identificador-alerta"),
+            crearCelda(formatearBox(alerta.box)),
+            crearCelda(formatearTipoRiesgo(alerta.tipo_riesgo), "etiqueta-tipo"),
+            crearCelda(nivelVisual(alerta), `etiqueta-nivel nivel-${nivel}`, `Nivel ${alerta.nivel_severidad}; semáforo ${alerta.semaforo}`),
+            crearCelda(formatearFecha(alerta.fecha_hora)),
+            crearCelda(formatearHora(alerta.fecha_hora)),
+            crearCelda(alerta.estado_evaluacion === "pendiente" ? "Pendiente" : "Revisada", `etiqueta-estado ${estado}`, `Estado de evaluación: ${etiquetas[alerta.estado_evaluacion]}`),
+        );
 
-                    <td>${formatearBox(alerta.box)}</td>
+        const accion = document.createElement("td");
+        const boton = document.createElement("button");
+        boton.type = "button";
+        boton.className = "boton-revisar";
+        boton.dataset.alerta = alerta.alerta_id;
+        boton.textContent = alerta.estado_evaluacion === "pendiente" ? "Revisar" : "Ver detalle";
+        accion.append(boton);
+        fila.append(accion);
+        filas.append(fila);
+    });
+    elementos.tabla.replaceChildren(filas);
 
-                    <td>
-                        ${etiquetas[alerta.tipo_riesgo]}
-                    </td>
-
-                    <td>
-                        <span class="etiqueta-nivel">
-                            ${etiquetaNivel(
-                                alerta.nivel_severidad
-                            )}
-                        </span>
-                    </td>
-
-                    <td>
-                        ${formatearFecha(alerta.fecha_hora)}
-                    </td>
-
-                    <td>
-                        ${formatearHora(alerta.fecha_hora)}
-                    </td>
-
-                    <td>
-                        <span class="etiqueta-estado">
-                            ${
-                                etiquetas[
-                                    alerta.estado_evaluacion
-                                ]
-                            }
-                        </span>
-                    </td>
-
-                    <td>
-                        <button
-                            type="button"
-                            class="boton-revisar"
-                            data-alerta="${alerta.alerta_id}"
-                        >
-                            ${
-                                alerta.estado_evaluacion ===
-                                "pendiente"
-                                    ? "Revisar"
-                                    : "Ver detalle"
-                            }
-                        </button>
-                    </td>
-                </tr>
-            `
-        )
-        .join("");
-
-    const final = Math.min(
-        inicio + registrosPorPagina,
-        filtradas.length
-    );
-
-    elementos.textoPaginacion.textContent =
-        `Mostrando ${inicio + 1}–${final} ` +
-        `de ${filtradas.length}`;
-
-    elementos.numerosPagina.innerHTML = Array.from(
-        { length: totalPaginas },
-        (_, indice) => {
-            const numeroPagina = indice + 1;
-
-            return `
-                <button
-                    type="button"
-                    class="${
-                        numeroPagina === paginaActual
-                            ? "activo"
-                            : ""
-                    }"
-                    data-pagina="${numeroPagina}"
-                >
-                    ${numeroPagina}
-                </button>
-            `;
-        }
-    ).join("");
-
-    elementos.anterior.disabled =
-        paginaActual === 1;
-    elementos.siguiente.disabled =
-        paginaActual === totalPaginas;
-
-    document
-        .querySelectorAll("[data-alerta]")
-        .forEach((boton) => {
-            boton.addEventListener("click", () => {
-                abrirDetalle(
-                    boton.dataset.alerta
-                );
-            });
-        });
-
-    document
-        .querySelectorAll("[data-pagina]")
-        .forEach((boton) => {
-            boton.addEventListener("click", () => {
-                paginaActual = Number(
-                    boton.dataset.pagina
-                );
-
-                renderizarTabla();
-            });
-        });
+    elementos.textoPaginacion.textContent = `Mostrando ${primero}–${final} de ${totalCoincidencias}`;
+    elementos.numerosPagina.replaceChildren();
+    const paginaInicial = Math.max(1, Math.min(paginaActual - 2, totalPaginas - 4));
+    const paginaFinal = Math.min(totalPaginas, paginaInicial + 4);
+    for (let numero = paginaInicial; numero <= paginaFinal; numero += 1) {
+        const boton = document.createElement("button");
+        boton.type = "button";
+        boton.className = numero === paginaActual ? "activo" : "";
+        boton.dataset.pagina = String(numero);
+        boton.textContent = String(numero);
+        if (numero === paginaActual) boton.setAttribute("aria-current", "page");
+        elementos.numerosPagina.append(boton);
+    }
+    elementos.anterior.disabled = paginaActual <= 1;
+    elementos.siguiente.disabled = paginaActual >= totalPaginas;
 }
 
 function completarDetalle(alerta) {
-    document.querySelector(
-        "#tituloModal"
-    ).textContent = alerta.alerta_id;
+    document.querySelector("#tituloModal").textContent = codigoAlertaVisible(alerta.alerta_id);
+    document.querySelector("#detalleBox").textContent = formatearBox(alerta.box);
+    document.querySelector("#detalleTipo").textContent = formatearTipoRiesgo(alerta.tipo_riesgo);
+    document.querySelector("#detalleNivel").textContent = etiquetaNivel(alerta);
+    document.querySelector("#detalleFecha").textContent = `${formatearFecha(alerta.fecha_hora)} · ${formatearHora(alerta.fecha_hora)}`;
+    document.querySelector("#detalleEstado").textContent = etiquetas[alerta.estado_evaluacion] || alerta.estado_evaluacion;
+    document.querySelector("#detalleSesion").textContent = alerta.sesion_id || "—";
 
-    document.querySelector(
-        "#detalleBox"
-    ).textContent = formatearBox(alerta.box);
-
-    document.querySelector(
-        "#detalleTipo"
-    ).textContent =
-        etiquetas[alerta.tipo_riesgo];
-
-    document.querySelector(
-        "#detalleNivel"
-    ).textContent =
-        etiquetaNivel(alerta.nivel_severidad);
-
-    document.querySelector(
-        "#detalleFecha"
-    ).textContent =
-        `${formatearFecha(alerta.fecha_hora)} · ` +
-        `${formatearHora(alerta.fecha_hora)}`;
-
-    document.querySelector(
-        "#detalleEstado"
-    ).textContent =
-        etiquetas[alerta.estado_evaluacion];
-
-    document.querySelector(
-        "#detalleSesion"
-    ).textContent = alerta.sesion_id;
-
-    const formulario = document.querySelector(
-        "#formularioEvaluacion"
-    );
-
-    const registrada = document.querySelector(
-        "#evaluacionRegistrada"
-    );
-
-    const pendiente =
-        alerta.estado_evaluacion === "pendiente";
-
-    formulario.hidden = !pendiente;
-    registrada.hidden = pendiente;
-
-    document
-        .querySelectorAll(
-            'input[name="evaluacion"]'
-        )
-        .forEach((opcion) => {
-            opcion.checked = false;
-        });
-
-    const mensaje = document.querySelector(
-        "#mensajeEvaluacion"
-    );
-
-    limpiarEstado(mensaje);
+    const pendiente = alerta.estado_evaluacion === "pendiente";
+    document.querySelector("#formularioEvaluacion").hidden = !pendiente;
+    document.querySelector("#evaluacionRegistrada").hidden = pendiente;
+    document.querySelectorAll('input[name="evaluacion"]').forEach((opcion) => {
+        opcion.checked = false;
+    });
+    limpiarEstado(document.querySelector("#mensajeEvaluacion"));
 
     if (alerta.evaluacion) {
-        document.querySelector(
-            "#resultadoEvaluacion"
-        ).textContent =
-            etiquetas[
-                alerta.evaluacion.resultado
-            ];
-
-        document.querySelector(
-            "#evaluadoPor"
-        ).textContent =
-            alerta.evaluacion.usuario;
-
-        document.querySelector(
-            "#fechaEvaluacion"
-        ).textContent =
-            `${formatearFecha(
-                alerta.evaluacion.fecha_hora
-            )} · ${formatearHora(
-                alerta.evaluacion.fecha_hora
-            )}`;
+        const resultado = alerta.evaluacion.evaluacion;
+        document.querySelector("#resultadoEvaluacion").textContent = etiquetas[resultado] || resultado;
+        document.querySelector("#evaluadoPor").textContent = alerta.evaluacion.usuario;
+        document.querySelector("#fechaEvaluacion").textContent = `${formatearFecha(alerta.evaluacion.fecha_hora)} · ${formatearHora(alerta.evaluacion.fecha_hora)}`;
     }
 }
 
-function abrirDetalle(alertaId) {
-    alertaSeleccionada = alertas.find(
-        (alerta) => alerta.alerta_id === alertaId
-    );
-
-    if (!alertaSeleccionada) {
-        return;
-    }
-
-    completarDetalle(alertaSeleccionada);
+async function abrirDetalle(alertaId) {
+    const idSolicitud = ++solicitudDetalle;
     elementos.modal.hidden = false;
     document.body.classList.add("modal-abierto");
+    document.querySelector("#formularioEvaluacion").hidden = true;
+    document.querySelector("#evaluacionRegistrada").hidden = true;
+    mostrarCarga(elementos.estadoDetalle, "Cargando detalle…");
+    elementos.modal.querySelector(".boton-cerrar").focus();
 
-    elementos.modal
-        .querySelector(".boton-cerrar")
-        .focus();
+    try {
+        const alerta = await apiGetDatos(`/api/v1/alerts/${encodeURIComponent(alertaId)}`);
+        if (idSolicitud !== solicitudDetalle) return;
+        alertaSeleccionada = alerta;
+        completarDetalle(alerta);
+        limpiarEstado(elementos.estadoDetalle);
+    } catch (error) {
+        if (idSolicitud !== solicitudDetalle) return;
+        mostrarError(elementos.estadoDetalle, error, {
+            reintentar: () => abrirDetalle(alertaId),
+        });
+    }
 }
 
 function cerrarDetalle() {
+    solicitudDetalle += 1;
     elementos.modal.hidden = true;
     document.body.classList.remove("modal-abierto");
     alertaSeleccionada = null;
 }
 
-function guardarEvaluacion() {
-    if (
-        !alertaSeleccionada ||
-        alertaSeleccionada.estado_evaluacion !==
-            "pendiente"
-    ) {
-        return;
-    }
+async function guardarEvaluacion() {
+    if (!alertaSeleccionada || alertaSeleccionada.estado_evaluacion !== "pendiente") return;
 
-    const opcionSeleccionada =
-        document.querySelector(
-            'input[name="evaluacion"]:checked'
-        );
-
-    const mensaje = document.querySelector(
-        "#mensajeEvaluacion"
-    );
-
-    if (!opcionSeleccionada) {
+    const opcion = document.querySelector('input[name="evaluacion"]:checked');
+    const mensaje = document.querySelector("#mensajeEvaluacion");
+    if (!opcion) {
         mostrarEstado(mensaje, "error", "Selecciona una opción antes de guardar.");
-
         return;
     }
 
-    alertaSeleccionada.estado_evaluacion =
-        opcionSeleccionada.value;
-
-    alertaSeleccionada.evaluacion = {
-        resultado: opcionSeleccionada.value,
-        usuario: "autonoma",
-        fecha_hora: new Date().toISOString(),
-    };
-
-    actualizarTarjetas();
-    renderizarTabla();
-    completarDetalle(alertaSeleccionada);
+    const alertaId = alertaSeleccionada.alerta_id;
+    establecerCargaBoton(elementos.guardar, true, "Guardando…");
+    try {
+        const response = await apiPost(
+            `/api/v1/alerts/${encodeURIComponent(alertaId)}/evaluacion`,
+            { evaluacion: opcion.value },
+        );
+        const evaluacion = await leerRespuesta(response);
+        await Promise.all([
+            cargarAlertas(offsetActual),
+            cargarResumenAlertas(true),
+            abrirDetalle(alertaId),
+        ]);
+        mostrarEstado(elementos.estadoDetalle, "exito", "Evaluación registrada.");
+    } catch (error) {
+        if (error instanceof ErrorSolicitud && error.estado === 409) {
+            await abrirDetalle(alertaId);
+            mostrarEstado(elementos.estadoDetalle, "error", "La alerta ya tiene una evaluación. Se actualizó el detalle.");
+        } else {
+            mostrarError(mensaje, error);
+        }
+    } finally {
+        establecerCargaBoton(elementos.guardar, false);
+    }
 }
 
-[
-    elementos.buscar,
-    elementos.box,
-    elementos.estado,
-    elementos.desde,
-    elementos.hasta,
-].forEach((control) => {
-    control.addEventListener("input", () => {
-        paginaActual = 1;
-        renderizarTabla();
-    });
+function aplicarFiltroInicial() {
+    const parametros = new URLSearchParams(window.location.search);
+    const revisadas = parametros.get("revisadas");
+    const estado = parametros.get("estado_evaluacion");
+    if (revisadas === "true") {
+        elementos.estado.value = "__revisadas__";
+    } else if (revisadas === "false") {
+        elementos.estado.value = "pendiente";
+    } else if (estado && [...elementos.estado.options].some((opcion) => opcion.value === estado)) {
+        elementos.estado.value = estado;
+    }
+}
+
+elementos.buscar.addEventListener("input", () => {
+    clearTimeout(temporizadorBusqueda);
+    temporizadorBusqueda = setTimeout(() => cargarAlertas(0), 300);
+});
+
+[elementos.box, elementos.estado, elementos.desde, elementos.hasta].forEach((control) => {
+    control.addEventListener("change", () => cargarAlertas(0));
 });
 
 elementos.limpiar.addEventListener("click", () => {
@@ -476,32 +345,34 @@ elementos.limpiar.addEventListener("click", () => {
     elementos.estado.value = "";
     elementos.desde.value = "";
     elementos.hasta.value = "";
-    paginaActual = 1;
-
-    renderizarTabla();
+    clearTimeout(temporizadorBusqueda);
+    cargarAlertas(0);
 });
 
-elementos.actualizar.addEventListener(
-    "click",
-    renderizarTabla
-);
+elementos.actualizar.addEventListener("click", () => {
+    cargarAlertas(offsetActual);
+    cargarResumenAlertas(true);
+});
 
-elementos.anterior.addEventListener("click", () => {
-    if (paginaActual > 1) {
-        paginaActual -= 1;
-        renderizarTabla();
+elementos.anterior.addEventListener("click", () => cargarAlertas(Math.max(0, offsetActual - registrosPorPagina)));
+
+elementos.siguiente.addEventListener("click", () => {
+    if (offsetActual + registrosPorPagina < totalCoincidencias) {
+        cargarAlertas(offsetActual + registrosPorPagina);
     }
 });
 
-elementos.siguiente.addEventListener("click", () => {
-    const totalPaginas = Math.ceil(
-        obtenerAlertasFiltradas().length /
-            registrosPorPagina
-    );
+elementos.numerosPagina.addEventListener("click", (evento) => {
+    const boton = evento.target.closest("[data-pagina]");
+    if (boton) {
+        cargarAlertas((Number(boton.dataset.pagina) - 1) * registrosPorPagina);
+    }
+});
 
-    if (paginaActual < totalPaginas) {
-        paginaActual += 1;
-        renderizarTabla();
+elementos.tabla.addEventListener("click", (evento) => {
+    const boton = evento.target.closest("[data-alerta]");
+    if (boton) {
+        abrirDetalle(boton.dataset.alerta);
     }
 });
 
@@ -528,5 +399,6 @@ document.addEventListener("keydown", (evento) => {
     }
 });
 
-actualizarTarjetas();
-renderizarTabla();
+aplicarFiltroInicial();
+cargarResumenAlertas();
+cargarAlertas(0);

@@ -32,7 +32,7 @@ class AlertQueryFilterSerializer(serializers.Serializer):
         choices=["pendiente", "correcta", "falso_positivo", "neutro"],
         required=False,
     )
-    revisadas = StrictQueryBooleanField(required=False)
+    revisadas = StrictQueryBooleanField(required=False, default=None, allow_null=True)
     limit = serializers.IntegerField(required=False, default=50, min_value=1, max_value=100)
     offset = serializers.IntegerField(required=False, default=0, min_value=0)
 
@@ -81,6 +81,17 @@ class EvaluacionPublicSerializer(serializers.Serializer):
     usuario = serializers.CharField()
     fecha_hora = UTCDateTimeField()
     estado_evaluacion = serializers.CharField()
+
+
+class EvaluacionCreateSerializer(serializers.Serializer):
+    evaluacion = serializers.ChoiceField(choices=("correcta", "falso_positivo", "neutro"))
+
+    def to_internal_value(self, data):
+        if hasattr(data, "keys"):
+            extras = set(data.keys()) - set(self.fields)
+            if extras:
+                raise serializers.ValidationError({campo: ["Campo no permitido."] for campo in extras})
+        return super().to_internal_value(data)
 
 
 class AlertaListItemSerializer(serializers.Serializer):
