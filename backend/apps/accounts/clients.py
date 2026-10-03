@@ -16,7 +16,7 @@ class EmailClient:
                 **os.environ,
                 "DJANGO_SETTINGS_MODULE": "backend.config.settings",
                 "PYTHONPATH": str(settings.BASE_DIR),
-            }={**os.environ, "DJANGO_SETTINGS_MODULE": "backend.config.settings"},                timeout=settings.EMAIL_DELIVERY_TIMEOUT, check=False,
+            }
             result = subprocess.run(
                 [sys.executable, "-m", "backend.apps.accounts.email_worker"],
                 input=json.dumps(payload),
