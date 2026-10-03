@@ -48,6 +48,17 @@ let solicitudResumen = null;
 let resumenCargado = false;
 let temporizadorBusqueda;
 let alertaSeleccionada = null;
+const evaluacionesEnCurso = new Set();
+const evaluacionesConfirmadas = new Map();
+
+function actualizarBotonEvaluacion() {
+    establecerCargaBoton(elementos.guardar, false);
+    elementos.guardar.disabled = !alertaSeleccionada ||
+        alertaSeleccionada.estado_evaluacion !== "pendiente";
+    if (alertaSeleccionada && evaluacionesEnCurso.has(alertaSeleccionada.alerta_id)) {
+        establecerCargaBoton(elementos.guardar, true, "Guardando…");
+    }
+}
 
 async function cargarResumenAlertas(forzar = false) {
     if (solicitudResumen) return solicitudResumen;
@@ -253,6 +264,9 @@ function completarDetalle(alerta) {
 
 async function abrirDetalle(alertaId) {
     const idSolicitud = ++solicitudDetalle;
+    const evaluacionAnterior = evaluacionesConfirmadas.get(alertaId);
+    alertaSeleccionada = null;
+    actualizarBotonEvaluacion();
     elementos.modal.hidden = false;
     document.body.classList.add("modal-abierto");
     document.querySelector("#formularioEvaluacion").hidden = true;
@@ -261,10 +275,15 @@ async function abrirDetalle(alertaId) {
     elementos.modal.querySelector(".boton-cerrar").focus();
 
     try {
-        const alerta = await apiGetDatos(`/api/v1/alerts/${encodeURIComponent(alertaId)}`);
+        let alerta = await apiGetDatos(`/api/v1/alerts/${encodeURIComponent(alertaId)}`);
         if (idSolicitud !== solicitudDetalle) return;
+        const confirmada = evaluacionesConfirmadas.get(alertaId);
+        if (confirmada && confirmada !== evaluacionAnterior) {
+            alerta = { ...alerta, evaluacion: confirmada, estado_evaluacion: confirmada.estado_evaluacion };
+        }
         alertaSeleccionada = alerta;
         completarDetalle(alerta);
+        actualizarBotonEvaluacion();
         limpiarEstado(elementos.estadoDetalle);
     } catch (error) {
         if (idSolicitud !== solicitudDetalle) return;
@@ -279,41 +298,90 @@ function cerrarDetalle() {
     elementos.modal.hidden = true;
     document.body.classList.remove("modal-abierto");
     alertaSeleccionada = null;
+    actualizarBotonEvaluacion();
+}
+
+function aplicarEvaluacion(alerta, evaluacion) {
+    if (evaluacion?.alerta_id !== alerta.alerta_id ||
+        !["correcta", "falso_positivo", "neutro"].includes(evaluacion.evaluacion) ||
+        evaluacion.estado_evaluacion !== evaluacion.evaluacion ||
+        typeof evaluacion.usuario !== "string" || !evaluacion.fecha_hora) {
+        throw new ErrorSolicitud();
+    }
+    evaluacionesConfirmadas.set(alerta.alerta_id, evaluacion);
+    const actualizada = { ...alerta, evaluacion, estado_evaluacion: evaluacion.estado_evaluacion };
+    alertas = alertas.map((item) => item.alerta_id === alerta.alerta_id ? { ...item, ...actualizada } : item);
+    const boton = [...elementos.tabla.querySelectorAll("button[data-alerta]")]
+        .find((item) => item.dataset.alerta === alerta.alerta_id);
+    if (boton) {
+        const fila = boton.closest("tr");
+        fila.children[6].replaceWith(crearCelda("Revisada", "etiqueta-estado estado-revisada",
+            "Estado de evaluación: " + etiquetas[actualizada.estado_evaluacion]));
+        boton.textContent = "Ver detalle";
+    }
+    return actualizada;
 }
 
 async function guardarEvaluacion() {
     if (!alertaSeleccionada || alertaSeleccionada.estado_evaluacion !== "pendiente") return;
-
+    const alerta = alertaSeleccionada;
+    const alertaId = alerta.alerta_id;
+    if (evaluacionesEnCurso.has(alertaId)) return;
     const opcion = document.querySelector('input[name="evaluacion"]:checked');
     const mensaje = document.querySelector("#mensajeEvaluacion");
     if (!opcion) {
         mostrarEstado(mensaje, "error", "Selecciona una opción antes de guardar.");
         return;
     }
-
-    const alertaId = alertaSeleccionada.alerta_id;
-    establecerCargaBoton(elementos.guardar, true, "Guardando…");
+    const modalVigente = () => !elementos.modal.hidden &&
+        alertaSeleccionada?.alerta_id === alertaId;
+    evaluacionesEnCurso.add(alertaId);
+    limpiarEstado(mensaje);
+    actualizarBotonEvaluacion();
     try {
-        const response = await apiPost(
-            `/api/v1/alerts/${encodeURIComponent(alertaId)}/evaluacion`,
-            { evaluacion: opcion.value },
-        );
-        const evaluacion = await leerRespuesta(response);
-        await Promise.all([
-            cargarAlertas(offsetActual),
-            cargarResumenAlertas(true),
-            abrirDetalle(alertaId),
-        ]);
-        mostrarEstado(elementos.estadoDetalle, "exito", "Evaluación registrada.");
+        const evaluacion = await solicitarJson(
+            "/api/v1/alerts/" + encodeURIComponent(alertaId) + "/evaluacion",
+            { method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ evaluacion: opcion.value }) }, apiRequest);
+        const actualizada = aplicarEvaluacion(alerta, evaluacion);
+        if (modalVigente()) {
+            alertaSeleccionada = actualizada;
+            completarDetalle(actualizada);
+            mostrarEstado(elementos.estadoDetalle, "exito", "Evaluación registrada.");
+        }
+        void cargarResumenAlertas(true);
     } catch (error) {
         if (error instanceof ErrorSolicitud && error.estado === 409) {
-            await abrirDetalle(alertaId);
-            mostrarEstado(elementos.estadoDetalle, "error", "La alerta ya tiene una evaluación. Se actualizó el detalle.");
-        } else {
-            mostrarError(mensaje, error);
+            if (modalVigente()) {
+                document.querySelector("#formularioEvaluacion").hidden = true;
+                alertaSeleccionada = { ...alerta, estado_evaluacion: "registrada" };
+            }
+            try {
+                const evaluacion = await apiGetDatos(
+                    "/api/v1/alerts/" + encodeURIComponent(alertaId) + "/evaluacion");
+                const actualizada = aplicarEvaluacion(alerta, evaluacion);
+                if (modalVigente()) {
+                    alertaSeleccionada = actualizada;
+                    completarDetalle(actualizada);
+                    mostrarEstado(elementos.estadoDetalle, "error",
+                        "La alerta ya tiene una evaluación. Se actualizó el detalle.");
+                }
+                void cargarResumenAlertas(true);
+            } catch (consultaError) {
+                if (modalVigente()) mostrarError(elementos.estadoDetalle, consultaError, {
+                    mensajes: { 404: "No encontramos la evaluación registrada." },
+                    reintentar: () => abrirDetalle(alertaId),
+                });
+            }
+        } else if (modalVigente()) {
+            mostrarError(mensaje, error, { mensajes: {
+                400: "El identificador de alerta o la evaluación no son válidos.",
+                404: "La alerta ya no existe.",
+            } });
         }
     } finally {
-        establecerCargaBoton(elementos.guardar, false);
+        evaluacionesEnCurso.delete(alertaId);
+        actualizarBotonEvaluacion();
     }
 }
 
