@@ -1,6 +1,6 @@
 # Psycode API
 
-Backend del proyecto Psycode, desarrollado en Python y Django. Actualmente funcionan el inicio de sesión, la recuperación de contraseña y el manejo de sesión (SCRUM-31). Alertas, dashboard y notificaciones tienen su estructura creada, pero sus funcionalidades están pendientes.
+Backend del proyecto Psycode, desarrollado en Python y Django. Actualmente funcionan el inicio de sesión, la recuperación de contraseña y el manejo de sesión (SCRUM-31), y la persistencia de alertas en MongoDB (SCRUM-32). Las rutas HTTP de alertas, el dashboard y las notificaciones siguen pendientes.
 
 ## Primera instalación
 
@@ -109,6 +109,19 @@ uv run python manage.py seed_demo_user --reset-password
 
 Con pip, sustituye `uv run python` por `python` en el entorno activado, o por `.venv\Scripts\python.exe` en Windows.
 
+## Alertas de prueba (MongoDB)
+
+La persistencia de alertas usa MongoDB. En local, con Docker:
+
+```sh
+docker run --name psycode-mongo -p 27017:27017 -d mongo:7
+uv run python manage.py seed_demo_alerts
+```
+
+`.env.example` ya trae `MONGODB_URI=mongodb://127.0.0.1:27017` y `MONGODB_DATABASE=psycode`. El comando exige `DJANGO_DEBUG=true`, crea cinco alertas sintéticas (boxes, tipos, severidades y estados distintos) y las vuelve a leer para comprobarlas. No guarda audio ni datos de pacientes. Si las alertas ya existen, no las modifica. Para recrearlas: `seed_demo_alerts --reset`.
+
+`runserver` no se conecta a MongoDB al arrancar. Las rutas `/api/v1/alerts` todavía responden 404 (SCRUM-33). Detalle del seed: [comandos de alerts](backend/apps/alerts/management/commands/README.md).
+
 ## Probar el inicio de sesión
 
 Con el servidor abierto, envía desde Postman u otro cliente HTTP:
@@ -138,7 +151,7 @@ Para comprobar la sesión, envía `GET http://127.0.0.1:8000/api/v1/auth/me`. En
 
 El token vence en una hora y solo se puede usar una vez. Al cambiar la contraseña, vuelve a iniciar sesión: los tokens de sesión anteriores dejan de servir. La contraseña nueva debe cumplir los validadores de la aplicación; el comando de usuario local permite restaurar la contraseña sencilla de prueba.
 
-La pantalla web de recuperación está pendiente del frontend. Para configurar correo SMTP, consulta [SCRUM-31](docs/SCRUM-31.md#correo-y-configuración).
+La pantalla web de recuperación está pendiente del frontend. Para configurar archivos locales o SMTP, consulta [SCRUM-31](docs/SCRUM-31.md#correo-y-configuración) y [la cuenta técnica de pruebas](docs/SMTP_TEST_ACCOUNT.md).
 
 ## Ubicar tu tarea de Jira
 
@@ -148,7 +161,7 @@ Lee tu tarea y abre el módulo y contrato correspondientes antes de modificar c�
 |---|---|---|
 | SCRUM-30: arquitectura | [Arquitectura](ARCHITECTURE.md) y [contratos](API_CONTRACTS.md) | Documentados |
 | SCRUM-31 / SCRUM-35: autenticación backend / frontend | [Accounts](backend/apps/accounts/README.md) y [contrato de autenticación](API_CONTRACTS.md#1-autenticación) | Disponible |
-| SCRUM-32 / 33 / 34: persistencia, consulta y evaluación | [Alerts](backend/apps/alerts/README.md) y [contrato de alertas](API_CONTRACTS.md#2-alertas-y-evaluaciones) | Pendiente |
+| SCRUM-32 / 33 / 34: persistencia, consulta y evaluación | [Alerts](backend/apps/alerts/README.md), [esquema MongoDB](docs/MONGODB.md) y [contrato de alertas](API_CONTRACTS.md#2-alertas-y-evaluaciones) | Persistencia y seed disponibles; rutas HTTP pendientes |
 | SCRUM-36: dashboard | [Dashboard](backend/apps/dashboard/README.md) y [contrato dashboard](API_CONTRACTS.md#3-dashboard) | Pendiente |
 | SCRUM-37 / 39 / 40: historial, detalle y registro en frontend | [Alerts](backend/apps/alerts/README.md) y [contrato de alertas](API_CONTRACTS.md#2-alertas-y-evaluaciones) | Pendiente |
 | SCRUM-41: notificaciones | [Notifications](backend/apps/notifications/README.md) y [contrato interno](API_CONTRACTS.md#4-registro-y-notificaciones-contratos-internos) | Pendiente |
@@ -164,7 +177,7 @@ Ejecuta desde la raíz:
 ```sh
 uv run python manage.py check
 uv run python manage.py makemigrations --check --dry-run
-uv run python manage.py test backend.apps.accounts --settings=backend.config.test_settings
+uv run python manage.py test backend.apps.accounts backend.apps.alerts --settings=backend.config.test_settings
 ```
 
 Con pip, usa el mismo reemplazo de `uv run python` indicado arriba. Las pruebas crean una base separada y no modifican tu usuario local. Si cambias modelos, genera y revisa la migración correspondiente antes de comprobar que no quedan migraciones pendientes.

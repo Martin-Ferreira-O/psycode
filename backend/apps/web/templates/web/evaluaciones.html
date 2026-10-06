@@ -1,0 +1,209 @@
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Registro de evaluaciones</title>
+
+    <link rel="stylesheet" href="{% static 'web/css/styles.css' %}">
+    <link rel="stylesheet" href="{% static 'web/css/dashboard.css' %}">
+    <link rel="stylesheet" href="{% static 'web/css/alertas.css' %}">
+    <link rel="stylesheet" href="{% static 'web/css/evaluaciones.css' %}">
+    <link rel="stylesheet" href="{% static 'web/css/estados.css' %}">
+</head>
+
+<body>
+    <div class="aplicacion">
+        {% include "web/components/sidebar.html" with seccion_activa="evaluaciones" %}
+        <main class="contenido-dashboard">
+
+            <header class="cabecera-dashboard">
+                <div>
+                    <span class="subtitulo">
+                        Resultados de revisión
+                    </span>
+
+                    <h1>Registro de evaluaciones</h1>
+
+                    <p>
+                        Consulta cómo fue clasificada cada alerta
+                        después de la revisión profesional.
+                    </p>
+                </div>
+
+                <div class="usuario">
+                    <div class="usuario-icono">S</div>
+
+                    <div>
+                        <strong>Supervisor</strong>
+                        <span>Cuenta institucional</span>
+                    </div>
+                </div>
+            </header>
+
+            <section class="panel-alertas panel-evaluaciones">
+
+                <div class="panel-cabecera">
+                    <div>
+                        <h2>Evaluaciones registradas</h2>
+                        <p id="resultadoEvaluaciones">
+                            Cargando evaluaciones...
+                        </p>
+                    </div>
+                </div>
+
+                <div
+                    id="estadoVacioEvaluaciones"
+                    class="estado-vacio"
+                    hidden
+                >
+                    <strong>No se encontraron evaluaciones</strong>
+                    <p>
+                        Todavía no existen alertas evaluadas.
+                    </p>
+                </div>
+
+                <div
+                    id="tablaEvaluacionesContenedor"
+                    class="tabla-contenedor"
+                >
+                    <table class="tabla-alertas tabla-evaluaciones">
+                        <thead>
+                            <tr>
+                                <th>Alerta</th>
+                                <th>Evaluación seleccionada</th>
+                                <th>Registro del sistema</th>
+                                <th>Estado</th>
+                                <th>Fecha de evaluación</th>
+                                <th>Acción</th>
+                            </tr>
+                        </thead>
+
+                        <tbody id="tablaEvaluaciones"></tbody>
+                    </table>
+                </div>
+
+                <div class="pie-evaluaciones">
+                    Cada resultado queda asociado a la alerta y se conserva
+                    como parte de la bitácora.
+                </div>
+
+            </section>
+
+        </main>
+    </div>
+
+    <div
+        id="modalDetalle"
+        class="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="tituloModal"
+        hidden
+    >
+        <div
+            class="modal-fondo"
+            data-cerrar-modal
+        ></div>
+
+        <section class="modal-contenido">
+
+            <!-- Cabecera -->
+            <header class="modal-cabecera">
+                <div>
+                    <span class="subtitulo">
+                        Detalle de alerta
+                    </span>
+
+                    <h2 id="tituloModal">
+                        Alerta
+                    </h2>
+                </div>
+
+                <button
+                    type="button"
+                    class="boton-cerrar"
+                    data-cerrar-modal
+                    aria-label="Cerrar"
+                >
+                    ×
+                </button>
+            </header>
+
+            <div class="detalle-grid detalle-alerta">
+
+                <div class="detalle-item">
+                    <span>Box</span>
+                    <strong id="detalleBox"></strong>
+                </div>
+
+                <div class="detalle-item">
+                    <span>Tipo de riesgo</span>
+                    <strong id="detalleTipo"></strong>
+                </div>
+
+                <div class="detalle-item">
+                    <span>Nivel</span>
+                    <strong id="detalleNivel"></strong>
+                </div>
+
+                <div class="detalle-item">
+                    <span>Fecha</span>
+                    <strong id="detalleFecha"></strong>
+                </div>
+
+                <div class="detalle-item">
+                    <span>Hora</span>
+                    <strong id="detalleHora"></strong>
+                </div>
+
+                <div class="detalle-item">
+                    <span>Estado</span>
+                    <strong id="detalleEstado"></strong>
+                </div>
+
+            </div>
+
+            <section
+                class="seccion-evaluacion evaluacion-registrada"
+            >
+                <h3>Evaluación registrada</h3>
+
+                <div class="detalle-grid detalle-evaluacion-registrada">
+
+                    <div class="detalle-item">
+                        <span>Resultado</span>
+                        <strong id="resultadoEvaluacion"></strong>
+                    </div>
+
+                    <div class="detalle-item">
+                        <span>Evaluado por</span>
+                        <strong id="evaluadoPor"></strong>
+                    </div>
+
+                    <div class="detalle-item">
+                        <span>Fecha de evaluación</span>
+                        <strong id="fechaEvaluacion"></strong>
+                    </div>
+
+                </div>
+
+                <p class="aviso-bloqueado">
+                    Esta evaluación ya fue guardada y no puede modificarse.
+                </p>
+            </section>
+
+        </section>
+    </div>
+
+    <script src="{% static 'web/js/solicitudes.js' %}"></script>
+    <script src="{% static 'web/js/estados.js' %}"></script>
+    <script src="{% static 'web/js/api.js' %}"></script>
+    <script src="{% static 'web/js/components.js' %}"></script>
+    <script src="{% static 'web/js/utils.js' %}"></script>
+    <script src="{% static 'web/js/evaluaciones.js' %}?v=2"></script>
+</body>
+</html>

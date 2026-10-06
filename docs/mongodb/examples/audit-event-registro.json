@@ -1,0 +1,14 @@
+{
+  "event_id": "44444444-4444-4444-8444-444444444444",
+  "timestamp": { "$date": "2026-09-12T14:05:23.000Z" },
+  "action": "alerts.register",
+  "outcome": "success",
+  "actor_id": null,
+  "alerta_id": "11111111-1111-4111-8111-111111111111",
+  "channel": null,
+  "contingencia": null,
+  "motivo": null,
+  "error_code": null,
+  "duration_ms": null,
+  "intentos": []
+}

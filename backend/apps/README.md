@@ -5,7 +5,7 @@ Organización por responsabilidad dentro de un único backend Django:
 | Módulo | Responsabilidad | Rutas disponibles |
 |---|---|---|
 | [accounts](accounts/README.md) | Autenticación y recuperación | `/api/v1/auth/...` |
-| [alerts](alerts/README.md) | Alertas y evaluaciones | Pendientes (SCRUM-32 / 33 / 34) |
+| [alerts](alerts/README.md) | Alertas y evaluaciones | Persistencia MongoDB; rutas HTTP pendientes (SCRUM-33 / 34) |
 | [dashboard](dashboard/README.md) | Resumen y estadísticas | Pendientes (SCRUM-36) |
 | [notifications](notifications/README.md) | Teams y contingencia | Sin API pública; implementación pendiente (SCRUM-41) |
 

@@ -1,0 +1,32 @@
+{
+  "collection": "alerts",
+  "indexes": [
+    {
+      "keys": { "alerta_id": 1 },
+      "options": { "unique": true, "name": "alerts_alerta_id_unique" },
+      "uso": "Lookup por identificador público, alta idempotente y evaluación atómica."
+    },
+    {
+      "keys": { "fecha_hora": -1, "alerta_id": 1 },
+      "options": { "name": "alerts_fecha_hora_alerta_id" },
+      "uso": "Listado e historial: orden contractual fecha_hora descendente, alerta_id ascendente; rangos del dashboard."
+    },
+    {
+      "keys": { "box": 1, "fecha_hora": -1, "alerta_id": 1 },
+      "options": { "name": "alerts_box_fecha_hora_alerta_id" },
+      "uso": "Filtro exacto por box combinado con fechas y el mismo orden estable."
+    },
+    {
+      "keys": { "estado_evaluacion": 1, "fecha_hora": -1, "alerta_id": 1 },
+      "options": { "name": "alerts_estado_fecha_hora_alerta_id" },
+      "uso": "Filtro por estado o revisadas (pendiente vs el resto) combinado con fechas."
+    }
+  ],
+  "notas": [
+    "No hay índice de texto ni buscador externo para q: es subcadena literal, sin regex del usuario, sobre alerta_id, box y tipo_riesgo.",
+    "No hay índice de sesion_id: el contrato de consulta no filtra por sesión clínica.",
+    "No hay índice de evaluacion.usuario_id: el listado de evaluaciones usa estado_evaluacion distinto de pendiente.",
+    "box en filtro es sensible a mayúsculas; q no lo es. La colección no usa collation case-insensitive para no alterar el filtro exacto de box.",
+    "nivel_severidad se inserta como entero BSON (Int32). Un double rompería el validador y el semáforo derivado."
+  ]
+}

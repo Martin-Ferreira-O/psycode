@@ -61,6 +61,11 @@ Estos son criterios especificados, **no pruebas ejecutadas ni funcionalidades ya
 | Notificación | Ambos canales fallan | Resultado fallido; conservar alerta; sin garantía de entrega |
 | Notificación | NULO o envíos deshabilitados | Resultado omitido y cero intentos |
 | Privacidad | Notificación y logs | Ausencia de pacientes, audio, descripción libre, métodos operativos y secretos |
+| MongoDB | Alta de alerta | Documento en `alerts` con `evaluacion` null, estado pendiente y semáforo derivado del nivel |
+| MongoDB | Evaluación concurrente | Un solo `evaluacion` incrustado; el segundo intento no crea otro documento |
+| MongoDB | Box y sesión | No existen colecciones de boxes ni sesiones; solo `box` y `sesion_id` en la alerta |
+| MongoDB | Bitácora | Evento en `audit_events` para alta, evaluación o envío, sin secretos ni datos de paciente |
+| MongoDB | Datos prohibidos | Rechazo o ausencia de audio, transcripción, identidad de paciente y tokens |
 
 ## Capa frontend: dashboard e historial
 

@@ -1,6 +1,8 @@
 import hashlib
+import hmac
 import secrets
 from datetime import datetime, timezone as datetime_timezone
+from datetime import timedelta
 from urllib.parse import urlencode
 
 from django.conf import settings
@@ -76,23 +78,35 @@ class AccountsService:
     def get_current_user(user):
         return {"id": str(user.pk), "usuario": user.username, "nombre": user.get_full_name(), "correo": user.email, "activo": user.is_active}
 
-    def request_password_reset(self, correo):
-        token = secrets.token_urlsafe(32)
-        digest = reset_digest(token)
+    def request_password_reset(self, correo, client_ip=""):
+        correo = correo.strip().lower()
+        now = timezone.now()
+        window = timedelta(seconds=settings.PASSWORD_RESET_RATE_LIMIT_WINDOW_SECONDS)
+        secret = settings.SECRET_KEY.encode()
+        ip_key = hmac.new(secret, ("ip:" + client_ip).encode(), hashlib.sha256).hexdigest()
+        email_key = hmac.new(secret, ("email:" + correo).encode(), hashlib.sha256).hexdigest()
         with self.repository.atomic():
-            user = self.repository.find_by_email(correo)
-            if user is None:
-                raise ServiceError("AUTH_USER_NOT_FOUND", "Usuario no encontrado", 404)
-            if not user.is_active:
-                raise ServiceError("AUTH_USER_INACTIVE", "Usuario inactivo", 403)
-            self.repository.replace_reset(user, digest, credential_hash(user), timezone.now() + settings.PASSWORD_RESET_LIFETIME)
+            ip_count = self.repository.count_reset_attempt(ip_key, now, window)
+            email_count = (self.repository.count_reset_attempt(email_key, now, window)
+                           if ip_count <= settings.PASSWORD_RESET_RATE_LIMIT_MAX else 0)
+            limited = max(ip_count, email_count) > settings.PASSWORD_RESET_RATE_LIMIT_MAX
+            user = self.repository.find_by_email(correo) if not limited and email_count == 1 else None
+            if user is not None and user.is_active:
+                token = secrets.token_urlsafe(32)
+                digest = reset_digest(token)
+                self.repository.replace_reset(user, digest, credential_hash(user), timezone.now() + settings.PASSWORD_RESET_LIFETIME)
+        if limited:
+            raise ServiceError("PASSWORD_RESET_RATE_LIMITED", "Demasiadas solicitudes. Intenta más tarde.", 429)
+        if user is None or not user.is_active:
+            return
         # Nunca sostener el bloqueo de escritura de SQLite durante la red.
-        link = settings.FRONTEND_ORIGIN + "/password-reset/confirm?" + urlencode({"token": token})
+        link = settings.FRONTEND_BASE_URL + settings.PASSWORD_RESET_PATH + "?" + urlencode({"token": token})
         try:
             self.email_client.send_password_reset(user.email, link)
         except ServiceError:
             self.repository.discard_reset(digest)
-            raise
+            # La respuesta pública no distingue la existencia ni el estado del transporte.
+            return
 
     def confirm_password_reset(self, token, nueva_password):
         with self.repository.atomic():

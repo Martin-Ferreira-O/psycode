@@ -1,0 +1,32 @@
+{
+  "collection": "audit_events",
+  "indexes": [
+    {
+      "keys": { "event_id": 1 },
+      "options": { "unique": true, "name": "audit_events_event_id_unique" },
+      "uso": "Idempotencia del evento de bitácora."
+    },
+    {
+      "keys": { "timestamp": -1 },
+      "options": { "name": "audit_events_timestamp" },
+      "uso": "Recorrido cronológico de la bitácora."
+    },
+    {
+      "keys": { "alerta_id": 1, "timestamp": -1 },
+      "options": { "name": "audit_events_alerta_id_timestamp" },
+      "uso": "Trazabilidad de una alerta: alta, evaluación e intentos de notificación."
+    },
+    {
+      "keys": { "action": 1, "timestamp": -1 },
+      "options": { "name": "audit_events_action_timestamp" },
+      "uso": "Filtrar por tipo de evento (registro, evaluación o envío)."
+    }
+  ],
+  "notas": [
+    "Colección de solo inserción: no hay actualización ni borrado en v1.",
+    "Un fallo al escribir aquí no revierte la alerta; el evento sigue yendo al logger psycode.audit.",
+    "No se indexa actor_id: la consulta pública no lista la bitácora por profesional.",
+    "Sin TTL en v1. La retención se definirá antes de un uso clínico real.",
+    "Los eventos auth.* no se duplican en MongoDB: la identidad vive en SQLite y ya se audita en el log."
+  ]
+}

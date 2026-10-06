@@ -52,3 +52,10 @@ class PasswordReset(models.Model):
     token_hash = models.CharField(max_length=64, unique=True)
     credential_hash = models.CharField(max_length=32)
     expires_at = models.DateTimeField()
+
+
+class PasswordResetRateLimit(models.Model):
+    """Contadores por huella de IP y correo, compartidos entre procesos."""
+    key = models.CharField(max_length=64, primary_key=True)
+    window_started_at = models.DateTimeField()
+    count = models.PositiveIntegerField(default=0)

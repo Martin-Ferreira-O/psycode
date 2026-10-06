@@ -1,3 +1,5 @@
+import time
+
 from rest_framework import serializers
 from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
@@ -18,13 +20,15 @@ class AccountsView(APIView):
         if request.method in {"GET", "HEAD"} and request.body:
             raise serializers.ValidationError({"body": ["GET no acepta cuerpo."]})
 
-    def perform(self, method, serializer_type, message, status=200, user_argument=False):
+    def perform(self, method, serializer_type, message, status=200, user_argument=False, client_ip=False):
         try:
             serializer = serializer_type(data=self.request.data)
             serializer.is_valid(raise_exception=True)
             kwargs = dict(serializer.validated_data)
             if user_argument:
                 kwargs["user"] = self.request.user
+            if client_ip:
+                kwargs["client_ip"] = self.request.META.get("REMOTE_ADDR", "")
             data = getattr(self.service_factory(), method)(**kwargs)
         except Exception as exc:
             AuditWriter.record("auth." + method, "failure", error_code=getattr(exc, "code", "REQUEST_FAILED"))
@@ -61,7 +65,12 @@ class MeView(AccountsView):
 
 class PasswordResetView(PublicAccountsView):
     def post(self, request):
-        return self.perform("request_password_reset", PasswordResetSerializer, "Instrucciones enviadas", status=202)
+        started = time.monotonic()
+        response = self.perform("request_password_reset", PasswordResetSerializer,
+                                "Si el correo está registrado, recibirás las instrucciones para recuperar tu contraseña.",
+                                status=202, client_ip=True)
+        time.sleep(max(0, 0.5 - (time.monotonic() - started)))
+        return response
 
 
 class PasswordResetConfirmView(PublicAccountsView):

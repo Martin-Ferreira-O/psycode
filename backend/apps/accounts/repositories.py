@@ -1,7 +1,7 @@
 from django.db import transaction
 from django.utils import timezone
 
-from .models import PasswordReset, RefreshSession, User
+from .models import PasswordReset, PasswordResetRateLimit, RefreshSession, User
 
 
 class AccountsRepository:
@@ -32,6 +32,17 @@ class AccountsRepository:
         PasswordReset.objects.update_or_create(user=user, defaults={
             "token_hash": digest, "credential_hash": credential_hash, "expires_at": expires_at,
         })
+
+    def count_reset_attempt(self, key, now, window):
+        counter, _ = PasswordResetRateLimit.objects.get_or_create(
+            key=key, defaults={"window_started_at": now, "count": 0},
+        )
+        if counter.window_started_at + window <= now:
+            counter.window_started_at = now
+            counter.count = 0
+        counter.count += 1
+        counter.save(update_fields=["window_started_at", "count"])
+        return counter.count
 
     def find_reset(self, digest):
         return PasswordReset.objects.select_related("user").filter(token_hash=digest).first()

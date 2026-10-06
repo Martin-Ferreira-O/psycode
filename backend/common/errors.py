@@ -14,6 +14,11 @@ class ServiceError(Exception):
         self.details = details or {}
 
 
+class PersistenceUnavailable(ServiceError):
+    def __init__(self):
+        super().__init__("PERSISTENCE_UNAVAILABLE", "Persistencia no disponible", 503)
+
+
 def error_body(code, message, details=None):
     return {"success": False, "error": {"code": code, "message": message, "details": details or {}}, "timestamp": timestamp()}
 
