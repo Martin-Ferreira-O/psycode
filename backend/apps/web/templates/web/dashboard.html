@@ -19,42 +19,37 @@
 
         <main class="contenido-dashboard">
             <header class="cabecera-dashboard">
-                <div>
-                    <span class="subtitulo">Panel principal</span>
-                    <h1>Dashboard de alertas</h1>
-                    <p>Consulta, filtra y evalúa las alertas detectadas.</p>
+              <div>
+                <h1>Dashboard de alertas</h1>
+              <div>
+              <div class="usuario-dashboard">
+                <div class="usuario-avatar">
+                    S
                 </div>
 
-                <div class="usuario">
-                    <div class="usuario-icono">S</div>
-                    <div>
-                        <strong>Supervisor</strong>
-                        <span>Cuenta institucional</span>
-                    </div>
+                <div class="usuario-datos">
+                    <strong>Supervisor</strong>
+                    
                 </div>
+              </div>
             </header>
 
             <section class="tarjetas-resumen">
                 <a href="{% url 'web:estadisticas' %}?tipo=total" class="tarjeta-resumen tarjeta-acceso">
-                    <div class="resumen-superior">
-                        <span class="resumen-enlace">Ver estadísticas</span>
-                    </div>
+ 
                     <span class="resumen-etiqueta">Alertas registradas</span>
                     <strong id="totalAlertas" class="resumen-numero">0</strong>
                 </a>
 
                 <a href="{% url 'web:dashboard' %}?estado_evaluacion=pendiente#historial-alertas" class="tarjeta-resumen tarjeta-contador tarjeta-acceso">
-                    <div class="resumen-superior">
-                        <span class="resumen-enlace">Ver historial</span>
-                    </div>
+  
                     <span class="resumen-etiqueta">Pendientes</span>
                     <strong id="totalPendientes" class="resumen-numero">0</strong>
                 </a>
 
+  
                 <a href="{% url 'web:dashboard' %}?revisadas=true#historial-alertas" class="tarjeta-resumen tarjeta-contador tarjeta-acceso">
-                    <div class="resumen-superior">
-                        <span class="resumen-enlace">Ver historial</span>
-                    </div>
+   
                     <span class="resumen-etiqueta">Revisadas</span>
                     <strong id="totalRevisadas" class="resumen-numero">0</strong>
                 </a>
@@ -63,8 +58,7 @@
             <section id="historial-alertas" class="seccion-historial">
                 <header class="cabecera-historial">
                     <div>
-                        <h2>Historial de alertas</h2>
-                        <p>Consulta, filtra y revisa las detecciones.</p>
+                        <h2>Historial de alertas</h2>                        
                     </div>
 
                     <button type="button" id="botonActualizar" class="boton-principal">
@@ -125,7 +119,7 @@
                     <div class="panel-cabecera">
                         <div>
                             <h2>Alertas registradas</h2>
-                            <p id="resultadoTexto">Cargando alertas...</p>
+                            <p id="resultadoTexto">Cargando alertas...</p>                           
                         </div>
                     </div>
 
@@ -170,13 +164,7 @@
                 </section>
             </section>
 
-            <section class="aviso-notificacion">
-                <div>
-                    <strong>Canal de notificación</strong>
-                    <p>La última alerta fue enviada al supervisor correspondiente.</p>
-                </div>
-                <span>Correo enviado</span>
-            </section>
+
         </main>
     </div>
 
@@ -203,7 +191,9 @@
                     data-cerrar-modal
                     aria-label="Cerrar"
                 >
-                    X
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M6 6L18 18M18 6L6 18"></path>
+                    </svg>
                 </button>
             </header>
 

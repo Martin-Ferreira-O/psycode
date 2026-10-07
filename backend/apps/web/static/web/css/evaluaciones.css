@@ -1,52 +1,192 @@
+.panel-evaluaciones {
+    margin-top: 22px;
+}
+
 .tabla-evaluaciones {
-    min-width: 900px;
+    width: 100%;
+    min-width: 1100px;
+    table-layout: fixed;
+    border-collapse: collapse;
+}
+
+.tabla-evaluaciones th,
+.tabla-evaluaciones td {
+    box-sizing: border-box;
+    padding: 20px 16px;
+    font-family: "Segoe UI", Arial, sans-serif;
+    vertical-align: middle;
+}
+
+.tabla-evaluaciones th {
+    height: 60px;
+    background: #f5f8fb;
+    color: #52677c;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.tabla-evaluaciones tbody tr {
+    background: #ffffff;
+    transition: background 0.15s ease;
+}
+
+.tabla-evaluaciones tbody tr:hover {
+    background: #f8fafc;
+}
+
+.tabla-evaluaciones tbody td {
+    height: 74px;
+    color: #263548;
+    font-size: 16px;
+    font-weight: 400;
+}
+
+.tabla-evaluaciones tbody td strong {
+    color: #173858;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.tabla-evaluaciones th:nth-child(1),
+.tabla-evaluaciones td:nth-child(1) {
+    width: 14%;
+    text-align: left;
+}
+
+.tabla-evaluaciones th:nth-child(2),
+.tabla-evaluaciones td:nth-child(2) {
+    width: 22%;
+    text-align: center;
+}
+
+.tabla-evaluaciones th:nth-child(3),
+.tabla-evaluaciones td:nth-child(3) {
+    width: 19%;
+    text-align: center;
+}
+
+.tabla-evaluaciones th:nth-child(4),
+.tabla-evaluaciones td:nth-child(4) {
+    width: 13%;
+    text-align: center;
+}
+
+.tabla-evaluaciones th:nth-child(5),
+.tabla-evaluaciones td:nth-child(5) {
+    width: 18%;
+    text-align: center;
+}
+
+.tabla-evaluaciones th:nth-child(6),
+.tabla-evaluaciones td:nth-child(6) {
+    width: 14%;
+    text-align: center;
 }
 
 .etiqueta-evaluacion {
     display: inline-flex;
+    width: 128px;
+    min-width: 128px;
+    height: 34px;
+    min-height: 34px;
     align-items: center;
     justify-content: center;
-    width: 105px;
+ 
     box-sizing: border-box;
-    border: 1px solid #cbd5e1;
+ 
     border-radius: 999px;
-    padding: 5px 9px;
-    background: #ffffff;
-    color: #334155;
-    font-size: 11px;
-    font-weight: 600;
+    padding: 0 12px;
+    font-family: "Segoe UI", Arial, sans-serif;
+    font-size: 15px;
+    font-weight: 400;
+    line-height: 1;
     white-space: nowrap;
+    text-align: center;
+}
+
+.etiqueta-evaluacion.correcta {
+    border: 1px solid #aed7be;
+    background: #e6f5ec;
+    color: #24643f;
+}
+
+.etiqueta-evaluacion.falso-positivo {
+    border: 1px solid #efbbbb;
+    background: #fdecec;
+    color: #a12f2f;
+}
+
+.etiqueta-evaluacion.neutro {
+    border: 1px solid #c8d5e2;
+    background: #edf3f8;
+    color: #41566c;
 }
 
 .registro-sistema {
-    color: #172033;
-    font-weight: 700;
+    color: #263548;
+    font-family: "Segoe UI", Arial, sans-serif;
+    font-size: 15px;
+    font-weight: 400;
 }
 
 .fecha-evaluacion-tabla {
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    text-align: center;
+}
+
+.fecha-evaluacion-tabla span {
+    color: #263548;
+    font-family: "Segoe UI", Arial, sans-serif;
+    font-size: 15px;
+    font-weight: 400;
 }
 
 .fecha-evaluacion-tabla small {
-    color: #64748b;
-    font-size: 11px;
+    color: #52677c;
+    font-family: "Segoe UI", Arial, sans-serif;
+    font-size: 14px;
+    font-weight: 400;
+}
+
+.tabla-evaluaciones .etiqueta-estado {
+    width: 112px;
+    min-width: 112px;
+    height: 34px;
+    min-height: 34px;
+    font-size: 15px;
+    font-weight: 400;
 }
 
 .tabla-evaluaciones .boton-ver-detalle {
     display: inline-flex;
+    width: 118px;
+    min-width: 118px;
+    height: 42px;
+    min-height: 42px;
     align-items: center;
     justify-content: center;
-    width: 96px;
+  
     box-sizing: border-box;
     white-space: nowrap;
+    font-size: 15px;
+    font-weight: 500;
+    text-align: center;
 }
 
 .pie-evaluaciones {
-    padding: 15px 17px;
+    padding: 19px 20px;
+    border-top: 1px solid #e7edf3;
     color: #64748b;
-    font-size: 12px;
+    font-family: "Segoe UI", Arial, sans-serif;
+    font-size: 14px;
+    font-weight: 400;
 }
 
 .detalle-evaluacion-registrada {
@@ -54,8 +194,14 @@
     padding-right: 0;
 }
 
+@media (max-width: 950px) {
+    .tabla-evaluaciones {
+        min-width: 1000px;
+    }
+}
+
 @media (max-width: 650px) {
     .tabla-evaluaciones {
-        min-width: 850px;
+        min-width: 900px;
     }
 }

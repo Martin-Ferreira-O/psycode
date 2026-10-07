@@ -18,28 +18,18 @@
 <body>
     <div class="aplicacion">
         {% include "web/components/sidebar.html" with seccion_activa="evaluaciones" %}
+
         <main class="contenido-dashboard">
 
             <header class="cabecera-dashboard">
-                <div>
-                    <span class="subtitulo">
-                        Resultados de revisión
-                    </span>
+                <h1>Registro de evaluaciones</h1>
 
-                    <h1>Registro de evaluaciones</h1>
+                <div class="usuario-dashboard">
+                    <div class="usuario-avatar">S</div>
 
-                    <p>
-                        Consulta cómo fue clasificada cada alerta
-                        después de la revisión profesional.
-                    </p>
-                </div>
-
-                <div class="usuario">
-                    <div class="usuario-icono">S</div>
-
-                    <div>
+                    <div class="usuario-datos">
                         <strong>Supervisor</strong>
-                        <span>Cuenta institucional</span>
+                        <span>autonoma</span>
                     </div>
                 </div>
             </header>
@@ -49,6 +39,7 @@
                 <div class="panel-cabecera">
                     <div>
                         <h2>Evaluaciones registradas</h2>
+
                         <p id="resultadoEvaluaciones">
                             Cargando evaluaciones...
                         </p>
@@ -61,6 +52,7 @@
                     hidden
                 >
                     <strong>No se encontraron evaluaciones</strong>
+
                     <p>
                         Todavía no existen alertas evaluadas.
                     </p>
@@ -110,8 +102,7 @@
         ></div>
 
         <section class="modal-contenido">
-
-            <!-- Cabecera -->
+     
             <header class="modal-cabecera">
                 <div>
                     <span class="subtitulo">
@@ -129,7 +120,9 @@
                     data-cerrar-modal
                     aria-label="Cerrar"
                 >
-                    ×
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M6 6L18 18M18 6L6 18"></path>
+                    </svg>
                 </button>
             </header>
 
@@ -204,6 +197,6 @@
     <script src="{% static 'web/js/api.js' %}"></script>
     <script src="{% static 'web/js/components.js' %}"></script>
     <script src="{% static 'web/js/utils.js' %}"></script>
-    <script src="{% static 'web/js/evaluaciones.js' %}?v=2"></script>
+    <script src="{% static 'web/js/evaluaciones.js' %}?v=3"></script>
 </body>
 </html>

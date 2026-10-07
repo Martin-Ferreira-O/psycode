@@ -1,4 +1,4 @@
-// Presentación compartida. Los mensajes específicos deben ser textos locales.
+
 const mensajesSolicitud = Object.freeze({
     0: "No pudimos conectar con el servidor. Revisa tu conexión e inténtalo de nuevo.",
     400: "Revisa los datos ingresados e inténtalo de nuevo.",
@@ -56,7 +56,7 @@ function mostrarError(contenedor, error, { mensajes = {}, reintentar } = {}) {
         return;
     }
     mostrarEstado(contenedor, "error", descripcion.mensaje);
-    // La pantalla decide si repetir la operación es seguro. Nunca hay reintento automático.
+    
     if (descripcion.recuperable && reintentar) {
         const boton = document.createElement("button");
         boton.type = "button";

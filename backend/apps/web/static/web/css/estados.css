@@ -1,5 +1,6 @@
-/* Estados comunes; conserva los colores y controles del frontend existente. */
+
 .estado-solicitud {
+    
     padding: 12px 16px;
     border: 1px solid var(--borde, #dce3eb);
     border-radius: 10px;
@@ -30,5 +31,68 @@
     font: inherit;
     cursor: pointer;
 }
+
+.etiqueta-nivel {
+    display: inline-flex;
+    min-width: 82px;
+    min-height: 34px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    padding: 7px 13px;
+    font-family: "Segoe UI", Arial, sans-serif;
+    font-size: 15px;
+    font-weight: 400;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.nivel-alto {
+    border: 1px solid #efb6b6;
+    background: #fde8e8;
+    color: #a52828;
+}
+
+.nivel-medio {
+    border: 1px solid #f1cf92;
+    background: #fff3d8;
+    color: #9a5b00;
+}
+
+.nivel-bajo {
+    border: 1px solid #b8d5ea;
+    background: #e9f4fb;
+    color: #245f86;
+}
+
+.nivel-nulo {
+    border: 1px solid #d4dbe3;
+    background: #eef2f6;
+    color: #5c6875;
+}
 .boton-reintentar:focus-visible { outline: 3px solid var(--azul, #2b5278); outline-offset: 3px; }
 .boton-reintentar:disabled { opacity: .65; cursor: wait; }
+.etiqueta-estado {
+    display: inline-flex;
+    width: 112px;
+    min-width: 112px;
+    height: 34px;
+    min-height: 34px;
+
+    align-items: center;
+    justify-content: center;
+
+    box-sizing: border-box;
+    border-radius: 999px;
+    padding: 0 12px;
+
+    font-family: "Segoe UI", Arial, sans-serif;
+    font-size: 15px;
+    font-weight: 400;
+    line-height: 1;
+
+    white-space: nowrap;
+}
+.estado-pendiente {border: 1px solid #e6c88d;background: #fff4dc;color: #8a5a00;}
+
+.estado-revisada {border: 1px solid #b9d2e8;background: #eaf3fb;color: #24577f;}

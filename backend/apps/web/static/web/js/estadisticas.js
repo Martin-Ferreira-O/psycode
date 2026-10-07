@@ -54,6 +54,7 @@ const grafico = document.querySelector("#graficoBarras");
 const registroHistorico = document.querySelector("#registroHistorico");
 const tituloGrafico = document.querySelector("#tituloGrafico");
 const botonDescargar = document.querySelector("#botonDescargar");
+const textoDescarga = document.querySelector("#textoDescarga");
 const botonesPeriodo = document.querySelectorAll(".boton-periodo");
 
 function dibujarGrafico() {
@@ -62,17 +63,21 @@ function dibujarGrafico() {
 
     grafico.innerHTML = valores
         .map((item) => {
-            const altura = (item.total / maximo) * 215;
+            const altura = (item.total / maximo) * 245;
 
             return `
                 <div class="grupo-barra">
                     <span class="valor-barra">${item.total}</span>
+
                     <div
                         class="barra"
                         style="height: ${altura}px"
                         title="${item.etiqueta}: ${item.total} alertas"
                     ></div>
-                    <span class="etiqueta-barra">${item.etiqueta}</span>
+
+                    <span class="etiqueta-barra">
+                        ${item.etiqueta}
+                    </span>
                 </div>
             `;
         })
@@ -83,7 +88,9 @@ function mostrarRegistros() {
     registroHistorico.innerHTML = registros
         .map((alerta) => {
             const claseEstado =
-                alerta.estado === "Revisada" ? "estado revisada" : "estado";
+                alerta.estado === "Revisada"
+                    ? "estado revisada"
+                    : "estado";
 
             return `
                 <article class="registro">
@@ -91,15 +98,23 @@ function mostrarRegistros() {
                         <span class="registro-icono">!</span>
 
                         <div>
-                            <span class="registro-id">${alerta.id}</span>
-                            <span class="registro-tipo">${alerta.tipo}</span>
+                            <span class="registro-id">
+                                ${alerta.id}
+                            </span>
+
+                            <span class="registro-tipo">
+                                ${alerta.tipo}
+                            </span>
+
                             <span class="registro-fecha">
                                 ${alerta.fecha} · ${alerta.hora}
                             </span>
                         </div>
                     </div>
 
-                    <span class="${claseEstado}">${alerta.estado}</span>
+                    <span class="${claseEstado}">
+                        ${alerta.estado}
+                    </span>
                 </article>
             `;
         })
@@ -121,10 +136,10 @@ function cambiarPeriodo(nuevoPeriodo) {
             ? "Comportamiento semanal"
             : "Comportamiento mensual";
 
-    botonDescargar.textContent =
+    textoDescarga.textContent =
         periodoActual === "semana"
-            ? " Obtener registro de semana"
-            : " Obtener registro de mes";
+            ? "Obtener registro de semana"
+            : "Obtener registro de mes";
 
     dibujarGrafico();
 }
@@ -143,13 +158,21 @@ function descargarRegistro() {
     );
 
     const contenido = [encabezado, ...filas].join("\n");
-    const archivo = new Blob(["\uFEFF" + contenido], {
-        type: "text/csv;charset=utf-8",
-    });
+
+    const archivo = new Blob(
+        ["\uFEFF" + contenido],
+        {
+            type: "text/csv;charset=utf-8",
+        }
+    );
 
     const enlace = document.createElement("a");
+
     enlace.href = URL.createObjectURL(archivo);
-    enlace.download = `registro-alertas-${periodoActual}.csv`;
+
+    enlace.download =
+        `registro-alertas-${periodoActual}.csv`;
+
     enlace.click();
 
     URL.revokeObjectURL(enlace.href);
@@ -161,7 +184,10 @@ botonesPeriodo.forEach((boton) => {
     });
 });
 
-botonDescargar.addEventListener("click", descargarRegistro);
+botonDescargar.addEventListener(
+    "click",
+    descargarRegistro
+);
 
 mostrarRegistros();
 dibujarGrafico();
