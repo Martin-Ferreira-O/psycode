@@ -90,7 +90,7 @@ Documento de negocio. Las fechas se guardan como BSON Date UTC y se serializan I
 | `estado_evaluacion` | enum | Sí | Servidor | `pendiente` al alta |
 | `evaluacion` | objeto o null | Sí (null cuenta) | Servidor | `null` al alta |
 | `sesion_id` | string UUID | Sí | Entrada interna | No se expone en el listado, sí en el detalle |
-| `descripcion` | string ≤500 o null | Sí como campo; valor null permitido | Entrada interna opcional | Ausente o vacío → `null` |
+| `descripcion` | string ≤500 o null | Sí como campo; valor null permitido | Entrada interna opcional | Fragmento relevante de transcripción asociado a la alerta; se normalizan espacios y Unicode; ausente o vacío → `null` |
 | `trazabilidad.registrada_en` | date UTC | Sí | Reloj del servidor | |
 | `trazabilidad.actualizada_en` | date UTC | Sí | Reloj del servidor | Igual a `registrada_en` al alta; se actualiza al evaluar |
 | `trazabilidad.origen` | string 1–100 | Sí | Entrada interna | p. ej. `datos_sinteticos` |
@@ -229,7 +229,7 @@ Prohibido en MongoDB, en logs y en notificaciones, salvo mención explícita:
 | Dato | Motivo |
 |---|---|
 | Grabaciones de audio o fragmentos | RF-11 / handoff; fuera de alcance |
-| Transcripciones o texto de la sesión | El sistema no clasifica voz; recibe datos ya clasificados |
+| Transcripción completa de la sesión | No se almacena la transcripción completa; únicamente puede persistirse en `descripcion` el fragmento relevante asociado a la alerta |
 | Nombre, RUT, ficha u otros datos personales del paciente | Minimización; las notificaciones solo llevan box, tipo, semáforo y fecha |
 | Detalles operativos de métodos suicidas | Reglas de uso del insumo clínico |
 | Frecuencias inventadas | Si no hay dato, no se fabrica; no hay campo de frecuencia |
@@ -242,7 +242,8 @@ Prohibido en MongoDB, en logs y en notificaciones, salvo mención explícita:
 | Roles, permisos o réplica del usuario Django | Identidad en SQLite |
 | Segunda evaluación, historial de ediciones o borrado lógico de alertas | Fuera de v1 |
 
-`descripcion` existe en el contrato (máximo 500, opcional) y **no** es un canal para transcripción, identidad de paciente ni instrucciones de método. El alta interna debe normalizar ausencia a `null` y rechazar contenido que viole estas reglas en la capa de aplicación.
+`descripcion` existe en el contrato como campo opcional de máximo 500 caracteres y representa únicamente el fragmento relevante de transcripción asociado a la alerta. No debe utilizarse para almacenar 
+la transcripción completa de la sesión, audio original, identidad del paciente ni otros datos ajenos al contexto mínimo de la alerta. El alta interna normaliza espacios y caracteres Unicode; la ausencia o un valor vacío se normalizan a `null`, y el contenido que supere el límite se rechaza.
 
 ## 10. Correspondencia con el contrato y las tareas
 

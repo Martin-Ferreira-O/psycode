@@ -250,7 +250,7 @@ SCRUM-32, 33, 34, 37, 39 y 40. Todas requieren autenticación. No hay creación,
 | `estado_evaluacion` | enum | Listado y detalle; pendiente, correcta, falso_positivo, neutro |
 | `evaluacion` | Evaluation o null | Listado y detalle; null si pendiente |
 | `sesion_id` | UUID | Solo detalle; referencia de sesión clínica, no sesión JWT |
-| `descripcion` | string o null | Solo detalle; máximo 500; ausente en entrada se normaliza a null |
+| `descripcion` | string o null | Solo detalle; fragmento relevante de transcripción asociado a la alerta; máximo 500 caracteres; se normalizan espacios y Unicode; ausente o vacío se normaliza a null | 
 | `trazabilidad` | objeto | Solo detalle: registrada_en, actualizada_en (UTC), origen (string 1–100) |
 
 Evaluation tiene la misma forma en GET/POST y dentro de alertas:
@@ -353,6 +353,7 @@ Sin parámetros ni cuerpo. Ejemplo pendiente, respuesta 200:
 ~~~
 
 Si evaluada, evaluacion contiene Evaluation y estado correspondiente. Error específico: `404 ALERTA_NO_ENCONTRADA`.
+`descripcion` representa únicamente el fragmento relevante de transcripción que originó la posible alerta. No corresponde a la transcripción completa de la sesión ni al audio original. El campo se entrega solo en el endpoint de detalle y no forma parte del listado general de alertas.
 
 ### POST /api/v1/alerts/{alerta_id}/evaluacion
 
@@ -482,7 +483,8 @@ No son HTTP ni usan envelope público. Conectan SCRUM-32 y SCRUM-41; no implican
 
 ### register_alert(input) → RegistrationResult
 
-Entrada tipada obligatoria: alerta_id, box, tipo_riesgo, nivel_severidad, fecha_hora, sesion_id, origen; descripcion opcional. Tipos y límites del esquema de alerta. El llamador aporta UUID para detectar duplicados. No aceptar semáforo, estado, evaluación ni fechas de trazabilidad como autoridad del llamador.
+Entrada tipada obligatoria: alerta_id, box, tipo_riesgo, nivel_severidad, fecha_hora, sesion_id, origen; descripcion opcional.  `descripcion` corresponde al fragmento relevante de transcripción asociado a la alerta, con máximo 500 caracteres.. No se admite como sustituto de una transcripción completa ni del audio original. 
+Tipos y límites del esquema de alerta. El llamador aporta UUID para detectar duplicados. No aceptar semáforo, estado, evaluación ni fechas de trazabilidad como autoridad del llamador.
 
 Flujo: validar → derivar semáforo → estado pendiente y evaluación null → fechas de trazabilidad del servidor → persistir → notificar si corresponde.
 

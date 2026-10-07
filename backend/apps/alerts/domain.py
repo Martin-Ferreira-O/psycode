@@ -1,6 +1,7 @@
 """Tipos y reglas de alerts; sin dependencias de infraestructura."""
 
 from __future__ import annotations
+import unicodedata 
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -101,7 +102,8 @@ def _descripcion(valor: object) -> str | None:
         return None
     if not isinstance(valor, str):
         raise DomainError("descripcion debe ser una cadena o null.")
-    texto = valor.strip()
+    texto = unicodedata.normalize("NFC", valor)
+    texto = " ".join(texto.split())
     if not texto:
         return None
     if len(texto) > DESCRIPCION_MAX:

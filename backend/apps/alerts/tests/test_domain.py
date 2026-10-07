@@ -76,6 +76,29 @@ class DomainTests(SimpleTestCase):
     def test_descripcion_vacia_queda_null(self):
         self.assertIsNone(alta(descripcion="   ").descripcion)
 
+   
+    def test_descripcion_normaliza_espacios(self):
+        alerta = alta(descripcion="  No   quiero\nseguir\t sintiéndome   así.  ")
+
+        self.assertEqual(alerta.descripcion,"No quiero seguir sintiéndome así.")
+
+    def test_descripcion_normaliza_caracteres_unicode(self):
+        alerta = alta(descripcion="Me siento asi\u0301")
+        self.assertEqual(alerta.descripcion,"Me siento así")
+
+    def test_descripcion_rechaza_tipo_no_texto(self):
+        for valor in (123, True, ["texto"], {"texto": "ejemplo"}):
+            with self.subTest(valor=valor):
+                with self.assertRaises(DomainError):
+                    alta(descripcion=valor)
+
+    def test_descripcion_acepta_exactamente_500_caracteres(self):
+        descripcion = "x" * 500
+
+        alerta = alta(descripcion=descripcion)
+
+        self.assertEqual(alerta.descripcion, descripcion)
+
     def test_limites_de_campos(self):
         with self.assertRaises(DomainError):
             alta(box="")
