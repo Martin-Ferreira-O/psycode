@@ -4,6 +4,7 @@ if (!verificarSesion()) {
 
 let evaluaciones = [];
 let cargandoEvaluaciones = false;
+let solicitudDetalle = 0;
 
 const elementos = {
     tabla: document.querySelector("#tablaEvaluaciones"),
@@ -18,7 +19,6 @@ const elementos = {
     detalleTipo: document.querySelector("#detalleTipo"),
     detalleNivel: document.querySelector("#detalleNivel"),
     detalleFecha: document.querySelector("#detalleFecha"),
-    detalleHora: document.querySelector("#detalleHora"),
     detalleEstado: document.querySelector("#detalleEstado"),
     resultadoEvaluacion: document.querySelector("#resultadoEvaluacion"),
     evaluadoPor: document.querySelector("#evaluadoPor"),
@@ -129,65 +129,34 @@ function renderizarEvaluaciones() {
     });
 }
 
-function abrirDetalle(alertaId) {
-    const alerta = evaluaciones.find(
-        (item) => item.alerta_id === alertaId
-    );
-
-    if (!alerta) {
-        return;
-    }
-
-    const resultado = obtenerResultado(alerta);
-
-    elementos.tituloModal.textContent =
-        codigoAlertaVisible(alerta.alerta_id);
-
-    elementos.detalleBox.textContent =
-        formatearBox(alerta.box);
-
-    elementos.detalleTipo.textContent =
-        formatearTipoRiesgo(alerta.tipo_riesgo);
-
-    elementos.detalleNivel.textContent =
-        etiquetaNivel(alerta);
-
-    elementos.detalleFecha.textContent =
-        formatearFecha(alerta.fecha_hora);
-
-    elementos.detalleHora.textContent =
-        formatearHora(alerta.fecha_hora);
-
-    elementos.detalleEstado.textContent =
-        "Revisada";
-
-    elementos.resultadoEvaluacion.textContent =
-        obtenerEtiquetaEvaluacion(resultado);
-
-    elementos.evaluadoPor.textContent =
-        alerta.evaluacion?.usuario || "No disponible";
-
-    elementos.fechaEvaluacion.textContent =
-        `${formatearFecha(alerta.evaluacion?.fecha_hora)} · ` +
-        `${formatearHora(alerta.evaluacion?.fecha_hora)}`;
-
+async function abrirDetalle(alertaId) {
+    const idSolicitud = ++solicitudDetalle;
+    limpiarTranscripcion();
+    elementos.tituloModal.textContent = "Detalle de alerta";
     elementos.modal.hidden = false;
+    document.body.classList.add("modal-abierto");
+    const estado = document.querySelector("#estadoDetalle");
+    const bloques = elementos.modal.querySelectorAll(".detalle-grid, .evaluacion-registrada");
+    bloques.forEach(bloque => { bloque.hidden = true; });
+    mostrarCarga(estado, "Cargando detalle…");
+    elementos.modal.querySelector(".boton-cerrar").focus();
+    try {
+        const alerta = await apiGetDatos(`/api/v1/alerts/${encodeURIComponent(alertaId)}`);
+        if (idSolicitud !== solicitudDetalle) return;
+        completarContenidoDetalle(alerta);
 
-    document.body.classList.add(
-        "modal-abierto"
-    );
-
-    const botonCerrar = elementos.modal.querySelector(
-        ".boton-cerrar"
-    );
-
-    if (botonCerrar) {
-        botonCerrar.focus();
+        bloques.forEach(bloque => { bloque.hidden = false; });
+        limpiarEstado(estado);
+    } catch (error) {
+        if (idSolicitud !== solicitudDetalle) return;
+        mostrarError(estado, error, { reintentar: () => abrirDetalle(alertaId) });
     }
 }
 
 
 function cerrarDetalle() {
+    solicitudDetalle += 1;
+    limpiarTranscripcion();
     elementos.modal.hidden = true;
 
     document.body.classList.remove(

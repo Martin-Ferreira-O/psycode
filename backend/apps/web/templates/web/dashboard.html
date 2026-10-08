@@ -8,8 +8,8 @@
     <title>Dashboard de alertas</title>
 
     <link rel="stylesheet" href="{% static 'web/css/styles.css' %}">
-    <link rel="stylesheet" href="{% static 'web/css/dashboard.css' %}">
-    <link rel="stylesheet" href="{% static 'web/css/alertas.css' %}">
+    <link rel="stylesheet" href="{% static 'web/css/dashboard.css' %}?v=2">
+    <link rel="stylesheet" href="{% static 'web/css/alertas.css' %}?v=6">
     <link rel="stylesheet" href="{% static 'web/css/estados.css' %}">
 </head>
 
@@ -19,19 +19,8 @@
 
         <main class="contenido-dashboard">
             <header class="cabecera-dashboard">
-              <div>
                 <h1>Dashboard de alertas</h1>
-              <div>
-              <div class="usuario-dashboard">
-                <div class="usuario-avatar">
-                    S
-                </div>
-
-                <div class="usuario-datos">
-                    <strong>Supervisor</strong>
-                    
-                </div>
-              </div>
+                {% include "web/components/usuario_sesion.html" %}
             </header>
 
             <section class="tarjetas-resumen">
@@ -168,141 +157,13 @@
         </main>
     </div>
 
-    <div
-        id="modalDetalle"
-        class="modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="tituloModal"
-        hidden
-    >
-        <div class="modal-fondo" data-cerrar-modal></div>
-
-        <section class="modal-contenido">
-            <header class="modal-cabecera">
-                <div>
-                    <span class="subtitulo">Detalle de alerta</span>
-                    <h2 id="tituloModal">Alerta</h2>
-                </div>
-
-                <button
-                    type="button"
-                    class="boton-cerrar"
-                    data-cerrar-modal
-                    aria-label="Cerrar"
-                >
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M6 6L18 18M18 6L6 18"></path>
-                    </svg>
-                </button>
-            </header>
-
-            <p id="estadoDetalle" class="mensaje-evaluacion" role="status" hidden></p>
-
-            <div class="detalle-grid">
-                <div class="detalle-item">
-                    <span>Box</span>
-                    <strong id="detalleBox"></strong>
-                </div>
-                <div class="detalle-item">
-                    <span>Tipo de riesgo</span>
-                    <strong id="detalleTipo"></strong>
-                </div>
-                <div class="detalle-item">
-                    <span>Nivel</span>
-                    <strong id="detalleNivel"></strong>
-                </div>
-                <div class="detalle-item">
-                    <span>Fecha y hora</span>
-                    <strong id="detalleFecha"></strong>
-                </div>
-
-                <div class="detalle-item">
-                    <span>Estado</span>
-                    <strong id="detalleEstado"></strong>
-                </div>
-
-                <div class="detalle-item">
-                    <span>Sesión</span>
-                    <strong id="detalleSesion"></strong>
-                </div>
-            </div>
-            <section id="formularioEvaluacion" class="seccion-evaluacion">
-                <h3>Evaluar detección</h3>
-                <p>La evaluación se puede registrar una sola vez.</p>
-
-                <div class="opciones-evaluacion">
-                    <label>
-                        <input type="radio" name="evaluacion" value="correcta">
-                        <span>
-                            <strong>Correcta</strong>
-                            La detección corresponde a una alerta real.
-                        </span>
-                    </label>
-
-                    <label>
-                        <input
-                            type="radio"
-                            name="evaluacion"
-                            value="falso_positivo"
-                        >
-                        <span>
-                            <strong>Falso positivo</strong>
-                            La detección corresponde a un error del modelo.
-                        </span>
-                    </label>
-
-                    <label>
-                        <input type="radio" name="evaluacion" value="neutro">
-                        <span>
-                            <strong>Neutro</strong>
-                            No es posible confirmar la detección.
-                        </span>
-                    </label>
-                </div>
-
-                <p id="mensajeEvaluacion" class="mensaje-evaluacion"></p>
-
-                <button type="button" id="guardarEvaluacion" class="boton-principal">
-                    Guardar evaluación
-                </button>
-            </section>
-
-            <section
-                id="evaluacionRegistrada"
-                class="seccion-evaluacion evaluacion-registrada"
-                hidden
-            >
-                <h3>Evaluación registrada</h3>
-
-                <div class="detalle-grid">
-                    <div class="detalle-item">
-                        <span>Resultado</span>
-                        <strong id="resultadoEvaluacion"></strong>
-                    </div>
-
-                    <div class="detalle-item">
-                        <span>Evaluado por</span>
-                        <strong id="evaluadoPor"></strong>
-                    </div>
-
-                    <div class="detalle-item">
-                        <span>Fecha de evaluación</span>
-                        <strong id="fechaEvaluacion"></strong>
-                    </div>
-                </div>
-
-                <p class="aviso-bloqueado">
-                    Esta evaluación ya fue guardada y no puede modificarse.
-                </p>
-            </section>
-        </section>
-    </div>
+    {% include "web/components/modal_detalle.html" with puede_evaluar=True %}
     <script src="{% static 'web/js/solicitudes.js' %}"></script>
     <script src="{% static 'web/js/estados.js' %}"></script>
     <script src="{% static 'web/js/api.js' %}"></script>
-    <script src="{% static 'web/js/components.js' %}"></script>
+    <script src="{% static 'web/js/components.js' %}?v=2"></script>
     <script src="{% static 'web/js/utils.js' %}?v=2"></script>
-    <script src="{% static 'web/js/dashboard.js' %}?v=2"></script>
+    <script src="{% static 'web/js/alertas_detalle.js' %}?v=2"></script>
+    <script src="{% static 'web/js/dashboard.js' %}?v=5"></script>
 </body>
 </html>

@@ -189,11 +189,6 @@
     font-weight: 400;
 }
 
-.detalle-evaluacion-registrada {
-    padding-left: 0;
-    padding-right: 0;
-}
-
 @media (max-width: 950px) {
     .tabla-evaluaciones {
         min-width: 1000px;

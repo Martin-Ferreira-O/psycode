@@ -47,25 +47,26 @@
     white-space: nowrap;
 }
 
-.nivel-alto {
+.etiqueta-nivel.nivel-alto {
     border: 1px solid #efb6b6;
     background: #fde8e8;
     color: #a52828;
 }
 
-.nivel-medio {
+.etiqueta-nivel.nivel-medio {
     border: 1px solid #f1cf92;
     background: #fff3d8;
     color: #9a5b00;
 }
 
-.nivel-bajo {
-    border: 1px solid #b8d5ea;
-    background: #e9f4fb;
-    color: #245f86;
+.etiqueta-nivel.nivel-bajo {
+    border: 1px solid #86b99a;
+    background: #dcfce7;
+    color: #166534;
 }
 
-.nivel-nulo {
+.etiqueta-nivel.nivel-nulo,
+.etiqueta-nivel.nivel-desconocido {
     border: 1px solid #d4dbe3;
     background: #eef2f6;
     color: #5c6875;

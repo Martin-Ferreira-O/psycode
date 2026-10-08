@@ -193,7 +193,7 @@ function renderizarTabla() {
 
     const filas = document.createDocumentFragment();
     alertas.forEach((alerta) => {
-        const nivel = String(alerta.semaforo || "").toLowerCase();
+        const nivel = nivelPresentacion(alerta);
         const estado = alerta.estado_evaluacion === "pendiente"
             ? "estado-pendiente"
             : "estado-revisada";
@@ -202,7 +202,7 @@ function renderizarTabla() {
             crearCelda(codigoAlertaVisible(alerta.alerta_id), "identificador-alerta"),
             crearCelda(formatearBox(alerta.box)),
             crearCelda(formatearTipoRiesgo(alerta.tipo_riesgo), "etiqueta-tipo"),
-            crearCelda(nivelVisual(alerta), `etiqueta-nivel nivel-${nivel}`, `Nivel ${alerta.nivel_severidad}; semáforo ${alerta.semaforo}`),
+            crearCelda(nivel.texto, `etiqueta-nivel ${nivel.clase}`, `Nivel: ${nivel.texto}`),
             crearCelda(formatearFecha(alerta.fecha_hora)),
             crearCelda(formatearHora(alerta.fecha_hora)),
             crearCelda(alerta.estado_evaluacion === "pendiente" ? "Pendiente" : "Revisada", `etiqueta-estado ${estado}`, `Estado de evaluación: ${etiquetas[alerta.estado_evaluacion]}`),
@@ -238,13 +238,7 @@ function renderizarTabla() {
 }
 
 function completarDetalle(alerta) {
-    document.querySelector("#tituloModal").textContent = codigoAlertaVisible(alerta.alerta_id);
-    document.querySelector("#detalleBox").textContent = formatearBox(alerta.box);
-    document.querySelector("#detalleTipo").textContent = formatearTipoRiesgo(alerta.tipo_riesgo);
-    document.querySelector("#detalleNivel").textContent = etiquetaNivel(alerta);
-    document.querySelector("#detalleFecha").textContent = `${formatearFecha(alerta.fecha_hora)} · ${formatearHora(alerta.fecha_hora)}`;
-    document.querySelector("#detalleEstado").textContent = etiquetas[alerta.estado_evaluacion] || alerta.estado_evaluacion;
-    document.querySelector("#detalleSesion").textContent = alerta.sesion_id || "—";
+    completarContenidoDetalle(alerta);
 
     const pendiente = alerta.estado_evaluacion === "pendiente";
     document.querySelector("#formularioEvaluacion").hidden = !pendiente;
@@ -254,16 +248,13 @@ function completarDetalle(alerta) {
     });
     limpiarEstado(document.querySelector("#mensajeEvaluacion"));
 
-    if (alerta.evaluacion) {
-        const resultado = alerta.evaluacion.evaluacion;
-        document.querySelector("#resultadoEvaluacion").textContent = etiquetas[resultado] || resultado;
-        document.querySelector("#evaluadoPor").textContent = alerta.evaluacion.usuario;
-        document.querySelector("#fechaEvaluacion").textContent = `${formatearFecha(alerta.evaluacion.fecha_hora)} · ${formatearHora(alerta.evaluacion.fecha_hora)}`;
-    }
 }
 
 async function abrirDetalle(alertaId) {
     const idSolicitud = ++solicitudDetalle;
+    limpiarTranscripcion();
+    elementos.modal.querySelectorAll(".detalle-grid").forEach(bloque => { bloque.hidden = true; });
+    document.querySelector("#tituloModal").textContent = "Detalle de alerta";
     const evaluacionAnterior = evaluacionesConfirmadas.get(alertaId);
     alertaSeleccionada = null;
     actualizarBotonEvaluacion();
@@ -295,6 +286,7 @@ async function abrirDetalle(alertaId) {
 
 function cerrarDetalle() {
     solicitudDetalle += 1;
+    limpiarTranscripcion();
     elementos.modal.hidden = true;
     document.body.classList.remove("modal-abierto");
     alertaSeleccionada = null;
