@@ -58,6 +58,22 @@ class AlertDateTests(SimpleTestCase):
         self.assertIsNone(serializer.validated_data["fecha_hasta_utc"])
 
 
+class AlertSeveritySerializerTests(SimpleTestCase):
+    def test_list_serializer_emits_the_three_level_semaphore_mapping(self):
+        expected = {1: "BAJO", 2: "MEDIO", 3: "ALTO"}
+        for level, semaphore in expected.items():
+            with self.subTest(level=level):
+                alert = alta_pendiente(nivel_severidad=level)
+                serialized = AlertaListItemSerializer(alert).data
+                self.assertEqual(serialized["nivel_severidad"], level)
+                self.assertEqual(serialized["semaforo"], semaphore)
+
+    def test_severity_field_declares_the_supported_range(self):
+        field = AlertaListItemSerializer().fields["nivel_severidad"]
+        self.assertEqual(field.min_value, 1)
+        self.assertEqual(field.max_value, 3)
+
+
 class AlertFilterTests(SimpleTestCase):
     def setUp(self):
         self.client = APIClient()

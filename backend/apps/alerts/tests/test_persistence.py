@@ -140,7 +140,7 @@ class RepositoryTests(SimpleTestCase):
         leida = self.store.get_alert(alerta.alerta_id)
         self.assertEqual(leida.box, "box-3")
         self.assertEqual(leida.sesion_id, alerta.sesion_id)
-        self.assertEqual(leida.semaforo, Semaforo.BAJO)
+        self.assertEqual(leida.semaforo, Semaforo.MEDIO)
         self.assertEqual(leida.estado_evaluacion, EstadoEvaluacion.PENDIENTE)
         self.assertIsNone(leida.evaluacion)
         self.assertEqual(leida.trazabilidad.origen, ORIGEN)
@@ -170,7 +170,7 @@ class RepositoryTests(SimpleTestCase):
         leida = self.store.get_alert(alerta.alerta_id)
         self.assertEqual(leida.estado_evaluacion, EstadoEvaluacion.CORRECTA)
         self.assertEqual(leida.evaluacion.usuario_id, EVALUADOR_ID)
-        self.assertEqual(leida.semaforo, Semaforo.BAJO)
+        self.assertEqual(leida.semaforo, Semaforo.MEDIO)
         with self.assertRaises(EvaluationAlreadyRegistered):
             self.service.record_evaluation(alerta.alerta_id, "neutro", EVALUADOR_ID, EVALUADOR_USUARIO)
 

@@ -4,6 +4,8 @@ from datetime import date, datetime, time, timedelta, timezone
 
 from rest_framework import serializers
 
+from .domain import Semaforo
+
 ZONA_SANTIAGO = zoneinfo.ZoneInfo("America/Santiago")
 
 
@@ -98,14 +100,11 @@ class AlertaListItemSerializer(serializers.Serializer):
     alerta_id = serializers.CharField()
     box = serializers.CharField()
     tipo_riesgo = serializers.CharField()
-    nivel_severidad = serializers.IntegerField()
-    semaforo = serializers.SerializerMethodField()
+    nivel_severidad = serializers.IntegerField(min_value=1, max_value=3)
+    semaforo = serializers.ChoiceField(choices=tuple(item.value for item in Semaforo))
     fecha_hora = UTCDateTimeField()
     estado_evaluacion = serializers.CharField()
     evaluacion = EvaluacionPublicSerializer(allow_null=True)
-
-    def get_semaforo(self, obj):
-        return getattr(obj.semaforo, "value", obj.semaforo)
 
 
 class TrazabilidadSerializer(serializers.Serializer):

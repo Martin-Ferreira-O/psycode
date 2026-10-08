@@ -1,6 +1,6 @@
 # Contratos de API — Psycode API
 
-**Nombre técnico:** `psycode-api`. **API:** v1. **Revisión documental:** 1.1, consolidación SCRUM-30 del 2026-09-12. **Implementación actual:** las seis operaciones de autenticación (sección 1) están implementadas en SCRUM-31. Alertas, dashboard y notificaciones conservan contratos futuros, no endpoints funcionales.
+**Nombre técnico:** `psycode-api`. **API:** v1. **Revisión documental:** 1.2, escala de severidad actualizada el 2026-10-08. **Implementación actual:** las operaciones descritas se implementan por sus tareas SCRUM correspondientes.
 
 **Base URL:** `/api/v1/`. **Autenticación:** JWT `Authorization: Bearer <access_token>`. **JSON:** `application/json`. [Arquitectura](ARCHITECTURE.md) · [Aceptación](docs/ACCEPTANCE.md).
 
@@ -244,8 +244,8 @@ SCRUM-32, 33, 34, 37, 39 y 40. Todas requieren autenticación. No hay creación,
 | `alerta_id` | UUID | Listado y detalle; único e inmutable |
 | `box` | string | Listado y detalle; 1–64 caracteres |
 | `tipo_riesgo` | string | Listado y detalle; 1–100; sin catálogo inventado |
-| `nivel_severidad` | integer | Listado y detalle; 0–7, no booleano |
-| `semaforo` | enum | Listado y detalle; NULO, BAJO, MEDIO, ALTO; derivado del Anexo A |
+| `nivel_severidad` | integer | Listado y detalle; solo 1, 2 o 3; no booleano |
+| `semaforo` | enum | Listado y detalle; BAJO, MEDIO o ALTO; derivado unívocamente del nivel |
 | `fecha_hora` | fecha/hora UTC | Listado y detalle; detección, no evaluación |
 | `estado_evaluacion` | enum | Listado y detalle; pendiente, correcta, falso_positivo, neutro |
 | `evaluacion` | Evaluation o null | Listado y detalle; null si pendiente |
@@ -448,7 +448,7 @@ Respuesta 200:
 }
 ~~~
 
-Conteos enteros no negativos. Pendientes + revisadas = total_alertas; suma de cuatro severidades = total_alertas. Se conservan claves minúsculas del borrador, aunque enum de alerta sea mayúscula. Sin datos todas las cantidades son cero y se conservan cuatro claves.
+Conteos enteros no negativos. Pendientes + revisadas = total_alertas; suma de severidades = total_alertas. Se conservan las cuatro claves minúsculas del contrato anterior; `nulo` se mantiene en cero porque los resultados sin riesgo no se almacenan como alertas. Sin datos todas las cantidades son cero.
 
 ### GET /api/v1/dashboard/estadisticas
 
@@ -483,14 +483,14 @@ No son HTTP ni usan envelope público. Conectan SCRUM-32 y SCRUM-41; no implican
 
 ### register_alert(input) → RegistrationResult
 
-Entrada tipada obligatoria: alerta_id, box, tipo_riesgo, nivel_severidad, fecha_hora, sesion_id, origen; descripcion opcional.  `descripcion` corresponde al fragmento relevante de transcripción asociado a la alerta, con máximo 500 caracteres.. No se admite como sustituto de una transcripción completa ni del audio original. 
-Tipos y límites del esquema de alerta. El llamador aporta UUID para detectar duplicados. No aceptar semáforo, estado, evaluación ni fechas de trazabilidad como autoridad del llamador.
+Entrada tipada obligatoria: alerta_id, box, tipo_riesgo, nivel_severidad (1–3), fecha_hora, sesion_id, origen; descripcion opcional. `descripcion` corresponde al fragmento relevante de transcripción asociado a la alerta, con máximo 500 caracteres. No se admite como sustituto de una transcripción completa ni del audio original.
+Tipos y límites del esquema de alerta. El llamador aporta UUID para detectar duplicados. No aceptar semáforo, estado, evaluación ni fechas de trazabilidad como autoridad del llamador. Resultados NULO o sin riesgo se omiten antes de llamar a `register_alert`; no se guardan como alertas de riesgo.
 
-Flujo: validar → derivar semáforo → estado pendiente y evaluación null → fechas de trazabilidad del servidor → persistir → notificar si corresponde.
+Flujo: validar nivel 1–3 → derivar semáforo → estado pendiente y evaluación null → fechas de trazabilidad del servidor → persistir → notificar si corresponde. Un nivel fuera del rango se rechaza; NULO/sin riesgo no entra a este flujo.
 
 RegistrationResult contiene `alerta` (AlertDetail) y `notificacion` (NotificationResult). Duplicado → `AlertAlreadyExists`, sin nuevo envío; datos inválidos → `ValidationError`; persistencia caída → `PersistenceUnavailable`, sin envío. Tras guardar, fallo de notificación se expresa en resultado, no como fallo de persistencia.
 
-Prototipo: niveles 1–7 notifican; 0/NULO queda consultable sin envío. Política provisional que requiere validación clínica junto al semáforo. NOTIFICATIONS_ENABLED=false omite todos los envíos de desarrollo y datos sintéticos. Repositorios no envían mensajes.
+Prototipo: las alertas válidas de nivel 1–3 pueden notificar. NULO/sin riesgo no se registra como alerta ni se envía. NOTIFICATIONS_ENABLED=false omite todos los envíos de desarrollo y datos sintéticos. Repositorios no envían mensajes.
 
 ### notify_alert(alerta_id, payload) → NotificationResult
 
@@ -560,21 +560,16 @@ Frente al borrador: nombre Psycode API; envelopes completos/excepción 204; nomb
 
 Se conserva 404 de recuperación. Usuario de evaluación se define como nombre de usuario, aunque el ejemplo anterior usaba correo; no cambia nombre ni tipo de campo. Se reemplazan marcadores “uuid” por UUID válidos. ALERTA_NO_ENCONTRADA sustituye el uso contradictorio de RESOURCE_NOT_FOUND para alertas; este último queda para rutas desconocidas.
 
-## Anexo A — Clasificación del insumo clínico
+## Anexo A — Niveles de riesgo del proyecto
 
-Fuente: [Excel del cliente](docs/Matriz-lenguaje-ideacion-suicida.xlsx) y [transcripción](docs/matriz-lenguaje-ideacion-suicida.md). El gradiente 0–7 es la organización del insumo, que cita C-SSRS y literatura; no es una escala propia validada ni una equivalencia exacta de la escala oficial.
+El campo persistido `nivel_severidad` usa la escala operativa acordada para alertas de riesgo. No replica el gradiente 0–7 de los documentos fuente ni constituye una escala diagnóstica. NULO/sin riesgo no es una alerta y debe omitirse antes de `register_alert`.
 
-| Nivel del insumo | Categoría | Semáforo provisional |
+| `nivel_severidad` | Categoría operativa | `semaforo` |
 |---|---|---|
-| 0 | Sin ideación identificable | NULO |
-| 1 | Deseo pasivo de muerte | BAJO |
-| 2 | Ideación activa inespecífica | BAJO |
-| 3 | Consideración de método | MEDIO |
-| 4 | Alguna intención | MEDIO |
-| 5 | Plan específico e intención | ALTO |
-| 6 | Conducta preparatoria | ALTO |
-| 7 | Conducta suicida | ALTO |
+| 1 | Riesgo bajo | BAJO |
+| 2 | Riesgo medio | MEDIO |
+| 3 | Riesgo alto | ALTO |
 
-Reglas del insumo: frase aislada no diagnostica; distinguir ideación, intención, plan y conducta; no inventar frecuencias; no registrar detalles operativos; validación clínica, cultural y externa antes de producción. Esta fase solo define transporte y gestión de datos ya clasificados.
+La relación es única y automática. Los valores menores que 1, mayores que 3, no enteros y booleanos se rechazan. La conversión o retiro de documentos históricos 0–7 se describe en [MONGODB.md](docs/MONGODB.md#actualización-de-la-escala-histórica).
 
-A4 de “Gradiente clínico” está vacía; transcripción y borrador representan nivel 2. Se conserva esa convención documental y se registra la diferencia en [observaciones](docs/SOURCE_NOTES.md), sin alterar Excel ni afirmar que el cliente lo corrigió.
+Los materiales fuente pueden organizar categorías clínicas con otra numeración; no se debe inferir equivalencia exacta con C-SSRS ni diagnóstico. Cualquier clasificación requiere validación clínica, cultural y externa antes de producción.

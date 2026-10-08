@@ -84,7 +84,7 @@ Documento de negocio. Las fechas se guardan como BSON Date UTC y se serializan I
 | `alerta_id` | string UUID | Sí | Caso de uso interno | Índice único |
 | `box` | string 1–64 | Sí | Entrada interna | Se recortan extremos al persistir; el filtro público es exacto |
 | `tipo_riesgo` | string 1–100 | Sí | Entrada interna | Sin catálogo cerrado inventado |
-| `nivel_severidad` | int 0–7 | Sí | Entrada interna | No booleano; insertar Int32 |
+| `nivel_severidad` | int 1–3 | Sí | Entrada interna | No booleano; insertar Int32; NULO/sin riesgo no se persiste |
 | `semaforo` | enum | Sí | **Derivado** | Ver sección 5 |
 | `fecha_hora` | date UTC | Sí | Entrada interna | Detección, no evaluación |
 | `estado_evaluacion` | enum | Sí | Servidor | `pendiente` al alta |
@@ -114,6 +114,7 @@ No hay edición ni segunda evaluación en v1.
 
 ### Invariantes (dominio + validador)
 
+- `nivel_severidad` solo puede ser 1, 2 o 3.
 - `semaforo` = f(`nivel_severidad`) según la tabla de la sección 5.
 - `estado_evaluacion = pendiente` ⇔ `evaluacion is null`.
 - Si hay evaluación: `evaluacion.alerta_id = alerta_id` y `evaluacion.evaluacion = evaluacion.estado_evaluacion = estado_evaluacion`.
@@ -135,24 +136,59 @@ updateOne(
 
 ## 5. Estados y niveles de severidad
 
-### Gradiente clínico y semáforo
+### Escala operativa y semáforo
 
-Fuente: [Anexo A](../API_CONTRACTS.md#anexo-a--clasificación-del-insumo-clínico) e insumo del cliente. Es la organización del Excel, no una equivalencia exacta de C-SSRS ni un diagnóstico.
+| `nivel_severidad` | Categoría operativa | `semaforo` |
+|---|---|---|
+| 1 | Riesgo bajo | `BAJO` |
+| 2 | Riesgo medio | `MEDIO` |
+| 3 | Riesgo alto | `ALTO` |
 
-| `nivel_severidad` | Categoría del insumo | `semaforo` | ¿Notifica en el prototipo? |
-|---|---|---|---|
-| 0 | Sin ideación identificable | `NULO` | No |
-| 1 | Deseo pasivo de muerte | `BAJO` | Sí |
-| 2 | Ideación activa inespecífica | `BAJO` | Sí |
-| 3 | Consideración de método | `MEDIO` | Sí |
-| 4 | Alguna intención | `MEDIO` | Sí |
-| 5 | Plan específico e intención | `ALTO` | Sí |
-| 6 | Conducta preparatoria | `ALTO` | Sí |
-| 7 | Conducta suicida | `ALTO` | Sí |
+Implementación: `semaforo_desde_severidad` en [domain.py](../backend/apps/alerts/domain.py). Un resultado NULO/sin riesgo no se registra como alerta. El dashboard conserva la clave `nulo` en cero por compatibilidad; el documento persiste solo `BAJO`, `MEDIO` o `ALTO`. Un falso positivo **no** altera la severidad almacenada ni se excluye de los totales.
 
-Implementación: `semaforo_desde_severidad` en [domain.py](../backend/apps/alerts/domain.py). La política de aviso 1–7 es provisional y requiere validación clínica.
+### Actualización de la escala histórica
 
-El dashboard agrega con claves minúsculas (`nulo`, `bajo`, `medio`, `alto`); el documento persiste el enum en mayúsculas. Un falso positivo **no** altera la severidad almacenada ni se excluye de los totales.
+Ejecutar una sola vez antes de desplegar el backend con el validador 1–3. Detener temporalmente las escrituras a `alerts`; los eventos de auditoría se conservan. El modo `warn` permite convertir los documentos mientras el validador antiguo aún espera el semáforo anterior:
+
+```javascript
+db.runCommand({ collMod: "alerts", validationAction: "warn" })
+
+db.alerts.deleteMany({ nivel_severidad: 0 })
+
+db.alerts.updateMany(
+    { nivel_severidad: { $gte: 1, $lte: 7 } },
+    [{ $set: {
+        nivel_severidad: {
+            $switch: {
+                branches: [
+                    { case: { $lte: ["$nivel_severidad", 2] }, then: 1 },
+                    { case: { $lte: ["$nivel_severidad", 4] }, then: 2 }
+                ],
+                default: 3
+            }
+        },
+        semaforo: {
+            $switch: {
+                branches: [
+                    { case: { $lte: ["$nivel_severidad", 2] }, then: "BAJO" },
+                    { case: { $lte: ["$nivel_severidad", 4] }, then: "MEDIO" }
+                ],
+                default: "ALTO"
+            }
+        }
+    } }]
+)
+
+db.alerts.countDocuments({
+    $or: [
+        { nivel_severidad: { $lt: 1 } },
+        { nivel_severidad: { $gt: 3 } },
+        { semaforo: "NULO" }
+    ]
+})
+```
+
+La conversión conserva el semáforo anterior: 1–2 → 1/BAJO, 3–4 → 2/MEDIO y 5–7 → 3/ALTO. El nivel 0 se retira porque no representa una alerta de riesgo. Confirmar que la última consulta devuelve `0`; desplegar entonces el backend nuevo, cuyo `ensure_schema` aplica el validador estricto. No reanudar escrituras antes de esa aplicación. Después de migrar, recrear las alertas sintéticas con `seed_demo_alerts --reset`.
 
 ### Estado de evaluación
 
@@ -265,6 +301,6 @@ SCRUM-32 implementa conexión, variables `MONGODB_URI` / `MONGODB_DATABASE`, apl
 - Varias alertas pueden compartir `sesion_id` o `box`.
 - No hay caducidad (TTL) de `audit_events` en v1; la retención se define antes de uso clínico real.
 - No hay garantía de entrega de la bitácora si MongoDB cae después de persistir la alerta.
-- El mapeo 0–7 → semáforo sigue siendo provisional, como el Anexo A.
+- La escala persistida del proyecto es 1–3; NULO/sin riesgo queda fuera de `alerts`. Los valores 0–7 solo se usan para la migración histórica documentada arriba.
 
-Fuentes: contratos 1.1, arquitectura SCRUM-30, insumo clínico, `AuditWriter` y las descripciones de SCRUM-32/33/34/41 en el [handoff](../HANDOFF.md).
+Fuentes: contratos 1.2, arquitectura SCRUM-30, insumo clínico, `AuditWriter` y las descripciones de SCRUM-32/33/34/41 en el [handoff](../HANDOFF.md).
