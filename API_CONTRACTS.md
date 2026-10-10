@@ -18,13 +18,17 @@ Endpoints sin barra final; el prefijo sí se escribe `/api/v1/`. No depender de 
 | GET | `/api/v1/auth/me` | `accounts:me` | Protegido |
 | POST | `/api/v1/auth/password-reset` | `accounts:password_reset` | Público |
 | POST | `/api/v1/auth/password-reset/confirm` | `accounts:password_reset_confirm` | Token de recuperación |
+| GET | `/api/v1/auth/admin/users` | `accounts:admin_user_list` | Protegido (solo rol admin) |
+| POST | `/api/v1/auth/admin/users` | `accounts:admin_user_create` | Protegido (solo rol admin) |
+| PATCH | `/api/v1/auth/admin/users/{user_id}` | `accounts:admin_user_update` | Protegido (solo rol admin) |
+| PATCH | `/api/v1/auth/admin/users/{user_id}/toggle-active` | `accounts:admin_user_toggle_active` | Protegido (solo rol admin) |
 | GET | `/api/v1/alerts` | `alerts:list` | Protegido |
 | GET | `/api/v1/alerts/{alerta_id}` | `alerts:detail` | Protegido |
 | GET, POST | `/api/v1/alerts/{alerta_id}/evaluacion` | `alerts:evaluation` | Protegido |
 | GET | `/api/v1/dashboard/resumen` | `dashboard:summary` | Protegido |
 | GET | `/api/v1/dashboard/estadisticas` | `dashboard:statistics` | Protegido |
 
-Protegido significa profesional autenticado y activo. No hay roles adicionales definidos: todos los usuarios activos acceden a consulta y evaluación. No existe registro público de usuarios. GET lee y POST acciona o crea evaluación. PUT/PATCH/DELETE no están definidos para estos recursos.
+Protegido significa profesional autenticado y activo. No hay roles adicionales definidos para alertas y métricas: todos los usuarios activos acceden a consulta y evaluación. Las rutas bajo `/api/v1/auth/admin/` exigen rol `admin` (`403 AUTH_FORBIDDEN` para supervisores). No existe registro público de usuarios. GET lee y POST acciona o crea evaluación. PUT/PATCH/DELETE no están definidos para estos recursos, salvo PATCH en la administración de cuentas.
 
 ### Tipos, validación y respuestas
 
@@ -232,6 +236,163 @@ Respuesta 200:
 Actualizar contraseña y consumir token atómicamente en SQLite. Invalidar sesiones previas según política; no iniciar sesión automáticamente. Frontend vuelve al login.
 
 Errores: `400 AUTH_INVALID_RESET_TOKEN` por inválido, expirado, usado o sustituido; `400 VALIDATION_ERROR` por contraseña rechazada; `403 AUTH_USER_INACTIVE` si fue desactivado. Un fallo de validación de contraseña no consume token.
+
+## 1.1 Administración de usuarios
+
+SCRUM-42 y SCRUM-43. Gestión de cuentas sobre SQLite y Django REST Framework mediante `StrictSerializer` y patrón de servicios. Requiere access token válido de un usuario con rol `admin` y estado activo. No disponible para supervisores.
+
+### Esquema UserDetail
+
+| Campo | Tipo / significado | Presencia / regla |
+|---|---|---|
+| `id` | UUID | Canónico con guiones; inmutable |
+| `usuario` | string | Nombre de usuario único; 1–150 caracteres; inmutable tras creación |
+| `nombre` | string | 1–150 caracteres; se divide internamente en `first_name` y `last_name` |
+| `correo` | string | Correo institucional único normalizado a minúsculas; máximo 254 caracteres |
+| `rol` | enum | `admin` o `supervisor` |
+| `activo` | booleano | Estado operativo de la cuenta (`is_active`) |
+
+### GET /api/v1/auth/admin/users
+
+Sin cuerpo ni parámetros en v1. Retorna la colección completa de usuarios.
+
+Respuesta 200:
+
+~~~json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "4ebbdb08-dd54-4f7e-949b-d8a249d97c17",
+      "usuario": "autonoma",
+      "nombre": "Equipo Autonoma",
+      "correo": "autonoma@example.test",
+      "rol": "admin",
+      "activo": true
+    }
+  ],
+  "message": "Usuarios recuperados",
+  "timestamp": "2026-10-09T13:22:00Z"
+}
+~~~
+
+Sin registros devuelve lista vacía `[]` con código 200. Errores: `401 AUTH_REQUIRED`, `401 AUTH_INVALID_TOKEN`, `403 AUTH_USER_INACTIVE`, `403 AUTH_FORBIDDEN` ante rol insuficiente.
+
+### POST /api/v1/auth/admin/users
+
+Creación de nuevas cuentas por parte de un administrador. `password` se almacena exclusivamente hasheada; nunca se devuelve en la respuesta. Campos desconocidos se rechazan.
+
+| Campo payload | Tipo | Regla |
+|---|---|---|
+| `usuario` | string | Obligatorio; 1–150 caracteres; único; sin `@` |
+| `nombre` | string | Obligatorio; 1–150 caracteres |
+| `correo` | string | Obligatorio; formato email; normalizado a minúsculas; único |
+| `password` | string | Obligatorio; mínimo 12 caracteres mediante validadores de Django |
+| `rol` | enum | Opcional; `admin` o `supervisor`; predeterminado `supervisor` |
+| `activo` | booleano | Opcional; predeterminado `true` |
+
+Solicitud:
+
+~~~json
+{
+  "usuario": "psicologo_demo",
+  "nombre": "Constanza Silva",
+  "correo": "csilva@clinica.cl",
+  "password": "Clave-segura-2026-psycode",
+  "rol": "supervisor",
+  "activo": true
+}
+~~~
+
+Respuesta 201:
+
+~~~json
+{
+  "success": true,
+  "data": {
+    "id": "9439c603-cf13-4749-8ab7-132728ca7182",
+    "usuario": "psicologo_demo",
+    "nombre": "Constanza Silva",
+    "correo": "csilva@clinica.cl",
+    "rol": "supervisor",
+    "activo": true
+  },
+  "message": "Usuario creado",
+  "timestamp": "2026-10-09T13:22:00Z"
+}
+~~~
+
+Errores: `400 VALIDATION_ERROR` si falta algún campo obligatorio, si `usuario` o `correo` ya están en uso, si `rol` no es `admin` o `supervisor`, o ante contraseña rechazada.
+
+### PATCH /api/v1/auth/admin/users/{user_id}
+
+Actualización parcial (`partial=True`). Todos los campos del cuerpo son opcionales. No permite modificar `usuario` ni `id`.
+
+| Parámetro / Campo | Tipo | Ubicación | Regla |
+|---|---|---|---|
+| `user_id` | UUID | Ruta | UUID canónico del usuario objetivo |
+| `nombre` | string | Payload | Opcional; 1–150 caracteres |
+| `correo` | string | Payload | Opcional; formato email; no colisiona con otro usuario |
+| `rol` | enum | Payload | Opcional; `admin` o `supervisor`. Un administrador no puede quitarse su propio rol |
+| `activo` | booleano | Payload | Opcional. Un administrador no puede desactivarse a sí mismo por esta vía |
+
+Solicitud:
+
+~~~json
+{
+  "nombre": "Constanza Silva Henriquez",
+  "rol": "admin"
+}
+~~~
+
+Respuesta 200:
+
+~~~json
+{
+  "success": true,
+  "data": {
+    "id": "9439c603-cf13-4749-8ab7-132728ca7182",
+    "usuario": "psicologo_demo",
+    "nombre": "Constanza Silva Henriquez",
+    "correo": "csilva@clinica.cl",
+    "rol": "admin",
+    "activo": true
+  },
+  "message": "Usuario actualizado",
+  "timestamp": "2026-10-09T13:22:00Z"
+}
+~~~
+
+Errores: `400 VALIDATION_ERROR` por UUID mal formado, correo ya registrado, rol no perteneciente al catálogo (`admin`/`supervisor`), o auto-revocación del rol `admin`; `404 RESOURCE_NOT_FOUND` si el `user_id` válido no existe.
+
+### PATCH /api/v1/auth/admin/users/{user_id}/toggle-active
+
+Invierte el estado de activación de la cuenta (`true` a `false`, o `false` a `true`). Sin cuerpo de petición.
+
+- Parámetro de ruta: `user_id` (UUID canónico).
+- Solicitud: sin cuerpo.
+
+Respuesta 200:
+
+~~~json
+{
+  "success": true,
+  "data": {
+    "id": "9439c603-cf13-4749-8ab7-132728ca7182",
+    "usuario": "psicologo_demo",
+    "nombre": "Constanza Silva Henriquez",
+    "correo": "csilva@clinica.cl",
+    "rol": "admin",
+    "activo": false
+  },
+  "message": "Estado de usuario actualizado",
+  "timestamp": "2026-10-09T13:22:00Z"
+}
+~~~
+
+Errores específicos:
+- `400 VALIDATION_ERROR`: Si el usuario autenticado intenta modificar su propia cuenta (`"No puedes modificar el estado activo de tu propia cuenta."`) o UUID mal formado.
+- `404 RESOURCE_NOT_FOUND`: Si el usuario objetivo no existe.
 
 ## 2. Alertas y evaluaciones
 

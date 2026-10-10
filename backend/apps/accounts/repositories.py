@@ -29,13 +29,18 @@ class AccountsRepository:
         session.save(update_fields=["revoked_at"])
 
     def replace_reset(self, user, digest, credential_hash, expires_at):
-        PasswordReset.objects.update_or_create(user=user, defaults={
-            "token_hash": digest, "credential_hash": credential_hash, "expires_at": expires_at,
-        })
+        PasswordReset.objects.update_or_create(
+            user=user,
+            defaults={
+                "token_hash": digest,
+                "credential_hash": credential_hash,
+                "expires_at": expires_at,
+            },
+        )
 
     def count_reset_attempt(self, key, now, window):
         counter, _ = PasswordResetRateLimit.objects.get_or_create(
-            key=key, defaults={"window_started_at": now, "count": 0},
+            key=key, defaults={"window_started_at": now, "count": 0}
         )
         if counter.window_started_at + window <= now:
             counter.window_started_at = now
@@ -56,3 +61,28 @@ class AccountsRepository:
         user.save(update_fields=["password"])
         PasswordReset.objects.filter(user=user).delete()
         RefreshSession.objects.filter(user=user, revoked_at__isnull=True).update(revoked_at=timezone.now())
+
+    def list_users(self):
+        return list(User.objects.all().order_by("-date_joined"))
+
+    def create_user(self, *, username, email, first_name, last_name, password, role, is_active=True):
+        user = User(
+            username=username,
+            email=email,
+            first_name=first_name,
+            last_name=last_name,
+            role=role,
+            is_active=is_active,
+        )
+        user.set_password(password)
+        user.save()
+        return user
+
+    def update_user(self, user, **fields):
+        update_fields = []
+        for key, val in fields.items():
+            setattr(user, key, val)
+            update_fields.append(key)
+        if update_fields:
+            user.save(update_fields=update_fields)
+        return user
