@@ -32,9 +32,12 @@ backend/
     alerts/           persistencia, consulta y evaluación de alertas
     dashboard/        resumen y estadísticas sobre alertas
     notifications/    envío por Teams y contingencia por correo
+    agenda/           carga manual Excel y consulta temporal de ocupación
 ```
 
 Cada carpeta de código incluye su propio README. Accounts ya tiene capas implementadas, migraciones, comando y tests; las otras apps tienen archivos base sin comportamiento. Solo se crearán subcarpetas adicionales cuando su contenido lo justifique.
+
+El servicio interno [agenda](backend/apps/agenda/README.md) reúne lectura Excel, validación y consultas en memoria en `services.py`, con pruebas en `tests.py`.
 
 | Capa | Archivos previstos | Regla |
 |---|---|---|

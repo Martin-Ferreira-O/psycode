@@ -186,6 +186,16 @@ El token vence en una hora y solo se puede usar una vez. Al cambiar la contrase�
 
 La pantalla web de recuperación está pendiente del frontend. Para configurar archivos locales o SMTP, consulta [SCRUM-31](docs/SCRUM-31.md#correo-y-configuración) y [la cuenta técnica de pruebas](docs/SMTP_TEST_ACCOUNT.md).
 
+## Agenda temporal desde Excel
+
+El servicio interno [agenda](backend/apps/agenda/README.md) carga manualmente
+`citas.xlsx`, informa filas rechazadas y permite consultar la ocupación de boxes
+en memoria.
+
+```sh
+uv run python manage.py test backend.apps.agenda --settings=backend.config.test_settings
+```
+
 ## Comprobar los cambios
 
 Ejecuta desde la raíz:
