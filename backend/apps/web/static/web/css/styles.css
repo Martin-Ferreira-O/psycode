@@ -304,3 +304,7 @@ h1,h2,h3 {
 
     .registro {align-items: flex-start;flex-direction: column;}
 }
+
+[data-admin-only][hidden] {
+    display: none !important;
+}

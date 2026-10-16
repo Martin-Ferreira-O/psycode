@@ -1,0 +1,380 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Gestión de usuarios</title>
+
+    <link rel="stylesheet" href="{% static 'web/css/styles.css' %}">
+    <link rel="stylesheet" href="{% static 'web/css/dashboard.css' %}?v=2">
+    <link rel="stylesheet" href="{% static 'web/css/alertas.css' %}?v=6">
+    <link rel="stylesheet" href="{% static 'web/css/evaluaciones.css' %}">
+    <link rel="stylesheet" href="{% static 'web/css/estados.css' %}">
+    <link rel="stylesheet" href="{% static 'web/css/usuarios.css' %}">
+</head>
+<body>
+    <div class="aplicacion">
+
+        {% include "web/components/sidebar.html" with seccion_activa="usuarios" %}
+
+        <main class="contenido-dashboard">
+
+            <header class="cabecera-dashboard">
+                <div>
+                    <h1>Gestión de usuarios</h1>
+                    <p class="descripcion-pagina">
+                        Administra las cuentas y permisos de acceso al sistema.
+                    </p>
+                </div>
+
+                {% include "web/components/usuario_sesion.html" %}
+            </header>
+
+            <section class="panel-alertas panel-usuarios">
+
+                <div class="panel-cabecera panel-cabecera-usuarios">
+
+                    <div>
+                        <h2>Usuarios registrados</h2>
+
+                        <p id="resultadoUsuarios">
+                            Cargando usuarios...
+                        </p>
+                    </div>
+
+                    <button
+                        type="button"
+                        class="boton-crear-usuario"
+                        id="botonCrearUsuario"
+                        data-admin-only
+                        hidden
+                    >
+                        + Crear usuario
+                    </button>
+
+                </div>
+                <div
+                    id="estadoCargaUsuarios"
+                    class="estado-carga"
+                    role="status"
+                >
+                    Cargando usuarios...
+                </div>
+                <div
+                    id="estadoErrorUsuarios"
+                    class="estado-error"
+                    role="alert"
+                    hidden
+                >
+                    <strong>No se pudieron cargar los usuarios</strong>
+
+                    <p id="mensajeErrorUsuarios">
+                        Intenta nuevamente.
+                    </p>
+
+                    <button
+                        type="button"
+                        id="botonReintentarUsuarios"
+                        class="boton-reintentar"
+                    >
+                        Reintentar
+                    </button>
+                </div>
+                <div
+                    id="estadoVacioUsuarios"
+                    class="estado-vacio"
+                    hidden
+                >
+                    <strong>No hay usuarios registrados</strong>
+
+                    <p>
+                        Crea una cuenta para comenzar a gestionar los accesos.
+                    </p>
+                </div>
+                <div
+                    id="tablaUsuariosContenedor"
+                    class="tabla-contenedor"
+                    hidden
+                >
+                    <table class="tabla-alertas tabla-usuarios">
+
+                        <thead>
+                            <tr>
+                                <th>Usuario</th>
+                                <th>Nombre</th>
+                                <th>Correo</th>
+                                <th>Rol</th>
+                                <th>Estado</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+
+                        <tbody id="tablaUsuarios"></tbody>
+
+                    </table>
+                </div>
+
+                <div class="pie-usuarios">
+                    Las cuentas administrativas permiten controlar el acceso
+                    y los permisos dentro de Psycode.
+                </div>
+
+            </section>
+
+        </main>
+    </div>
+    <div
+        id="modalUsuario"
+        class="modal-usuario"
+        hidden
+    >
+        <div
+            class="modal-usuario-fondo"
+            data-cerrar-modal-usuario
+        ></div>
+
+        <section
+            class="modal-usuario-contenido"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="tituloModalUsuario"
+        >
+
+            <header class="modal-usuario-cabecera">
+
+                <div>
+                    <h2 id="tituloModalUsuario">
+                        Crear usuario
+                    </h2>
+                </div>
+
+                <button
+                    type="button"
+                    class="boton-cerrar-modal"
+                    id="botonCerrarModalUsuario"
+                    aria-label="Cerrar ventana"
+                >
+                    ×
+                </button>
+
+            </header>
+
+
+            <form
+                id="formularioUsuario"
+                class="formulario-usuario"
+                novalidate
+            >
+
+                <div
+                    id="mensajeFormularioUsuario"
+                    class="mensaje-formulario-usuario"
+                    role="alert"
+                    hidden
+                ></div>
+                <div
+                    class="campo-formulario"
+                    id="grupoUsuario"
+                >
+                    <label for="usuarioUsuario">
+                        Usuario
+                    </label>
+
+                    <input
+                        type="text"
+                        id="usuarioUsuario"
+                        name="usuario"
+                        maxlength="150"
+                        autocomplete="username"
+                        required
+                    >
+
+                    <small>
+                        Este identificador no podrá modificarse posteriormente.
+                    </small>
+                </div>
+                <div class="campo-formulario">
+
+                    <label for="nombreUsuario">
+                        Nombre completo
+                    </label>
+
+                    <input
+                        type="text"
+                        id="nombreUsuario"
+                        name="nombre"
+                        maxlength="150"
+                        autocomplete="name"
+                        required
+                    >
+
+                </div>
+                <div class="campo-formulario">
+
+                    <label for="correoUsuario">
+                        Correo
+                    </label>
+
+                    <input
+                        type="email"
+                        id="correoUsuario"
+                        name="correo"
+                        maxlength="254"
+                        autocomplete="email"
+                        required
+                    >
+
+                </div>
+                <div
+                    class="campo-formulario"
+                    id="grupoPassword"
+                >
+                    <label for="passwordUsuario">
+                        Contraseña
+                    </label>
+
+                    <input
+                        type="password"
+                        id="passwordUsuario"
+                        name="password"
+                        minlength="12"
+                        autocomplete="new-password"
+                    >
+
+                    <small>
+                        Debe cumplir los requisitos de seguridad del sistema.
+                    </small>
+                </div>
+                <div class="fila-formulario-usuario">
+                    <div class="campo-formulario">
+
+                        <label for="rolUsuario">
+                            Rol
+                        </label>
+
+                        <select
+                            id="rolUsuario"
+                            name="rol"
+                            required
+                        >
+                            <option value="supervisor">
+                                Supervisor
+                            </option>
+
+                            <option value="admin">
+                                Administrador
+                            </option>
+                        </select>
+
+                    </div>
+                    <div
+                        class="campo-formulario"
+                        id="grupoActivo"
+                    >
+                        <label for="activoUsuario">
+                            Estado
+                        </label>
+
+                        <select
+                            id="activoUsuario"
+                            name="activo"
+                        >
+                            <option value="true">
+                                Activo
+                            </option>
+
+                            <option value="false">
+                                Inactivo
+                            </option>
+                        </select>
+
+                    </div>
+
+                </div>
+
+
+                <div class="acciones-formulario-usuario">
+
+                    <button
+                        type="button"
+                        class="boton-secundario-usuario"
+                        id="botonCancelarUsuario"
+                    >
+                        Cancelar
+                    </button>
+
+                    <button
+                        type="submit"
+                        class="boton-guardar-usuario"
+                        id="botonGuardarUsuario"
+                    >
+                        Crear usuario
+                    </button>
+
+                </div>
+
+            </form>
+
+        </section>
+    </div>
+    <div
+        id="modalConfirmacionUsuario"
+        class="modal-usuario"
+        hidden
+    >
+        <div
+            class="modal-usuario-fondo"
+            data-cerrar-confirmacion
+        ></div>
+
+        <section
+            class="modal-confirmacion-contenido"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="tituloConfirmacionUsuario"
+        >
+
+            <div class="icono-confirmacion-usuario">
+                !
+            </div>
+
+            <h2 id="tituloConfirmacionUsuario">
+                Desactivar usuario
+            </h2>
+
+            <p id="textoConfirmacionUsuario">
+                ¿Estás seguro de que deseas desactivar esta cuenta?
+            </p>
+
+            <div class="acciones-confirmacion-usuario">
+
+                <button
+                    type="button"
+                    class="boton-secundario-usuario"
+                    id="botonCancelarConfirmacion"
+                >
+                    Cancelar
+                </button>
+
+                <button
+                    type="button"
+                    class="boton-confirmar-usuario"
+                    id="botonConfirmarEstado"
+                >
+                    Desactivar
+                </button>
+
+            </div>
+
+        </section>
+    </div>
+    
+    <script src="{% static 'web/js/solicitudes.js' %}"></script>
+    <script src="{% static 'web/js/estados.js' %}"></script>
+    <script src="{% static 'web/js/api.js' %}"></script>
+    <script src="{% static 'web/js/components.js' %}?v=2"></script>    
+    <script src="{% static 'web/js/usuarios.js' %}"></script>
+</body>
+</html>

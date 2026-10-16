@@ -104,6 +104,7 @@ class AccountsService:
             "usuario": user.username,
             "nombre": user.get_full_name(),
             "correo": user.email,
+            "rol": getattr(user, "role", Role.SUPERVISOR),
             "activo": user.is_active,
         }
 

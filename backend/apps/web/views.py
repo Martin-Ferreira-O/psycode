@@ -21,5 +21,9 @@ def evaluaciones(request):
     return render(request, "web/evaluaciones.html")
 
 
+def usuarios(request):
+    return render(request, "web/usuarios.html")
+
+
 def password_reset_confirm(request):
     return render(request, "web/password_reset_confirm.html")

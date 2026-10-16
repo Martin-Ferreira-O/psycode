@@ -1,11 +1,12 @@
-<aside class="barra-lateral">
-    <div class="marca">
-        <div class="marca-icono">P</div>
+{% load static %}
 
-        <div>
-            <strong>Psycode</strong>
-            <span>Portal de alertas</span>
-        </div>
+<aside class="barra-lateral">
+    <div class="marca-universidad">
+        <img
+            src="{% static 'web/img/logo.png' %}"
+            alt="Universidad Autónoma de Chile"
+            class="logo-universidad-sidebar"
+        >
     </div>
 
     <nav class="navegacion" aria-label="Navegación principal">
@@ -23,6 +24,16 @@
             {% if seccion_activa == "evaluaciones" %}aria-current="page"{% endif %}
         >
             Registro de evaluaciones
+        </a>
+
+        <a
+            href="{% url 'web:usuarios' %}"
+            class="enlace-menu{% if seccion_activa == 'usuarios' %} activo{% endif %}"
+            data-admin-only
+            hidden
+            {% if seccion_activa == "usuarios" %}aria-current="page"{% endif %}
+        >
+            Gestión de usuarios
         </a>
     </nav>
 
