@@ -2,6 +2,8 @@
 
 Backend del proyecto Psycode, desarrollado en Python y Django. Actualmente funcionan el inicio de sesión, la recuperación de contraseña y el manejo de sesión (SCRUM-31), y la persistencia de alertas en MongoDB (SCRUM-32). Las rutas HTTP de alertas, el dashboard y las notificaciones siguen pendientes.
 
+La integración interna de Speechmatics Batch y JEV está documentada en [implementación y pruebas sin credenciales](docs/INTEGRACION-SPEECHMATICS-JEV.md). Incluye el contrato de salida 1.0, procedencia del código y conexión a alertas/bitácora; no añade una interfaz ni habilita envíos externos por defecto.
+
 ## Primera instalación
 
 Abre una terminal en la carpeta del proyecto, donde está `manage.py`. Necesitas Python 3.12 o 3.13. Elige una de las dos opciones siguientes; ambas instalan las mismas dependencias.
@@ -83,6 +85,37 @@ Desde la carpeta que contiene `manage.py`, usa el comando de tu instalación:
 
 Después de actualizar el código, vuelve a instalar las dependencias con el comando de tu opción y ejecuta `manage.py migrate` antes de arrancar. No vuelvas a copiar `.env`.
 
+## Speechmatics Batch y JEV: configuración y pruebas
+
+Las variables de análisis están incluidas en [`.env.example`](.env.example). Si ya tienes `.env`, incorpora únicamente las variables nuevas que necesites, conservando su contenido; no lo reemplaces ni subas claves a Git. El análisis externo viene deshabilitado y las claves del ejemplo están vacías.
+
+| Variable | Valor de ejemplo / función |
+|---|---|
+| `PSYCODE_EXTERNAL_PROCESSING_ENABLED` | `0`. Solo `1` habilita envíos externos autorizados. |
+| `SPEECHMATICS_API_KEY` | Vacía. Clave de Speechmatics, requerida para uso real. |
+| `SPEECHMATICS_REGION` | `eu1`. Admite `eu1`, `us1`, `au1`; confirmar la región autorizada antes de usar datos reales. |
+| `SPEECHMATICS_MODEL` | `enhanced`. También admite `standard`. |
+| `SPEECHMATICS_POLL_INTERVAL` | `2` segundos entre consultas; rango 0,1–30. |
+| `PSYCODE_PROVIDER_TIMEOUT` | `300` segundos por etapa; rango 1–540. El borrado tiene hasta 30 segundos adicionales. |
+| `JEV_PROVIDER` | `auto`, `typesafe` u `openrouter`. En `auto`, prefiere Typesafe si existen ambas claves; no cambia de cuenta ante fallos. |
+| `TYPESAFE_API_KEY` | Vacía. Necesaria al elegir Typesafe. |
+| `JEV_MODEL` | `jev-1.13.0`. Versión explícita para Typesafe. |
+| `OPENROUTER_API_KEY` | Vacía. Necesaria al elegir OpenRouter. |
+| `OPENROUTER_JEV_MODEL` | `typesafe/jev-1.13`. Versión para la Decisions API de OpenRouter. |
+| `PSYCODE_REDACT_TERMS` | `[]`. Lista JSON de nombres/direcciones conocidos para redactar antes de JEV; no garantiza anonimización completa. |
+
+Para JEV basta la clave del proveedor seleccionado. **Las pruebas no requieren claves, MongoDB ni habilitar procesamiento externo**:
+
+```sh
+uv run python manage.py test backend.apps.analysis --settings=backend.config.test_settings --noinput
+```
+
+Con pip y el entorno activado, usa `python` en lugar de `uv run python`; en Windows también puedes usar `.venv\Scripts\python.exe`. La configuración de pruebas omite la carga de `.env` y los casos de integración bloquean las conexiones de red.
+
+Esta entrega expone `backend.config.composition.analysis_worker()` y `worker.process(fragment, roles=...)` para el trabajador interno. `runserver` no inicia un consumidor de audio: falta conectar el productor/ejecutor que entregue fragmentos. El rol del paciente debe confirmarlo el llamador; la diarización por sí sola no lo identifica. Sin esa atribución, el resultado es indeterminado y no genera alertas.
+
+Consulta [componentes adaptados, recuperación y pendientes de Jira](docs/INTEGRACION-SPEECHMATICS-JEV.md) y el [contrato de salida 1.0](docs/analysis/OUTPUT-1.0.md).
+
 ## Usuario de prueba
 
 Cada integrante crea esta cuenta en su propia base local con `seed_demo_user`:
@@ -152,23 +185,6 @@ Para comprobar la sesión, envía `GET http://127.0.0.1:8000/api/v1/auth/me`. En
 El token vence en una hora y solo se puede usar una vez. Al cambiar la contraseña, vuelve a iniciar sesión: los tokens de sesión anteriores dejan de servir. La contraseña nueva debe cumplir los validadores de la aplicación; el comando de usuario local permite restaurar la contraseña sencilla de prueba.
 
 La pantalla web de recuperación está pendiente del frontend. Para configurar archivos locales o SMTP, consulta [SCRUM-31](docs/SCRUM-31.md#correo-y-configuración) y [la cuenta técnica de pruebas](docs/SMTP_TEST_ACCOUNT.md).
-
-## Ubicar tu tarea de Jira
-
-Lee tu tarea y abre el módulo y contrato correspondientes antes de modificar código. Las rutas documentadas como pendientes todavía responden 404.
-
-| Tarea | Dónde trabajar o consultar | Estado del backend |
-|---|---|---|
-| SCRUM-30: arquitectura | [Arquitectura](ARCHITECTURE.md) y [contratos](API_CONTRACTS.md) | Documentados |
-| SCRUM-31 / SCRUM-35: autenticación backend / frontend | [Accounts](backend/apps/accounts/README.md) y [contrato de autenticación](API_CONTRACTS.md#1-autenticación) | Disponible |
-| SCRUM-32 / 33 / 34: persistencia, consulta y evaluación | [Alerts](backend/apps/alerts/README.md), [esquema MongoDB](docs/MONGODB.md) y [contrato de alertas](API_CONTRACTS.md#2-alertas-y-evaluaciones) | Persistencia y seed disponibles; rutas HTTP pendientes |
-| SCRUM-36: dashboard | [Dashboard](backend/apps/dashboard/README.md) y [contrato dashboard](API_CONTRACTS.md#3-dashboard) | Pendiente |
-| SCRUM-37 / 39 / 40: historial, detalle y registro en frontend | [Alerts](backend/apps/alerts/README.md) y [contrato de alertas](API_CONTRACTS.md#2-alertas-y-evaluaciones) | Pendiente |
-| SCRUM-41: notificaciones | [Notifications](backend/apps/notifications/README.md) y [contrato interno](API_CONTRACTS.md#4-registro-y-notificaciones-contratos-internos) | Pendiente |
-
-El código de este repositorio es el backend. Las tareas frontend consultan sus contratos aquí. El [handoff](HANDOFF.md) conserva las descripciones originales del backlog; para conocer lo que funciona en el código actual, usa esta tabla y los README de cada módulo.
-
-La [capa de frontend](ARCHITECTURE.md#4-capa-de-frontend--dashboard-e-historial-de-alertas) define la organización de pantallas, el dashboard y el acceso al historial de alertas de riesgo de suicidio. Es un diseño pendiente de implementación; el stack frontend todavía no está definido.
 
 ## Comprobar los cambios
 

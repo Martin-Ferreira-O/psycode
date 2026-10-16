@@ -1,0 +1,181 @@
+"""Speechmatics Batch adaptado; sin ejecutores ni procesos auxiliares."""
+import io
+import hashlib
+import json
+import math
+from pathlib import Path
+import re
+import time
+import wave
+
+import httpx
+
+from .http import ProviderError, SubmissionUncertain, json_body, request
+from .settings import Settings
+
+RATE = 16000
+
+
+def save_job(path, record):
+    temporary = path.with_suffix(".tmp")
+    import os
+    with temporary.open("w", encoding="utf-8") as stream:
+        temporary.chmod(0o600)
+        json.dump(record, stream)
+        stream.flush()
+        os.fsync(stream.fileno())
+    temporary.replace(path)
+
+
+def parse_transcript(data, chunk, job_id):
+    results = data.get("results")
+    if not isinstance(results, list):
+        raise ProviderError("Transcripción inválida")
+    words, prefix = [], ""
+    previous_owned = False
+    for item in results:
+        if not isinstance(item, dict):
+            raise ProviderError("Palabra inválida")
+        if item.get("type") not in {"word", "punctuation"}:
+            continue
+        try:
+            alt = item["alternatives"][0]
+            content = alt["content"]
+            start, end = float(item["start_time"]), float(item["end_time"])
+            if not isinstance(content, str) or not math.isfinite(start + end) or not 0 <= start <= end <= (chunk.end - chunk.context_start) / RATE + .1:
+                raise ValueError
+        except (KeyError, IndexError, TypeError, ValueError):
+            raise ProviderError("Palabras del proveedor inválidas") from None
+        start += chunk.context_start / RATE
+        end += chunk.context_start / RATE
+        if item["type"] == "punctuation":
+            if item.get("attaches_to", "previous") == "next":
+                prefix += content
+            elif words and previous_owned:
+                words[-1]["text"] += content
+            continue
+        previous_owned = chunk.start / RATE <= (start + end) / 2 < chunk.end / RATE
+        if previous_owned:
+            label = alt.get("speaker")
+            if label is not None and (not isinstance(label, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", label)):
+                raise ProviderError("Hablante inválido")
+            # Batch speaker IDs only have meaning inside this job.
+            speaker = f"batch-{chunk.id}-{label}" if label and label != "UU" else None
+            words.append({"start": round(start, 3), "end": round(end, 3),
+                          "text": " " + prefix + content, "speaker": speaker,
+                          "confidence": alt.get("confidence")})
+        prefix = ""
+    return words
+
+
+class BatchClient:
+    def __init__(self, settings: Settings, journal_dir: Path, client=None, sleep=time.sleep):
+        self.settings, self.client, self.sleep = settings, client, sleep
+        self.journal_dir = journal_dir
+
+    def transcribe(self, path: Path, chunk) -> dict:
+        self.settings.validate("speechmatics")
+        if not 0 <= chunk.context_start <= chunk.start < chunk.end:
+            raise ProviderError("Intervalo inválido")
+        with path.open("rb") as source:
+            source.seek(chunk.context_start * 2)
+            pcm = source.read((chunk.end - chunk.context_start) * 2)
+        if len(pcm) != (chunk.end - chunk.context_start) * 2:
+            raise ProviderError("Audio incompleto")
+        audio = io.BytesIO()
+        with wave.open(audio, "wb") as wav:
+            wav.setnchannels(1)
+            wav.setsampwidth(2)
+            wav.setframerate(RATE)
+            wav.writeframes(pcm)
+        self.journal_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        journal = self.journal_dir / f"{chunk.session_id}-{chunk.id}.json"
+        record = json.loads(journal.read_text()) if journal.exists() else {
+            "session": chunk.session_id, "sequence": chunk.id, "region": self.settings.region,
+            "state": "new", "job_id": None}
+        if record["region"] != self.settings.region:
+            raise ProviderError("El trabajo pertenece a otra región")
+        if record["state"] in {"submitting", "uncertain", "deleted", "delete_pending"}:
+            raise SubmissionUncertain("Fragmento ya enviado o incierto; no se reenviará automáticamente")
+        base = f"https://{self.settings.region}.asr.api.speechmatics.com/v2"
+        started = time.monotonic()
+        deadline = started + self.settings.timeout
+        own_client = self.client is None
+        client = self.client or httpx.Client(timeout=30, headers={
+            "Authorization": f"Bearer {self.settings.speechmatics_key}"}, trust_env=False)
+        job_id = record["job_id"]
+        timings, cleanup = {}, "pending"
+        try:
+            if not job_id:
+                record["state"] = "submitting"
+                save_job(journal, record)
+                try:
+                    response = request(client, "POST", base + "/jobs/", safe=False, sleep=self.sleep,
+                                       deadline=deadline, data={"config": json.dumps({"type": "transcription",
+                                       "tracking": {"reference": hashlib.sha256(f"{record['session']}:{chunk.id}".encode()).hexdigest()},
+                                       "transcription_config": {"language": "es", "model": self.settings.model,
+                                                                "diarization": "speaker"}})},
+                                       files={"data_file": ("fragment.wav", audio.getvalue(), "audio/wav")})
+                    try:
+                        job_id = json_body(response).get("id")
+                    except ProviderError:
+                        raise SubmissionUncertain("Respuesta de creación inválida; envío incierto") from None
+                    if not isinstance(job_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]+", job_id):
+                        job_id = None
+                        raise SubmissionUncertain("No se recibió un identificador válido; envío incierto")
+                except SubmissionUncertain:
+                    record["state"] = "uncertain"
+                    save_job(journal, record)
+                    raise
+                except ProviderError:
+                    record["state"] = "new"
+                    save_job(journal, record)
+                    raise
+                record.update(job_id=job_id, state="submitted")
+                save_job(journal, record)
+            timings["upload_seconds"] = time.monotonic() - started
+            polling = time.monotonic()
+            while True:
+                try:
+                    state = json_body(request(client, "GET", f"{base}/jobs/{job_id}",
+                                              params={"wait": 0}, deadline=deadline, sleep=self.sleep))["job"]["status"]
+                except (KeyError, TypeError):
+                    raise ProviderError("Estado de trabajo inválido") from None
+                if state == "done":
+                    break
+                if state == "rejected":
+                    raise ProviderError("Speechmatics rechazó el fragmento")
+                if state not in {"running", "queued"}:
+                    raise ProviderError("Estado de trabajo desconocido")
+                if time.monotonic() + self.settings.poll_interval >= deadline:
+                    raise ProviderError("Speechmatics superó el plazo de procesamiento")
+                self.sleep(self.settings.poll_interval)
+            timings["provider_wait_seconds"] = time.monotonic() - polling
+            retrieval = time.monotonic()
+            data = json_body(request(client, "GET", f"{base}/jobs/{job_id}/transcript",
+                                     params={"format": "json-v2", "wait": 0}, deadline=deadline, sleep=self.sleep))
+            words = parse_transcript(data, chunk, job_id)
+            timings["download_seconds"] = time.monotonic() - retrieval
+        finally:
+            if job_id:
+                deleting = time.monotonic()
+                try:
+                    request(client, "DELETE", f"{base}/jobs/{job_id}", params={"force": "true"},
+                            sleep=self.sleep, deadline=time.monotonic() + 30)
+                    record["state"] = cleanup = "deleted"
+                except ProviderError:
+                    record["state"] = cleanup = "delete_pending"
+                timings["cleanup_seconds"] = time.monotonic() - deleting
+                save_job(journal, record)
+            if own_client:
+                client.close()
+        seconds = time.monotonic() - started
+        return {"id": chunk.id, "start": chunk.start / RATE, "end": chunk.end / RATE,
+                "context_start": chunk.context_start / RATE,
+                "text": "".join(w["text"] for w in words).strip(), "words": words,
+                "inference_seconds": seconds, "rtf": seconds / ((chunk.end - chunk.start) / RATE),
+                "provider": "speechmatics", "provider_job_id": job_id,
+                "provider_cleanup": cleanup, "timings": timings,
+                "submitted_audio_seconds": len(pcm) / (RATE * 2),
+                "configuration": self.settings.public()}
+

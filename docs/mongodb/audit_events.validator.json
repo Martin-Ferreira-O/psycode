@@ -20,6 +20,10 @@
         "intentos"
       ],
       "additionalProperties": false,
+      "oneOf": [
+        {"properties": {"action": {"enum": ["alerts.register", "alerts.evaluate", "notifications.send"]}, "alerta_id": {"bsonType": "string"}}},
+        {"properties": {"action": {"enum": ["analysis.speechmatics", "analysis.jev"]}, "alerta_id": {"bsonType": "null"}}}
+      ],
       "properties": {
         "_id": { "bsonType": "objectId" },
         "event_id": {
@@ -32,8 +36,8 @@
           "description": "Instante UTC en que el backend registró el evento."
         },
         "action": {
-          "enum": ["alerts.register", "alerts.evaluate", "notifications.send"],
-          "description": "Solo eventos del dominio persistido en MongoDB. La autenticación permanece en el log de Django."
+          "enum": ["alerts.register", "alerts.evaluate", "notifications.send", "analysis.speechmatics", "analysis.jev"],
+          "description": "Eventos internos de alertas, notificación y fallos técnicos de análisis. Autenticación solo en log."
         },
         "outcome": {
           "enum": ["success", "failure", "skipped"]
@@ -49,9 +53,9 @@
           ]
         },
         "alerta_id": {
-          "bsonType": "string",
+          "bsonType": ["string", "null"],
           "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-          "description": "Referencia lógica a alerts.alerta_id. No hay join ni transacción con SQLite."
+          "description": "UUID de alerta; null solo para fallos técnicos de análisis previos a una alerta."
         },
         "channel": {
           "enum": ["teams", "email", null],

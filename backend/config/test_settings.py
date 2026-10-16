@@ -1,12 +1,14 @@
 """Tests aislados de credenciales reales y sin correos de red."""
 import os
+from unittest.mock import patch
 
 os.environ["DJANGO_DEBUG"] = "true"
 os.environ["DJANGO_SECRET_KEY"] = "test-only-not-for-deployment-" * 3
 os.environ["FRONTEND_ORIGIN"] = "http://localhost:5173"
 os.environ["FRONTEND_BASE_URL"] = "http://localhost:5173"
 
-from .settings import *  # noqa: E402,F403
+with patch("dotenv.load_dotenv"):
+    from .settings import *  # noqa: E402,F403
 
 DEBUG = False
 SECURE_SSL_REDIRECT = False

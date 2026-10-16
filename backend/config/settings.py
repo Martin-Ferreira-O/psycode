@@ -65,6 +65,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "backend.apps.accounts.apps.AccountsConfig",
     "backend.apps.alerts.apps.AlertsConfig",
+    "backend.apps.analysis.apps.AnalysisConfig",
     "backend.apps.dashboard.apps.DashboardConfig",
     "backend.apps.notifications.apps.NotificationsConfig",
     "django.contrib.staticfiles",

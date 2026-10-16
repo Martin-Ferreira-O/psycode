@@ -203,11 +203,12 @@ La conversión conserva el semáforo anterior: 1–2 → 1/BAJO, 3–4 → 2/MED
 
 ## 6. Colección `audit_events` (bitácora)
 
-Eventos relevantes del **dominio persistido en MongoDB**: alta de alerta, registro de evaluación e intento de notificación. Es complementaria al logger `psycode.audit`.
+Eventos relevantes del **dominio persistido en MongoDB**: alta de alerta, registro de evaluación, intento de notificación y fallos técnicos de análisis. Es complementaria al logger `psycode.audit`.
 
 | Qué | Dónde |
 |---|---|
 | `alerts.register`, `alerts.evaluate`, `notifications.send` | MongoDB `audit_events` **y** logger |
+| `analysis.speechmatics`, `analysis.jev` | MongoDB `audit_events` **y** logger; solo códigos permitidos, sin conversaciones ni cuerpos de proveedor |
 | `auth.login`, `auth.refresh`, `auth.logout`, `auth.password_reset`, `api.error` | Solo logger Django (identidad en SQLite) |
 
 Un fallo al insertar en `audit_events` no revierte la alerta ni se presenta como prueba de entrega. El evento ya emitido al log permanece. La colección es de solo inserción: no se actualiza ni se borra en v1.
@@ -218,10 +219,10 @@ Un fallo al insertar en `audit_events` no revierte la alerta ni se presenta como
 |---|---|---|---|---|
 | `event_id` | UUID | Sí | No | Identificador del evento |
 | `timestamp` | date UTC | Sí | No | Hora de registro |
-| `action` | enum de las tres acciones | Sí | No | Tipo de evento |
+| `action` | enum de las cinco acciones anteriores | Sí | No | Tipo de evento |
 | `outcome` | `success` \| `failure` \| `skipped` | Sí | No | Resultado |
 | `actor_id` | UUID | Sí como campo | Sí | Profesional que evalúa; null en alta/envío |
-| `alerta_id` | UUID | Sí | No | Relación con `alerts` |
+| `alerta_id` | UUID o null | Sí | Solo en fallos de análisis | Relación con `alerts`; fallos previos a una alerta usan null |
 | `channel` | `teams` \| `email` | Sí como campo | Sí | Canal que aceptó el aviso |
 | `contingencia` | bool | Sí como campo | Sí | Correo por fallo de Teams |
 | `motivo` | `sin_riesgo` \| `deshabilitada` \| `ningun_canal_acepto` | Sí como campo | Sí | Por qué se omitió o falló el envío |
@@ -230,6 +231,8 @@ Un fallo al insertar en `audit_events` no revierte la alerta ni se presenta como
 | `intentos` | arreglo | Sí | No (vacío) | Detalle por canal; vacío si no hay envío |
 
 Validador e índices: [audit_events.validator.json](mongodb/audit_events.validator.json), [audit_events.indexes.json](mongodb/audit_events.indexes.json). Ejemplos de alta, evaluación y contingencia Teams→correo en [mongodb/examples/](mongodb/examples/).
+
+La integración de [Speechmatics y JEV](INTEGRACION-SPEECHMATICS-JEV.md) comprueba la conexión con esta bitácora mediante dobles de persistencia. Al desplegar, `AlertsRepository.ensure_schema()` aplica el validador ampliado a MongoDB; se debe verificar con la entrega final de la tarea 6. La caída de la bitácora deja un evento técnico sanitizado en el logger, sin convertir un fallo de análisis en ausencia de riesgo.
 
 ## 7. Índices y consultas cubiertas
 

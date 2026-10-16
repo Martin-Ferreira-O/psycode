@@ -104,7 +104,9 @@ Entrada interna validada
 
 El contrato de registro se define para SCRUM-32/41; no implica crear un productor de alertas. Los datos de prueba invocarán el registro con envío deshabilitado por defecto. No habrá `POST /alerts` público en esta fase.
 
-Los fallos de MongoDB impiden el registro y el envío. Los fallos de notificación no revierten una alerta guardada. La auditoría técnica se emite en el logger `psycode.audit`. Los eventos `alerts.register`, `alerts.evaluate` y `notifications.send` se persisten además en `audit_events`; los de autenticación permanecen solo en el log. Un fallo al escribir la bitácora no revierte la alerta y se dirige al log de error local, nunca como prueba de entrega.
+Los fallos de MongoDB impiden el registro y el envío. Los fallos de notificación no revierten una alerta guardada. La auditoría técnica se emite en el logger `psycode.audit`. Los eventos `alerts.register`, `alerts.evaluate`, `notifications.send` y los fallos `analysis.speechmatics`/`analysis.jev` se persisten además en `audit_events`; los de autenticación permanecen solo en el log. Los fallos de análisis previos a una alerta usan `alerta_id=null` y códigos permitidos sin texto ni respuestas de proveedor. Un fallo al escribir la bitácora no revierte la alerta y se dirige al log de error local, nunca como prueba de entrega.
+
+El módulo interno de [análisis Speechmatics + JEV](docs/INTEGRACION-SPEECHMATICS-JEV.md) se compone para un trabajador secuencial, mediante puertos y salida tipada [1.0](docs/analysis/OUTPUT-1.0.md). No inicia procesos al importar Django ni añade rutas públicas de ingesta.
 
 La secuencia es síncrona y acotada según el contrato. No hay transacción entre MongoDB, SQLite, Teams y correo, ni garantía de entrega exactamente una vez. Una caída entre persistir y notificar puede dejar una alerta sin aviso; la recuperación automática duradera queda fuera del backlog actual. Esta limitación debe revisarse antes de uso clínico real.
 
