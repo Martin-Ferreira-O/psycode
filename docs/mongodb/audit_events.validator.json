@@ -72,7 +72,7 @@
             "null"
           ],
           "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-          "description": "UUID de alerta; null solo para fallos técnicos de análisis previos a una alerta."
+          "description": "UUID de alerta; null para eventos técnicos sin alerta persistida."
         },
         "channel": {
           "enum": [
@@ -80,7 +80,7 @@
             "email",
             null
           ],
-          "description": "Canal que aceptó el aviso; null si ninguno o si la acción no es un envío."
+          "description": "Canal del intento, aceptado o fallido; null fuera de envíos."
         },
         "contingencia": {
           "bsonType": [
@@ -110,7 +110,7 @@
           ]
         },
         "duration_ms": {
-          "description": "Duración total del envío en milisegundos. null fuera de notifications.send.",
+          "description": "Duración de este intento en milisegundos; null fuera de envíos.",
           "oneOf": [
             {
               "bsonType": "null"
@@ -126,7 +126,7 @@
         },
         "intentos": {
           "bsonType": "array",
-          "description": "Intentos de notificación en orden. Vacío si la acción no envía avisos.",
+          "description": "Campo histórico. Los eventos nuevos registran un intento por evento y dejan este arreglo vacío.",
           "items": {
             "bsonType": "object",
             "required": [
@@ -182,7 +182,7 @@
             "null"
           ],
           "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-          "description": "UUID de alerta; null solo para fallos técnicos de análisis previos a una alerta."
+          "description": "UUID de sesión para correlación cuando esté disponible."
         },
         "sequence": {
           "bsonType": [
@@ -192,7 +192,66 @@
           ],
           "minimum": 0
         }
-      }
+      },
+      "allOf": [
+        {
+          "oneOf": [
+            {
+              "properties": {
+                "actor": {
+                  "enum": [
+                    "Sistema"
+                  ]
+                },
+                "actor_id": {
+                  "bsonType": "null"
+                }
+              }
+            },
+            {
+              "properties": {
+                "actor": {
+                  "enum": [
+                    "Usuario"
+                  ]
+                },
+                "actor_id": {
+                  "bsonType": "string"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "oneOf": [
+            {
+              "properties": {
+                "action": {
+                  "enum": [
+                    "alerts.register",
+                    "alerts.evaluate",
+                    "notifications.send"
+                  ]
+                },
+                "alerta_id": {
+                  "bsonType": "string"
+                }
+              }
+            },
+            {
+              "properties": {
+                "action": {
+                  "enum": [
+                    "analysis.speechmatics",
+                    "analysis.jev",
+                    "alerts.flow"
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ]
     }
   }
 }

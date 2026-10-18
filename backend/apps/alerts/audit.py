@@ -25,6 +25,10 @@ class AlertAudit:
                sequence=None, channel=None, backup=None, error_code=None, duration_ms=None):
         if action not in ACTIONS or outcome not in OUTCOMES:
             raise ValueError("Evento de bitácora inválido")
+        if action in ("alerts.register", "alerts.evaluate", "notifications.send") and alerta_id is None:
+            raise ValueError("El evento requiere alerta_id")
+        if action == "alerts.evaluate" and actor_id is None:
+            raise ValueError("La evaluación requiere usuario responsable")
         if error_code is not None and error_code not in ERROR_CODES:
             raise ValueError("Código técnico no permitido")
         if channel not in (None, "email", "teams"):

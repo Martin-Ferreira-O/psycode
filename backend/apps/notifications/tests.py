@@ -158,3 +158,66 @@ class EmailClientTests(SimpleTestCase):
                                (4, 'NOTIFICATION_REJECTED'), (1, 'NOTIFICATION_INTERNAL_ERROR')]:
             with patch('subprocess.run', return_value=Mock(returncode=code)):
                 self.assertEqual(EmailClient().send(self.payload).error, expected)
+
+
+class LocalSMTPTests(SimpleTestCase):
+    """Ejercita el proceso real SMTP contra un servidor local sin credenciales."""
+    def test_primary_rejected_then_backup_accepted(self):
+        import socketserver
+        import threading
+
+        recipients, messages = [], []
+
+        class Handler(socketserver.StreamRequestHandler):
+            def handle(self):
+                self.wfile.write(b'220 localhost test SMTP\r\n')
+                while line := self.rfile.readline():
+                    command = line.upper()
+                    if command.startswith(b'EHLO') or command.startswith(b'HELO'):
+                        self.wfile.write(b'250 localhost\r\n')
+                    elif command.startswith(b'MAIL') or command.startswith(b'RSET'):
+                        self.wfile.write(b'250 OK\r\n')
+                    elif command.startswith(b'RCPT'):
+                        recipients.append(line.decode().strip())
+                        self.wfile.write(b'550 rejected\r\n' if b'primary@' in line else b'250 OK\r\n')
+                    elif command.startswith(b'DATA'):
+                        self.wfile.write(b'354 send data\r\n')
+                        body = []
+                        while (data := self.rfile.readline()) not in (b'.\r\n', b''):
+                            body.append(data)
+                        messages.append(b''.join(body))
+                        self.wfile.write(b'250 queued\r\n')
+                    elif command.startswith(b'QUIT'):
+                        self.wfile.write(b'221 bye\r\n')
+                        return
+                    else:
+                        self.wfile.write(b'250 OK\r\n')
+
+        class Server(socketserver.ThreadingTCPServer):
+            daemon_threads = True
+
+        with Server(('127.0.0.1', 0), Handler) as server:
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                with override_settings(EMAIL_BACKEND='django.core.mail.backends.smtp.EmailBackend',
+                        EMAIL_HOST='127.0.0.1', EMAIL_PORT=server.server_address[1],
+                        EMAIL_HOST_USER='', EMAIL_HOST_PASSWORD='', EMAIL_USE_TLS=False,
+                        EMAIL_USE_SSL=False, EMAIL_DELIVERY_TIMEOUT=5, EMAIL_TIMEOUT=2):
+                    db = FakeDatabase()
+                    store = AlertsRepository(db)
+                    alert = alta_pendiente(descripcion='sensitive transcript')
+                    store.insert_alert(alert)
+                    result = NotificationService(store=store, enabled=True).notify_alert(alert.alerta_id,
+                        NotificationPayload('MEDIO', 'riesgo_suicida', 'box-3', '10:00'))
+                    self.assertTrue(result.enviado)
+                    self.assertEqual(result.intentos[0].error, 'NOTIFICATION_REJECTED')
+                    self.assertEqual(len(result.intentos), 2)
+                self.assertEqual(len(messages), 1)
+                self.assertIn('primary@example.test', recipients[0])
+                self.assertIn('backup@example.test', recipients[1])
+                self.assertNotIn(b'sensitive transcript', messages[0])
+                self.assertEqual(len(db['audit_events'].docs), 3)
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
