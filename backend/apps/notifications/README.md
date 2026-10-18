@@ -1,24 +1,11 @@
-# Notifications: avisos por Teams y correo
+# Notificaciones por correo
 
-Estado: pendiente de implementación (SCRUM-41). Los archivos actuales son la estructura base. El módulo enviará avisos internos; no tiene endpoints públicos. El responsable sigue sin asignar en el handoff.
+`NotificationService.notify_alert(alerta_id, payload)` consulta la alerta persistida y envía primero al correo principal configurado en `NOTIFICATION_EMAIL_TO` (SCRUM-67). Solo si falla o expira intenta `NOTIFICATION_EMAIL_BACKUP_TO` (Sergio). No se necesitan contraseñas de destinatarios: las credenciales corresponden al remitente o relay SMTP.
 
-## Capas y métodos previstos
+`NOTIFICATIONS_ENABLED=false` por defecto. Teams permanece fuera del flujo y deshabilitado hasta decidir el webhook; su cliente se mantiene desacoplado. NULO/sin riesgo, alerta ausente, persistencia inaccesible o envíos desactivados no generan mensajes. Un fallo doble conserva la alerta.
 
-- Aplicación: `NotificationService.notify_alert(alerta_id, payload)` implementa `AlertNotifier`.
-- Dominio: `domain.py` define payload permitido y resultado de intentos.
-- Infraestructura: `clients.py` implementa `TeamsClient.send(payload)` mediante HTTPS a Teams Workflows y `EmailClient.send(payload)` mediante correo Django.
-- Puertos: `ports.py` define clientes sustituibles para probar éxito, rechazo y timeout sin mensajes reales.
+La composición `backend.config.composition.alerts_service()` conecta persistencia y notificación en ese orden. Los repositorios no envían; los duplicados no vuelven a notificar. El seed usa el servicio sin notificador. El mensaje se reconstruye desde la alerta confirmada e incluye únicamente box, tipo de riesgo constante, semáforo y fecha. Nunca descripción, audio, transcripción ni datos de pacientes.
 
-No necesita `urls.py`, vistas ni modelos de alerta. Recibe datos del caso de uso de registro, no consulta MongoDB ni datos de pacientes. Composición/configuración ocurre en config.
+Cada intento se registra por separado mediante `AlertAudit`, con el mismo event_id en logger y MongoDB. `contingencia` distingue principal/respaldo sin guardar correos. SMTP usa un proceso cancelable con plazo completo `EMAIL_TIMEOUT_SECONDS`; un timeout puede dejar incierta la aceptación por el servidor, pero no deja un hilo de envío activo. Aceptación no implica entrega o lectura. No se implementa cola de recuperación ni reintentos automáticos.
 
-## Contrato y comportamiento
-
-Ver [contrato interno único](../../../API_CONTRACTS.md#4-registro-y-notificaciones-contratos-internos). Teams primero; correo si Teams falla. Plazo máximo total de 10 segundos por intento/canal, un intento por canal, sin reintentos automáticos en esta versión. Auditar resultado, duración y contingencia en el logger y en `audit_events` ([esquema](../../../docs/MONGODB.md)); distinguir aceptación por proveedor de lectura por una persona.
-
-El payload externo permite tipo de mensaje, box, tipo de riesgo, urgencia y fecha/hora. No incluye UUID del paciente, nombres, sesión, descripción libre, audio, transcripción ni detalles operativos. `alerta_id` acompaña el contexto interno de auditoría, no el cuerpo enviado.
-
-`NOTIFICATIONS_ENABLED=false` desactiva envíos en desarrollo y pruebas sintéticas. Si se activa y falta configuración de Teams, se registra fallo de ese canal y se intenta correo. Si ambos fallan, retornar resultado fallido sin eliminar la alerta ni ocultar el fallo.
-
-SCRUM-41 configurará el workflow, sus propietarios de continuidad y destinatarios con la clínica. Usar la integración vigente de [Teams Workflows](https://learn.microsoft.com/en-us/microsoftteams/platform/webhooks-and-connectors/what-are-webhooks-and-connectors), encapsulando su formato de transporte. La configuración local mantiene los envíos desactivados.
-
-Pruebas futuras: éxito Teams sin correo, timeout/rechazo Teams con correo, fallo doble, envíos deshabilitados, NULO sin envío y ausencia de información sensible.
+Pruebas: `uv run python manage.py test backend.apps.notifications --settings=backend.config.test_settings --noinput`. Usan correo en memoria, clientes simulados y un servidor SMTP local sin credenciales. [Contrato](../../../API_CONTRACTS.md#4-registro-y-notificaciones-contratos-internos), [arquitectura](../../../ARCHITECTURE.md).

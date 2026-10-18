@@ -17,3 +17,5 @@ La matriz se usa provisionalmente para la severidad de alertas según el Anexo A
 El Excel y su transcripción se conservan como referencias originales. Los documentos de entrega registran el estado de su fecha; los README de los módulos describen el estado actual del código.
 
 - [SCRUM-46 — Estados y errores comunes del frontend](SCRUM-46.md): helpers, integración, alcance y verificación.
+
+La bitácora consultable y el correo principal con respaldo se describen en [SCRUM-65.md](SCRUM-65.md).

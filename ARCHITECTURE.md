@@ -17,7 +17,7 @@ No se incorporan microservicios, buses de eventos, CQRS, contenedores de inyecci
 | Simple JWT | Emisión y validación de tokens; rotación y revocación de refresh |
 | ORM y autenticación de Django + SQLite | Usuarios, contraseñas, recuperación y estado de tokens |
 | PyMongo | Controlador oficial para alertas y evaluaciones; no usar el ORM relacional para MongoDB |
-| HTTPS a Teams Workflows y correo mediante Django | Adaptadores de notificación propios |
+| Correo SMTP mediante Django; adaptador Teams desacoplado | Adaptadores de notificación propios |
 
 La elección de librerías base fue confirmada por Martin. SCRUM-31 fija dependencias en pyproject.toml y uv.lock, con requirements.txt exportado para pip. Se agregan django-cors-headers y python-dotenv para el origen frontend y configuración local. Versiones efectivamente verificadas y comandos en [README](README.md).
 
@@ -31,7 +31,7 @@ backend/
     accounts/         autenticación y recuperación
     alerts/           persistencia, consulta y evaluación de alertas
     dashboard/        resumen y estadísticas sobre alertas
-    notifications/    envío por Teams y contingencia por correo
+    notifications/    correo principal y correo de respaldo
     agenda/           carga manual Excel y consulta temporal de ocupación
 ```
 
@@ -95,23 +95,33 @@ La actualización de `evaluacion`, `estado_evaluacion` y `trazabilidad.actualiza
 
 Índices previstos: unicidad de `alerta_id`; orden por `fecha_hora` y `alerta_id`; filtros por `box`/fecha y por `estado_evaluacion`/fecha. No se introduce un buscador externo para `q`.
 
+### Bitácora consultable (SCRUM-65)
+
+`GET /api/v1/audit-events` requiere JWT y un usuario activo con rol administrador o supervisor (también superusuario). Permite filtrar por período UTC, UUID de alerta, acción y resultado, con paginación y orden estable por timestamp/event_id. No hay interfaz visual de consulta ni escritura pública.
+
+`AlertAudit` genera una sola vez event_id y timestamp, emite el evento al logger y persiste el mismo evento en MongoDB. Los automáticos tienen actor `Sistema`; una evaluación registra `Usuario` y su UUID, sin nombre ni correo. Los fallos del trabajador incluyen sesión y secuencia; una excepción de flujo registra `FLOW_INTERRUPTED`. Una caída de MongoDB deja el mismo event_id en el logger para correlación; no hay cola de recuperación de auditoría.
+
 ### Registro y notificación
 
 ```text
 Entrada interna validada
   → guardar alerta en MongoDB
-  → si semáforo no es NULO: Teams
-      → si falla: correo
+  → si nivel BAJO/MEDIO/ALTO: correo principal (SCRUM-67)
+      → si falla o expira: correo de respaldo de Sergio
   → registrar resultado de cada intento
 ```
 
-El contrato de registro se define para SCRUM-32/41; no implica crear un productor de alertas. Los datos de prueba invocarán el registro con envío deshabilitado por defecto. No habrá `POST /alerts` público en esta fase.
+El trabajador de análisis usa `composition.alerts_service()` para persistir y después notificar. `AlertsService` admite un notificador inyectado; los datos sintéticos usan el servicio sin notificador. Los datos de prueba invocarán el registro con envío deshabilitado por defecto. No habrá `POST /alerts` público en esta fase.
 
-Los fallos de MongoDB impiden el registro y el envío. Los fallos de notificación no revierten una alerta guardada. La auditoría técnica se emite en el logger `psycode.audit`. Los eventos `alerts.register`, `alerts.evaluate`, `notifications.send` y los fallos `analysis.speechmatics`/`analysis.jev` se persisten además en `audit_events`; los de autenticación permanecen solo en el log. Los fallos de análisis previos a una alerta usan `alerta_id=null` y códigos permitidos sin texto ni respuestas de proveedor. Un fallo al escribir la bitácora no revierte la alerta y se dirige al log de error local, nunca como prueba de entrega.
+Los fallos de MongoDB impiden el registro y el envío. Los fallos de notificación no revierten una alerta guardada. La auditoría técnica se emite en el logger `psycode.audit`. Los eventos `alerts.register`, `alerts.evaluate`, cada intento `notifications.send` y los fallos `analysis.speechmatics`/`analysis.jev`/`alerts.flow` se persisten además en `audit_events`; los de autenticación permanecen solo en el log. Los fallos de análisis previos a una alerta usan `alerta_id=null` y códigos permitidos sin texto ni respuestas de proveedor. Un fallo al escribir la bitácora no revierte la alerta y se dirige al log de error local, nunca como prueba de entrega.
 
 El módulo interno de [análisis Speechmatics + JEV](docs/INTEGRACION-SPEECHMATICS-JEV.md) se compone para un trabajador secuencial, mediante puertos y salida tipada [1.0](docs/analysis/OUTPUT-1.0.md). No inicia procesos al importar Django ni añade rutas públicas de ingesta.
 
-La secuencia es síncrona y acotada según el contrato. No hay transacción entre MongoDB, SQLite, Teams y correo, ni garantía de entrega exactamente una vez. Una caída entre persistir y notificar puede dejar una alerta sin aviso; la recuperación automática duradera queda fuera del backlog actual. Esta limitación debe revisarse antes de uso clínico real.
+El correo principal se configura con `NOTIFICATION_EMAIL_TO` (SCRUM-67); el de respaldo con `NOTIFICATION_EMAIL_BACKUP_TO`. Nunca se envía a ambos en paralelo. Solo el remitente/relay usa credenciales SMTP. El proceso SMTP se cancela al superar `EMAIL_TIMEOUT_SECONDS`, que limita cada intento completo; no queda un hilo enviando después del timeout. La aceptación SMTP no prueba entrega ni lectura, y un timeout puede dejar incierta la aceptación previa por el relay.
+
+Teams queda deshabilitado (`TEAMS_ENABLED=False`) y no participa del flujo, aunque exista una URL en el entorno. Se conserva su adaptador desacoplado hasta decidir webhook y responsables. `NOTIFICATIONS_ENABLED=false` mantiene todos los envíos desactivados por defecto.
+
+La secuencia es síncrona y acotada según el contrato. No hay transacción entre MongoDB, SQLite y correo, ni garantía de entrega exactamente una vez. Una caída entre persistir y notificar puede dejar una alerta sin aviso; la recuperación automática duradera queda fuera del backlog actual. Esta limitación debe revisarse antes de uso clínico real.
 
 ## 4. Capa de frontend — dashboard e historial de alertas
 

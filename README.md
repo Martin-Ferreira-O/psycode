@@ -1,6 +1,6 @@
 # Psycode API
 
-Backend del proyecto Psycode, desarrollado en Python y Django. Actualmente funcionan el inicio de sesión, la recuperación de contraseña y el manejo de sesión (SCRUM-31), y la persistencia de alertas en MongoDB (SCRUM-32). Las rutas HTTP de alertas, el dashboard y las notificaciones siguen pendientes.
+Backend del proyecto Psycode, desarrollado en Python y Django. Actualmente funcionan el inicio de sesión, la recuperación de contraseña y el manejo de sesión (SCRUM-31), y la persistencia de alertas en MongoDB (SCRUM-32). Las alertas incluyen consulta y evaluación HTTP, bitácora protegida y notificación por correo principal con respaldo (envíos desactivados por defecto).
 
 La integración interna de Speechmatics Batch y JEV está documentada en [implementación y pruebas sin credenciales](docs/INTEGRACION-SPEECHMATICS-JEV.md). Incluye el contrato de salida 1.0, procedencia del código y conexión a alertas/bitácora; no añade una interfaz ni habilita envíos externos por defecto.
 
@@ -115,6 +115,26 @@ Con pip y el entorno activado, usa `python` en lugar de `uv run python`; en Wind
 Esta entrega expone `backend.config.composition.analysis_worker()` y `worker.process(fragment, roles=...)` para el trabajador interno. `runserver` no inicia un consumidor de audio: falta conectar el productor/ejecutor que entregue fragmentos. El rol del paciente debe confirmarlo el llamador; la diarización por sí sola no lo identifica. Sin esa atribución, el resultado es indeterminado y no genera alertas.
 
 Consulta [componentes adaptados, recuperación y pendientes de Jira](docs/INTEGRACION-SPEECHMATICS-JEV.md) y el [contrato de salida 1.0](docs/analysis/OUTPUT-1.0.md).
+
+## Bitácora y notificaciones (SCRUM-65)
+
+Consulta `GET /api/v1/audit-events` con JWT de administrador o supervisor activo. Admite período UTC (`fecha_desde`, `fecha_hasta`), `alerta_id`, `action`, `outcome`, `limit`, `offset` y `order`. [Contrato y ejemplos](API_CONTRACTS.md#consulta-de-bitácora-scrum-65).
+
+Para habilitar correo, incorpora a tu entorno `NOTIFICATIONS_ENABLED=true`, `NOTIFICATION_EMAIL_TO` con el destinatario principal acordado en SCRUM-67 y `NOTIFICATION_EMAIL_BACKUP_TO` con el respaldo de Sergio. Las direcciones no vienen fijadas en el repositorio. El respaldo solo se intenta tras fallo o timeout del principal. `EMAIL_BACKEND=file` permite probar sin SMTP; para SMTP configura únicamente las credenciales del remitente/relay. No se solicitan credenciales de destinatarios. Teams permanece deshabilitado.
+
+Pruebas sin servicios externos:
+
+```sh
+uv run python manage.py test --settings=backend.config.test_settings --noinput
+```
+
+Para incluir persistencia y filtros contra un MongoDB de pruebas aislado (usa la base `psycode_test`):
+
+```sh
+PSYCODE_TEST_MONGODB_URI=mongodb://127.0.0.1:27017 uv run python manage.py test --settings=backend.config.test_settings --noinput
+```
+
+La bitácora no almacena correos, contenido de mensajes, transcripciones ni secretos. El logger conserva el event_id original si MongoDB falla; no hay recuperación automática de eventos ni entrega garantizada tras una caída del proceso. [Detalles de notificaciones](backend/apps/notifications/README.md).
 
 ## Usuario de prueba
 

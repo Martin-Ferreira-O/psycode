@@ -1,6 +1,6 @@
 # Contratos de API — Psycode API
 
-**Nombre técnico:** `psycode-api`. **API:** v1. **Revisión documental:** 1.2, escala de severidad actualizada el 2026-10-08. **Implementación actual:** las operaciones descritas se implementan por sus tareas SCRUM correspondientes.
+**Nombre técnico:** `psycode-api`. **API:** v1. **Revisión documental:** 1.3, bitácora y correo principal/respaldo actualizados el 2026-10-17. **Implementación actual:** las operaciones descritas se implementan por sus tareas SCRUM correspondientes.
 
 **Base URL:** `/api/v1/`. **Autenticación:** JWT `Authorization: Bearer <access_token>`. **JSON:** `application/json`. [Arquitectura](ARCHITECTURE.md) · [Aceptación](docs/ACCEPTANCE.md).
 
@@ -22,6 +22,7 @@ Endpoints sin barra final; el prefijo sí se escribe `/api/v1/`. No depender de 
 | POST | `/api/v1/auth/admin/users` | `accounts:admin_user_create` | Protegido (solo rol admin) |
 | PATCH | `/api/v1/auth/admin/users/{user_id}` | `accounts:admin_user_update` | Protegido (solo rol admin) |
 | PATCH | `/api/v1/auth/admin/users/{user_id}/toggle-active` | `accounts:admin_user_toggle_active` | Protegido (solo rol admin) |
+| GET | `/api/v1/audit-events` | `alerts:audit-list` | Protegido (admin/supervisor) |
 | GET | `/api/v1/alerts` | `alerts:list` | Protegido |
 | GET | `/api/v1/alerts/{alerta_id}` | `alerts:detail` | Protegido |
 | GET, POST | `/api/v1/alerts/{alerta_id}/evaluacion` | `alerts:evaluation` | Protegido |
@@ -649,64 +650,49 @@ Tipos y límites del esquema de alerta. El llamador aporta UUID para detectar du
 
 Flujo: validar nivel 1–3 → derivar semáforo → estado pendiente y evaluación null → fechas de trazabilidad del servidor → persistir → notificar si corresponde. Un nivel fuera del rango se rechaza; NULO/sin riesgo no entra a este flujo.
 
-RegistrationResult contiene `alerta` (AlertDetail) y `notificacion` (NotificationResult). Duplicado → `AlertAlreadyExists`, sin nuevo envío; datos inválidos → `ValidationError`; persistencia caída → `PersistenceUnavailable`, sin envío. Tras guardar, fallo de notificación se expresa en resultado, no como fallo de persistencia.
+La implementación `AlertsService.register_alert` devuelve la alerta persistida. El resultado detallado de envío se obtiene mediante `NotificationService.notify_alert`; los intentos quedan en la bitácora. Duplicado → `AlertAlreadyExists`, sin nuevo envío; datos inválidos → `ServiceError(VALIDATION_ERROR)`; persistencia caída → `PersistenceUnavailable`, sin envío. Un fallo de notificación conserva la alerta. La composición del trabajador inyecta el notificador; el seed lo omite.
 
 Prototipo: las alertas válidas de nivel 1–3 pueden notificar. NULO/sin riesgo no se registra como alerta ni se envía. NOTIFICATIONS_ENABLED=false omite todos los envíos de desarrollo y datos sintéticos. Repositorios no envían mensajes.
 
 ### notify_alert(alerta_id, payload) → NotificationResult
 
-UUID es contexto interno de auditoría. Payload acepta exclusivamente:
+UUID es contexto interno de auditoría. `NotificationPayload` contiene `nivel_riesgo` (BAJO, MEDIO o ALTO), `tipo_riesgo`, `box` y `fecha_hora`. Se omiten NULO/sin riesgo y niveles desconocidos. El notificador verifica primero que el UUID exista en MongoDB y reconstruye el mensaje desde esa alerta, con tipo constante `riesgo_suicida`; no utiliza texto libre del llamador. No se envían descripción, sesión, identificadores personales, audio ni transcripción.
 
-~~~json
-{
-  "tipo": "alerta_riesgo",
-  "box": "box-3",
-  "tipo_riesgo": "riesgo_suicida",
-  "nivel_urgencia": "BAJO",
-  "fecha_hora": "2026-09-12T14:05:22Z"
-}
-~~~
+Primero se intenta correo a `NOTIFICATION_EMAIL_TO` (destinatario de SCRUM-67). Solo ante fallo, rechazo, configuración ausente o timeout se intenta `NOTIFICATION_EMAIL_BACKUP_TO` (Sergio). Teams no participa, incluso si existe un webhook configurado. Sin reintentos automáticos. Cada intento SMTP tiene un plazo completo `EMAIL_TIMEOUT_SECONDS` (10 segundos por defecto) mediante proceso cancelable; `EMAIL_TIMEOUT` limita además los sockets. La aceptación SMTP no garantiza entrega ni lectura.
 
-Tipo constante; urgencia igual al semáforo derivado y fecha UTC de detección. Adaptador traduce al formato de Teams Workflows o correo. No enviar descripción, sesión, pacientes, audio, transcripción ni detalles operativos. UUID de alerta se mantiene solo en auditoría interna.
-
-Un intento Teams; ante timeout, rechazo, fallo de red o configuración ausente, auditar y probar correo. **Máximo 10 segundos de tiempo total por canal/intento**, incluyendo conexión y respuesta; timeout de socket por sí solo no garantiza este límite. Sin reintentos automáticos; ambos canales suman hasta 20 segundos de comunicación, excluyendo persistencia y logging.
-
-2xx del workflow indica aceptación por proveedor, no publicación final ni lectura humana. SMTP aceptado tampoco garantiza entrega.
-
-NotificationResult siempre tiene:
+`NotificationResult` contiene:
 
 | Campo | Tipo / regla |
 |---|---|
-| `estado` | aceptada, fallida u omitida |
-| `canal` | teams, email o null; canal que aceptó, null si ninguno |
-| `contingencia` | booleano; true cuando se intentó correo por fallo Teams |
-| `motivo` | null, sin_riesgo, deshabilitada o ningun_canal_acepto |
-| `intentos` | Lista ordenada: canal, resultado (aceptado/fallido), error_code (string o null), duracion_ms (integer no negativo) |
+| `alerta_id` | UUID de la alerta |
+| `enviado` | bool: al menos un envío aceptado |
+| `canal_exitoso` | `email` o null |
+| `intentos` | Lista ordenada de `AttemptResult(canal, exitoso, duracion_ms, error)` |
+| `motivo_omision` | null, `NULO_O_SIN_RIESGO`, `ALERTA_NO_ALMACENADA`, `NOTIFICATIONS_DISABLED` o `FALLO_DOBLE_CANALES` |
 
-Ejemplo interno:
+Cada intento genera un evento `notifications.send` con UUID de alerta/sesión, timestamp UTC, actor Sistema, canal email, resultado, duración y código estable. `contingencia=false` identifica el principal y `true` el respaldo; nunca se guarda la dirección destinataria. El arreglo histórico `intentos` se conserva vacío en los eventos nuevos: cada intento ocupa su propio evento.
 
-~~~json
-{
-  "estado": "aceptada",
-  "canal": "email",
-  "contingencia": true,
-  "motivo": null,
-  "intentos": [
-    { "canal": "teams", "resultado": "fallido", "error_code": "NOTIFICATION_TIMEOUT", "duracion_ms": 10000 },
-    { "canal": "email", "resultado": "aceptado", "error_code": null, "duracion_ms": 250 }
-  ]
-}
-~~~
+Errores: `NOTIFICATION_TIMEOUT`, `NOTIFICATION_CONNECTION_FAILED`, `NOTIFICATION_REJECTED`, `NOTIFICATION_NOT_CONFIGURED`, `NOTIFICATION_INTERNAL_ERROR`. No se almacenan errores libres ni respuestas de proveedor. Los fallos de envío no eliminan la alerta. No hay cola duradera ni garantía de entrega tras una caída entre persistencia y envío.
 
-- Teams acepta: un intento, canal teams, contingencia false.
-- Ambos fallan: estado fallida, canal null, motivo ningun_canal_acepto, dos intentos, contingencia true.
-- Omisión: canal null, contingencia false, intentos vacíos; motivo sin_riesgo para NULO (precedencia), o deshabilitada.
-- Payload inválido: ValidationError interno antes de enviar.
-- Cada intento registra UUID de alerta, canal, hora, resultado, duración y contingencia.
+### Consulta de bitácora (SCRUM-65)
 
-Errores internos de intento: `NOTIFICATION_TIMEOUT`, `NOTIFICATION_CONNECTION_FAILED`, `NOTIFICATION_REJECTED`, `NOTIFICATION_NOT_CONFIGURED`, `NOTIFICATION_INTERNAL_ERROR`. No exponer secretos ni cuerpo libre de error del proveedor. Fallo inesperado Teams también permite contingencia.
+`GET /api/v1/audit-events`, JWT obligatorio; solo usuarios activos con rol `admin` o `supervisor`, o superusuarios. Anónimo → 401, rol no autorizado → 403, persistencia indisponible → 503. Otros métodos → 405.
 
-Ningún fallo de envío elimina la alerta. No se implementa cola duradera ni se garantiza entrega tras caída entre persistencia y envío.
+| Parámetro | Regla |
+|---|---|
+| `fecha_desde`, `fecha_hasta` | ISO 8601 fecha/hora; extremos inclusivos, convertidos a UTC. Sin zona se interpreta UTC. Desde no puede superar hasta. |
+| `alerta_id` | UUID válido |
+| `action` | `alerts.register`, `alerts.evaluate`, `notifications.send`, `analysis.speechmatics`, `analysis.jev`, `alerts.flow` |
+| `outcome` | `success`, `failure`, `skipped` |
+| `order` | `asc` por defecto, o `desc`; timestamp y event_id como desempate |
+| `limit` | 1–100, por defecto 50 |
+| `offset` | ≥ 0, por defecto 0 |
+
+Parámetros desconocidos, repetidos o inválidos → 400. Los filtros se combinan con AND. Devuelve el envelope habitual con `data={total, limit, offset, items}`. Una consulta sin coincidencias devuelve 200 y lista vacía. Paginación por offset: nuevas inserciones entre consultas pueden desplazar páginas.
+
+Cada item incluye `event_id`, `timestamp`, `action`, `outcome`, `actor` (`Sistema` o `Usuario`), `actor_id` (UUID o null), `alerta_id` (UUID o null), `sesion_id` (UUID o null), `sequence` (entero no negativo o null), `channel`, `contingencia`, `error_code`, `duration_ms`. Fechas UTC; la evaluación usa el usuario autenticado. No incluye nombres, correos, cuerpos de mensajes ni campos ajenos a la lista permitida. Eventos históricos sin actor explícito se presentan como Sistema/Usuario según actor_id; sesión/secuencia ausentes se presentan null.
+
+Ejemplo: `/api/v1/audit-events?alerta_id=11111111-1111-4111-8111-111111111111&action=notifications.send&outcome=failure&order=asc&limit=20&offset=0`.
 
 ## 5. Seguridad, compatibilidad y cambios
 

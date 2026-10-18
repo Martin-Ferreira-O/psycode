@@ -208,7 +208,7 @@ Eventos relevantes del **dominio persistido en MongoDB**: alta de alerta, regist
 | Qué | Dónde |
 |---|---|
 | `alerts.register`, `alerts.evaluate`, `notifications.send` | MongoDB `audit_events` **y** logger |
-| `analysis.speechmatics`, `analysis.jev` | MongoDB `audit_events` **y** logger; solo códigos permitidos, sin conversaciones ni cuerpos de proveedor |
+| `analysis.speechmatics`, `analysis.jev`, `alerts.flow` | MongoDB `audit_events` **y** logger; solo códigos permitidos, sin conversaciones ni cuerpos de proveedor |
 | `auth.login`, `auth.refresh`, `auth.logout`, `auth.password_reset`, `api.error` | Solo logger Django (identidad en SQLite) |
 
 Un fallo al insertar en `audit_events` no revierte la alerta ni se presenta como prueba de entrega. El evento ya emitido al log permanece. La colección es de solo inserción: no se actualiza ni se borra en v1.
@@ -217,22 +217,30 @@ Un fallo al insertar en `audit_events` no revierte la alerta ni se presenta como
 
 | Campo | Tipo | Obligatorio | Null permitido | Uso |
 |---|---|---|---|---|
-| `event_id` | UUID | Sí | No | Identificador del evento |
+| `event_id` | UUID | Sí | No | Mismo UUID en logger y MongoDB |
 | `timestamp` | date UTC | Sí | No | Hora de registro |
-| `action` | enum de las cinco acciones anteriores | Sí | No | Tipo de evento |
+| `action` | enum de las seis acciones anteriores | Sí | No | Tipo de evento |
 | `outcome` | `success` \| `failure` \| `skipped` | Sí | No | Resultado |
+| `actor` | `Sistema` \| `Usuario` | Sí | No | Actor automático o humano |
+| `sesion_id` | UUID | Sí como campo | Sí | Correlación con sesión cuando corresponde |
+| `sequence` | int ≥ 0 | Sí como campo | Sí | Secuencia del fragmento en fallos técnicos |
 | `actor_id` | UUID | Sí como campo | Sí | Profesional que evalúa; null en alta/envío |
-| `alerta_id` | UUID o null | Sí | Solo en fallos de análisis | Relación con `alerts`; fallos previos a una alerta usan null |
-| `channel` | `teams` \| `email` | Sí como campo | Sí | Canal que aceptó el aviso |
-| `contingencia` | bool | Sí como campo | Sí | Correo por fallo de Teams |
+| `alerta_id` | UUID o null | Sí | En fallos técnicos sin alerta | Relación con `alerts`; fallos previos a una alerta usan null |
+| `channel` | `teams` \| `email` | Sí como campo | Sí | Canal del intento, aceptado o fallido |
+| `contingencia` | bool | Sí como campo | Sí | Correo de respaldo por fallo del principal |
 | `motivo` | `sin_riesgo` \| `deshabilitada` \| `ningun_canal_acepto` | Sí como campo | Sí | Por qué se omitió o falló el envío |
 | `error_code` | string `A-Z0-9_` | Sí como campo | Sí | Código estable, no mensaje de proveedor |
-| `duration_ms` | int ≥ 0 | Sí como campo | Sí | Duración total del envío |
-| `intentos` | arreglo | Sí | No (vacío) | Detalle por canal; vacío si no hay envío |
+| `duration_ms` | int ≥ 0 | Sí como campo | Sí | Duración de este intento |
+| `intentos` | arreglo | Sí | No (vacío) | Campo histórico; vacío en eventos nuevos, un evento por intento |
 
-Validador e índices: [audit_events.validator.json](mongodb/audit_events.validator.json), [audit_events.indexes.json](mongodb/audit_events.indexes.json). Ejemplos de alta, evaluación y contingencia Teams→correo en [mongodb/examples/](mongodb/examples/).
+Validador e índices: [audit_events.validator.json](mongodb/audit_events.validator.json), [audit_events.indexes.json](mongodb/audit_events.indexes.json). Ejemplos de alta, evaluación y intentos de correo principal y de respaldo en [mongodb/examples/](mongodb/examples/).
 
-La integración de [Speechmatics y JEV](INTEGRACION-SPEECHMATICS-JEV.md) comprueba la conexión con esta bitácora mediante dobles de persistencia. Al desplegar, `AlertsRepository.ensure_schema()` aplica el validador ampliado a MongoDB; se debe verificar con la entrega final de la tarea 6. La caída de la bitácora deja un evento técnico sanitizado en el logger, sin convertir un fallo de análisis en ausencia de riesgo.
+`AlertAudit` emite primero el evento estructurado en el logger y después intenta persistirlo con el mismo `event_id` y timestamp. Si falla la bitácora, registra `AUDIT_UNAVAILABLE` y el UUID del evento original, sin detalle de excepción. Los eventos no contienen nombres, direcciones destinatarias, transcripciones ni cuerpos de proveedores. Los fallos técnicos del trabajador incluyen `sesion_id` y `sequence`; `alerts.flow` registra excepciones inesperadas e indisponibilidad al persistir alertas. Un corte abrupto del proceso requiere supervisión externa y no tiene recuperación automática.
+
+`GET /api/v1/audit-events` permite consulta protegida por rol, período, alerta, acción y resultado. [Contrato](../API_CONTRACTS.md#consulta-de-bitácora-scrum-65). Los índices cubren timestamp/event_id, alerta/fecha, acción/fecha y resultado/fecha. El orden por UUID desambigua timestamps iguales sin afirmar causalidad entre eventos simultáneos.
+
+`AlertsRepository.ensure_schema()` aplica el validador ampliado mediante collMod. Los documentos históricos permanecen sin reescribir: la API deriva actor a partir de actor_id y presenta sesión/secuencia ausentes como null. Las escrituras nuevas deben incluir esos campos. La integración real se comprueba con `PSYCODE_TEST_MONGODB_URI` en una base aislada `psycode_test`.
+
 
 ## 7. Índices y consultas cubiertas
 
@@ -257,7 +265,7 @@ Tres capas, con responsabilidades distintas:
 |---|---|---|
 | Trazabilidad de la alerta | `alerts.trazabilidad` | Cuándo se persistió, cuándo cambió (evaluación) y de qué origen |
 | Trazabilidad de la evaluación | `alerts.evaluacion` | Quién (UUID + username de entonces), qué resultado y cuándo |
-| Bitácora de eventos | `audit_events` + logger | Alta, evaluación, cada intento de Teams/correo, contingencia y códigos de error |
+| Bitácora de eventos | `audit_events` + logger | Alta, evaluación, cada intento de correo, contingencia y códigos de error |
 
 La evaluación no se reconstruye consultando SQLite. El profesional llega del contexto autenticado. Los intentos de notificación no forman parte del documento público de alerta: viven en la bitácora para no ampliar el contrato HTTP.
 
