@@ -17,15 +17,16 @@
         "motivo",
         "error_code",
         "duration_ms",
-        "intentos"
+        "intentos",
+        "actor",
+        "sesion_id",
+        "sequence"
       ],
       "additionalProperties": false,
-      "oneOf": [
-        {"properties": {"action": {"enum": ["alerts.register", "alerts.evaluate", "notifications.send"]}, "alerta_id": {"bsonType": "string"}}},
-        {"properties": {"action": {"enum": ["analysis.speechmatics", "analysis.jev"]}, "alerta_id": {"bsonType": "null"}}}
-      ],
       "properties": {
-        "_id": { "bsonType": "objectId" },
+        "_id": {
+          "bsonType": "objectId"
+        },
         "event_id": {
           "bsonType": "string",
           "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
@@ -36,16 +37,29 @@
           "description": "Instante UTC en que el backend registró el evento."
         },
         "action": {
-          "enum": ["alerts.register", "alerts.evaluate", "notifications.send", "analysis.speechmatics", "analysis.jev"],
+          "enum": [
+            "alerts.register",
+            "alerts.evaluate",
+            "notifications.send",
+            "analysis.speechmatics",
+            "analysis.jev",
+            "alerts.flow"
+          ],
           "description": "Eventos internos de alertas, notificación y fallos técnicos de análisis. Autenticación solo en log."
         },
         "outcome": {
-          "enum": ["success", "failure", "skipped"]
+          "enum": [
+            "success",
+            "failure",
+            "skipped"
+          ]
         },
         "actor_id": {
           "description": "UUID del profesional autenticado. null en registro interno o envío automático. Nunca correo ni nombre.",
           "oneOf": [
-            { "bsonType": "null" },
+            {
+              "bsonType": "null"
+            },
             {
               "bsonType": "string",
               "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
@@ -53,25 +67,42 @@
           ]
         },
         "alerta_id": {
-          "bsonType": ["string", "null"],
+          "bsonType": [
+            "string",
+            "null"
+          ],
           "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
           "description": "UUID de alerta; null solo para fallos técnicos de análisis previos a una alerta."
         },
         "channel": {
-          "enum": ["teams", "email", null],
+          "enum": [
+            "teams",
+            "email",
+            null
+          ],
           "description": "Canal que aceptó el aviso; null si ninguno o si la acción no es un envío."
         },
         "contingencia": {
-          "bsonType": ["bool", "null"],
-          "description": "true si se intentó correo por fallo de Teams. null fuera de notifications.send."
+          "bsonType": [
+            "bool",
+            "null"
+          ],
+          "description": "true si se usa el correo de respaldo."
         },
         "motivo": {
-          "enum": ["sin_riesgo", "deshabilitada", "ningun_canal_acepto", null]
+          "enum": [
+            "sin_riesgo",
+            "deshabilitada",
+            "ningun_canal_acepto",
+            null
+          ]
         },
         "error_code": {
           "description": "Código estable. Nunca el cuerpo libre de error del proveedor ni secretos.",
           "oneOf": [
-            { "bsonType": "null" },
+            {
+              "bsonType": "null"
+            },
             {
               "bsonType": "string",
               "pattern": "^[A-Z][A-Z0-9_]{1,78}$"
@@ -81,8 +112,16 @@
         "duration_ms": {
           "description": "Duración total del envío en milisegundos. null fuera de notifications.send.",
           "oneOf": [
-            { "bsonType": "null" },
-            { "bsonType": ["int", "long"], "minimum": 0 }
+            {
+              "bsonType": "null"
+            },
+            {
+              "bsonType": [
+                "int",
+                "long"
+              ],
+              "minimum": 0
+            }
           ]
         },
         "intentos": {
@@ -90,14 +129,31 @@
           "description": "Intentos de notificación en orden. Vacío si la acción no envía avisos.",
           "items": {
             "bsonType": "object",
-            "required": ["canal", "resultado", "error_code", "duracion_ms"],
+            "required": [
+              "canal",
+              "resultado",
+              "error_code",
+              "duracion_ms"
+            ],
             "additionalProperties": false,
             "properties": {
-              "canal": { "enum": ["teams", "email"] },
-              "resultado": { "enum": ["aceptado", "fallido"] },
+              "canal": {
+                "enum": [
+                  "teams",
+                  "email"
+                ]
+              },
+              "resultado": {
+                "enum": [
+                  "aceptado",
+                  "fallido"
+                ]
+              },
               "error_code": {
                 "oneOf": [
-                  { "bsonType": "null" },
+                  {
+                    "bsonType": "null"
+                  },
                   {
                     "bsonType": "string",
                     "pattern": "^[A-Z][A-Z0-9_]{1,78}$"
@@ -105,11 +161,36 @@
                 ]
               },
               "duracion_ms": {
-                "bsonType": ["int", "long"],
+                "bsonType": [
+                  "int",
+                  "long"
+                ],
                 "minimum": 0
               }
             }
           }
+        },
+        "actor": {
+          "enum": [
+            "Sistema",
+            "Usuario"
+          ]
+        },
+        "sesion_id": {
+          "bsonType": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+          "description": "UUID de alerta; null solo para fallos técnicos de análisis previos a una alerta."
+        },
+        "sequence": {
+          "bsonType": [
+            "int",
+            "long",
+            "null"
+          ],
+          "minimum": 0
         }
       }
     }

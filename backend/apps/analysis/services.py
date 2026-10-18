@@ -7,6 +7,7 @@ from threading import Lock
 from uuid import NAMESPACE_URL, uuid5
 
 from backend.apps.alerts.exceptions import AlertAlreadyExists
+from backend.common.errors import PersistenceUnavailable
 from .domain import AnalysisResult, AnalysisState, Fragment, FragmentRejected, Signal
 from .errors import ProviderError, SubmissionUncertain
 from .ports import AnalizadorDeSenales, FragmentLedger, TechnicalAudit, Transcriptor
@@ -46,7 +47,12 @@ class AnalysisService:
     def process(self, fragment: Fragment, *, roles: dict[str, str] | None = None) -> AnalysisResult:
         # No background process/stdout pipes to deadlock under Windows spawn.
         with self._lock:
-            return self._process(fragment, roles or {})
+            try:
+                return self._process(fragment, roles or {})
+            except Exception:
+                self.audit.failure("FLOW_INTERRUPTED", sesion_id=fragment.session_id,
+                                   sequence=fragment.sequence)
+                raise
 
     def _process(self, fragment, roles):
         if fragment.session_id not in self.histories and len(self.histories) >= self.max_sessions:
@@ -59,12 +65,12 @@ class AnalysisService:
         try:
             transcription = self.transcriptor.transcribe(fragment)
         except (ProviderError, OSError):
-            self.audit.failure("SPEECHMATICS_FAILED")
+            self.audit.failure("SPEECHMATICS_FAILED", sesion_id=fragment.session_id, sequence=fragment.sequence)
             return AnalysisResult(fragment.session_id, fragment.sequence,
                                   AnalysisState.INDETERMINATE, error_codes=("SPEECHMATICS_FAILED",))
         if transcription.cleanup != "deleted":
             errors.append("SPEECHMATICS_DELETE_PENDING")
-            self.audit.failure(errors[-1])
+            self.audit.failure(errors[-1], sesion_id=fragment.session_id, sequence=fragment.sequence)
         words = [asdict(w) for w in transcription.words]
         utterances = align_words(words, [{"start": w.start, "end": w.end, "speaker": w.speaker}
                                         for w in transcription.words])
@@ -106,7 +112,7 @@ class AnalysisService:
             except ProviderError as exc:
                 code = "JEV_SUBMISSION_UNCERTAIN" if isinstance(exc, SubmissionUncertain) else "JEV_FAILED"
                 errors.append(code)
-                self.audit.failure(code)
+                self.audit.failure(code, sesion_id=fragment.session_id, sequence=fragment.sequence)
             history.append(current)
             while history and sum(len(h["text"]) for h in history) > 12000:
                 history.pop(0)
@@ -135,3 +141,7 @@ class AnalysisService:
                     descripcion=" ".join(signal.excerpt.split())[:500])
             except AlertAlreadyExists:
                 pass
+            except PersistenceUnavailable:
+                self.audit.failure("ALERT_PERSISTENCE_FAILED", alerta_id=ident,
+                                   sesion_id=fragment.session_id, sequence=fragment.sequence)
+                raise

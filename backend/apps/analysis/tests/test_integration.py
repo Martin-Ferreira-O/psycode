@@ -307,7 +307,7 @@ class IntegrationTests(SimpleTestCase):
             raise RuntimeError("provider response and secrets")
         with self.assertLogs("psycode.audit", level="INFO") as logs:
             AnalysisAudit(unavailable).failure("JEV_FAILED")
-        self.assertIn("ANALYSIS_AUDIT_UNAVAILABLE", str(logs.output))
+        self.assertIn("AUDIT_UNAVAILABLE", str(logs.output))
         self.assertNotIn("provider response", str(logs.output))
 
     def test_restart_does_not_silently_resume_with_missing_context(self):

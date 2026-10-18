@@ -12,7 +12,7 @@ class AnalizadorDeSenales(Protocol):
 
 
 class TechnicalAudit(Protocol):
-    def failure(self, code: str) -> None: ...
+    def failure(self, code: str, *, alerta_id=None, sesion_id=None, sequence=None) -> None: ...
 
 
 class FragmentLedger(Protocol):
