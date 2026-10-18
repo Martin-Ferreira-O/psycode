@@ -20,3 +20,7 @@ EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
 LOGGING = {"version": 1, "disable_existing_loggers": False,
            "handlers": {"null": {"class": "logging.NullHandler"}},
            "loggers": {"psycode.audit": {"handlers": ["null"], "propagate": False}}}
+
+NOTIFICATIONS_ENABLED = False
+NOTIFICATION_EMAIL_TO = "primary@example.test"
+NOTIFICATION_EMAIL_BACKUP_TO = "backup@example.test"

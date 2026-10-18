@@ -1,4 +1,4 @@
-"""Adaptadores Teams/correo pendientes; este módulo no realiza envíos."""
+"""Adaptadores desacoplados de correo y Teams (fuera del flujo activo)."""
 import json
 import logging
 import os
@@ -129,54 +129,53 @@ class TeamsClient(NotificationChannelClient):
 
 
 class EmailClient(NotificationChannelClient):
-    def __init__(self, destinatarios: Optional[List[str]] = None):
-        if destinatarios is not None:
-            self.destinatarios = destinatarios
-        else:
-            env_emails = os.getenv("NOTIFICATION_EMAIL_TO", "") or os.getenv("NOTIFICATION_EMAILS", "")
-            self.destinatarios = [e.strip() for e in env_emails.split(",") if e.strip()]
+    def __init__(self, destinatarios=None, *, backup=False):
+        if destinatarios is None:
+            configured = (settings.NOTIFICATION_EMAIL_BACKUP_TO if backup
+                          else settings.NOTIFICATION_EMAIL_TO)
+            destinatarios = [e.strip() for e in configured.split(",") if e.strip()]
+        self.destinatarios = destinatarios
 
     @property
-    def nombre_canal(self) -> str:
+    def nombre_canal(self):
         return "email"
 
-    def send(self, payload: NotificationPayload) -> AttemptResult:
-        inicio = time.perf_counter()
+    def send(self, payload):
+        import subprocess
+        import sys
 
+        start = time.perf_counter()
+        error = None
         if not self.destinatarios:
-            duracion = (time.perf_counter() - inicio) * 1000
-            return AttemptResult(
-                canal=self.nombre_canal,
-                exitoso=False,
-                duracion_ms=round(duracion, 2),
-                error="Configuracion ausente: destinatarios vacios",
-            )
-
-        asunto = payload.formatear_asunto_correo()
-        cuerpo_plano = payload.formatear_cuerpo_correo()
-        cuerpo_html = payload.formatear_html_correo()
-        from_email = getattr(settings, "DEFAULT_FROM_EMAIL", "alertas@psycode.local")
-
-        try:
-            send_mail(
-                subject=asunto,
-                message=cuerpo_plano,
-                html_message=cuerpo_html,
-                from_email=from_email,
-                recipient_list=self.destinatarios,
-                fail_silently=False,
-            )
-            duracion = (time.perf_counter() - inicio) * 1000
-            return AttemptResult(
-                canal=self.nombre_canal,
-                exitoso=True,
-                duracion_ms=round(duracion, 2),
-            )
-        except Exception as e:
-            duracion = (time.perf_counter() - inicio) * 1000
-            return AttemptResult(
-                canal=self.nombre_canal,
-                exitoso=False,
-                duracion_ms=round(duracion, 2),
-                error=type(e).__name__,
-            )
+            error = "NOTIFICATION_NOT_CONFIGURED"
+        else:
+            mail = dict(subject=payload.formatear_asunto_correo(),
+                        message=payload.formatear_cuerpo_correo(),
+                        html_message=payload.formatear_html_correo(),
+                        from_email=settings.DEFAULT_FROM_EMAIL,
+                        recipient_list=self.destinatarios, fail_silently=False)
+            try:
+                if settings.EMAIL_BACKEND == "django.core.mail.backends.smtp.EmailBackend":
+                    # Un proceso cancelable acota DNS, conexión y diálogo SMTP completos.
+                    config = {key: getattr(settings, key) for key in (
+                        "EMAIL_BACKEND", "EMAIL_HOST", "EMAIL_PORT", "EMAIL_HOST_USER",
+                        "EMAIL_HOST_PASSWORD", "EMAIL_USE_TLS", "EMAIL_USE_SSL", "EMAIL_TIMEOUT")}
+                    response = subprocess.run(
+                        [sys.executable, "-m", "backend.apps.notifications.email_worker"],
+                        input=json.dumps({"mail": mail, "config": config}), text=True,
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                        cwd=str(settings.BASE_DIR), timeout=settings.EMAIL_DELIVERY_TIMEOUT,
+                        check=False)
+                    error = {0: None, 2: "NOTIFICATION_TIMEOUT",
+                             3: "NOTIFICATION_CONNECTION_FAILED", 4: "NOTIFICATION_REJECTED"}.get(
+                                 response.returncode, "NOTIFICATION_INTERNAL_ERROR")
+                elif send_mail(**mail) != 1:
+                    error = "NOTIFICATION_REJECTED"
+            except (subprocess.TimeoutExpired, TimeoutError):
+                error = "NOTIFICATION_TIMEOUT"
+            except (ConnectionError, OSError):
+                error = "NOTIFICATION_CONNECTION_FAILED"
+            except Exception:
+                error = "NOTIFICATION_INTERNAL_ERROR"
+        return AttemptResult("email", error is None,
+                             round((time.perf_counter() - start) * 1000), error)

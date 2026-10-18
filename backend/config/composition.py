@@ -14,7 +14,9 @@ def alerts_repository():
 
 
 def alerts_service(store=None):
-    return AlertsService(store or AlertsRepository())
+    from backend.apps.notifications.services import NotificationService
+    repository = store if store is not None else AlertsRepository()
+    return AlertsService(repository, NotificationService(store=repository))
 
 
 def analysis_worker(*, settings=None, directory=None, speechmatics_http=None, jev_http=None,
@@ -30,19 +32,17 @@ def analysis_worker(*, settings=None, directory=None, speechmatics_http=None, je
     from backend.apps.analysis.ledger import FileFragmentLedger
     from backend.apps.analysis.providers.settings import Settings
     from backend.apps.analysis.services import AnalysisService
-    from backend.apps.alerts.mongo import get_database
 
     config = settings or Settings.from_env()
     root = Path(directory) if directory is not None else django_settings.BASE_DIR / ".local/analysis"
     store = alert_store if alert_store is not None else AlertsRepository()
 
     def events():
-        store.ensure_schema()
-        return get_database()["audit_events"]
+        return store._events()
 
     return AnalysisService(
         SpeechmaticsTranscriptor(config, root / "jobs", speechmatics_http),
         JevAnalizador(config, jev_http), FileFragmentLedger(root / "fragments"),
-        AlertsService(store), audit if audit is not None else AnalysisAudit(events),
+        alerts_service(store), audit if audit is not None else AnalysisAudit(events),
         redact_terms=config.redact_terms,
         secrets=(config.speechmatics_key, config.jev_key, config.openrouter_key))

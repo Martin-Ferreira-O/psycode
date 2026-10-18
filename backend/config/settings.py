@@ -185,3 +185,9 @@ LOGGING = {
     "handlers": {"console": {"class": "logging.StreamHandler"}},
     "loggers": {"psycode.audit": {"handlers": ["console"], "level": "INFO", "propagate": False}},
 }
+
+# SCRUM-67: destinatarios, sin credenciales de las cuentas receptoras.
+NOTIFICATIONS_ENABLED = env_bool("NOTIFICATIONS_ENABLED", False)
+NOTIFICATION_EMAIL_TO = os.getenv("NOTIFICATION_EMAIL_TO", "").strip()
+NOTIFICATION_EMAIL_BACKUP_TO = os.getenv("NOTIFICATION_EMAIL_BACKUP_TO", "").strip()
+TEAMS_ENABLED = False  # Webhook y continuidad pendientes de decisión.
