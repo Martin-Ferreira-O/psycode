@@ -73,7 +73,7 @@ class AuthTests(TestCase):
         self.authorize(pair)
         response = self.client.get(PREFIX + "me")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data["data"], {"id": str(self.user.pk), "usuario": "martin", "nombre": "Martin Prueba", "correo": "martin@example.test", "activo": True})
+        self.assertEqual(response.data["data"], {"id": str(self.user.pk), "usuario": "martin", "nombre": "Martin Prueba", "correo": "martin@example.test", "rol": "supervisor", "activo": True})
         self.assertNotIn(PASSWORD, self.user.password)
         self.assertTrue(self.user.check_password(PASSWORD))
         self.assertEqual(self.user.pk.version, 4)
