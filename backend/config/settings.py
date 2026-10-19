@@ -70,6 +70,7 @@ INSTALLED_APPS = [
     "backend.apps.notifications.apps.NotificationsConfig",
     "django.contrib.staticfiles",
     "backend.apps.web.apps.WebConfig",
+    "backend.apps.operational.apps.OperationalConfig",
 ]
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",

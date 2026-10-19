@@ -10,6 +10,7 @@ urlpatterns = [
     path("api/v1/", include("backend.apps.alerts.urls")),
     path("api/v1/dashboard/", include("backend.apps.dashboard.urls")),
     path("", include("backend.apps.web.urls")),
+    path("api/v1/", include("backend.apps.operational.urls")),
     re_path(r"^.*$", not_found),
 ]
 
