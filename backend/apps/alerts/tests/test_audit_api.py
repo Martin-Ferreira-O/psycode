@@ -16,7 +16,7 @@ class AuditApiTests(SimpleTestCase):
     def setUp(self):
         self.client = APIClient()
         self.user = SimpleNamespace(is_authenticated=True, is_active=True,
-                                    is_superuser=False, role='supervisor')
+                            is_superuser=False, role='admin')
         self.patch = patch('backend.apps.alerts.audit_api.AlertsRepository')
         self.repo = self.patch.start().return_value
         self.addCleanup(self.patch.stop)
@@ -27,7 +27,7 @@ class AuditApiTests(SimpleTestCase):
     def test_permissions(self):
         self.assertEqual(self.client.get('/api/v1/audit-events').status_code, 401)
         for role, active, expected in [('unknown', True, 403), ('admin', False, 403),
-                                       ('admin', True, 200), ('supervisor', True, 200)]:
+                                       ('admin', True, 200), ('supervisor', True, 403)]:
             self.user.role, self.user.is_active = role, active
             self.client.force_authenticate(self.user)
             self.assertEqual(self.client.get('/api/v1/audit-events').status_code, expected)

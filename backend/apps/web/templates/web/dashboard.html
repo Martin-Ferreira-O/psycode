@@ -8,7 +8,7 @@
     <title>Dashboard de alertas</title>
 
     <link rel="stylesheet" href="{% static 'web/css/styles.css' %}">
-    <link rel="stylesheet" href="{% static 'web/css/dashboard.css' %}?v=2">
+    <link rel="stylesheet" href="{% static 'web/css/dashboard.css' %}?v=3">
     <link rel="stylesheet" href="{% static 'web/css/alertas.css' %}?v=6">
     <link rel="stylesheet" href="{% static 'web/css/estados.css' %}">
 </head>
@@ -24,33 +24,79 @@
             </header>
 
             <section class="tarjetas-resumen">
-                <a href="{% url 'web:estadisticas' %}?tipo=total" class="tarjeta-resumen tarjeta-acceso">
- 
-                    <span class="resumen-etiqueta">Alertas registradas</span>
-                    <strong id="totalAlertas" class="resumen-numero">0</strong>
+                <a
+                    href="{% url 'web:estadisticas' %}?tipo=total"
+                    class="tarjeta-resumen tarjeta-acceso tarjeta-total"
+                >
+                    <span class="resumen-etiqueta">
+                        Alertas registradas
+                    </span>
+
+                    <div class="resumen-contenido">
+                        <strong
+                            id="totalAlertas"
+                            class="resumen-numero"
+                        >
+                            0
+                        </strong>
+
+                        <span class="flecha-estadisticas" aria-hidden="true">
+                             <svg viewBox="0 0 24 24" class="icono-flecha">
+                                <path d="M5 12h12"></path>
+                                <path d="M13 6l6 6-6 6"></path>
+                            </svg>
+                        </span>
+                    </div>
+
+                    <span class="resumen-indicacion">
+                        Ver estadísticas
+                    </span>
                 </a>
 
-                <a href="{% url 'web:dashboard' %}?estado_evaluacion=pendiente#historial-alertas" class="tarjeta-resumen tarjeta-contador tarjeta-acceso">
-  
-                    <span class="resumen-etiqueta">Pendientes</span>
-                    <strong id="totalPendientes" class="resumen-numero">0</strong>
+                <a
+                    href="{% url 'web:dashboard' %}?estado_evaluacion=pendiente#historial-alertas"
+                    class="tarjeta-resumen tarjeta-contador tarjeta-acceso tarjeta-pendientes"
+                >
+                    <span class="resumen-etiqueta">
+                        Pendientes
+                    </span>
+
+                    <strong
+                        id="totalPendientes"
+                        class="resumen-numero"
+                    >
+                        0
+                    </strong>
                 </a>
 
-  
-                <a href="{% url 'web:dashboard' %}?revisadas=true#historial-alertas" class="tarjeta-resumen tarjeta-contador tarjeta-acceso">
-   
-                    <span class="resumen-etiqueta">Revisadas</span>
-                    <strong id="totalRevisadas" class="resumen-numero">0</strong>
+                <a
+                    href="{% url 'web:dashboard' %}?revisadas=true#historial-alertas"
+                    class="tarjeta-resumen tarjeta-contador tarjeta-acceso tarjeta-revisadas"
+                >
+                    <span class="resumen-etiqueta">
+                        Revisadas
+                    </span>
+
+                    <strong
+                        id="totalRevisadas"
+                        class="resumen-numero"
+                    >
+                        0
+                    </strong>
                 </a>
             </section>
 
             <section id="historial-alertas" class="seccion-historial">
                 <header class="cabecera-historial">
                     <div>
-                        <h2>Historial de alertas</h2>                        
+                        <h2>Historial de alertas</h2>
                     </div>
 
-                    <button type="button" id="botonActualizar" class="boton-principal">
+                    <button
+                        type="button"
+                        id="botonActualizar"
+                        class="boton-principal"
+                    >
                         Actualizar
                     </button>
                 </header>
@@ -91,15 +137,25 @@
 
                     <div class="campo">
                         <label for="fechaDesde">Desde</label>
-                        <input type="date" id="fechaDesde">
+                        <input
+                            type="date"
+                            id="fechaDesde"
+                        >
                     </div>
 
                     <div class="campo">
                         <label for="fechaHasta">Hasta</label>
-                        <input type="date" id="fechaHasta">
+                        <input
+                            type="date"
+                            id="fechaHasta"
+                        >
                     </div>
 
-                    <button type="button" id="limpiarFiltros" class="boton-secundario">
+                    <button
+                        type="button"
+                        id="limpiarFiltros"
+                        class="boton-secundario"
+                    >
                         Limpiar
                     </button>
                 </div>
@@ -108,16 +164,27 @@
                     <div class="panel-cabecera">
                         <div>
                             <h2>Alertas registradas</h2>
-                            <p id="resultadoTexto">Cargando alertas...</p>                           
+                            <p id="resultadoTexto">
+                                Cargando alertas...
+                            </p>
                         </div>
                     </div>
 
-                    <div id="estadoVacio" class="estado-vacio" hidden>
+                    <div
+                        id="estadoVacio"
+                        class="estado-vacio"
+                        hidden
+                    >
                         <strong>No se encontraron alertas</strong>
-                        <p>Prueba modificando o limpiando los filtros.</p>
+                        <p>
+                            Prueba modificando o limpiando los filtros.
+                        </p>
                     </div>
 
-                    <div id="tablaContenedor" class="tabla-contenedor">
+                    <div
+                        id="tablaContenedor"
+                        class="tabla-contenedor"
+                    >
                         <table class="tabla-alertas">
                             <thead>
                                 <tr>
@@ -131,33 +198,42 @@
                                     <th>Acción</th>
                                 </tr>
                             </thead>
+
                             <tbody id="tablaAlertas"></tbody>
                         </table>
                     </div>
 
-                    <footer id="paginacion" class="paginacion">
+                    <footer
+                        id="paginacion"
+                        class="paginacion"
+                    >
                         <span id="textoPaginacion"></span>
 
                         <div class="botones-paginacion">
-                            <button type="button" id="paginaAnterior">
+                            <button
+                                type="button"
+                                id="paginaAnterior"
+                            >
                                 Anterior
                             </button>
 
                             <div id="numerosPagina"></div>
 
-                            <button type="button" id="paginaSiguiente">
+                            <button
+                                type="button"
+                                id="paginaSiguiente"
+                            >
                                 Siguiente
                             </button>
                         </div>
                     </footer>
                 </section>
             </section>
-
-
         </main>
     </div>
 
     {% include "web/components/modal_detalle.html" with puede_evaluar=True %}
+
     <script src="{% static 'web/js/solicitudes.js' %}"></script>
     <script src="{% static 'web/js/estados.js' %}"></script>
     <script src="{% static 'web/js/api.js' %}"></script>

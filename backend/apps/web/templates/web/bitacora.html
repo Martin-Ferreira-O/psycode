@@ -1,0 +1,438 @@
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Bitácora | Psycode</title>
+
+    <link rel="stylesheet" href="{% static 'web/css/styles.css' %}">
+    <link rel="stylesheet" href="{% static 'web/css/dashboard.css' %}">
+    <link rel="stylesheet" href="{% static 'web/css/estados.css' %}">
+    <link rel="stylesheet" href="{% static 'web/css/bitacora.css' %}?v=3">
+</head>
+
+<body>
+    <div class="aplicacion">
+        {% include "web/components/sidebar.html" with seccion_activa="bitacora" %}
+
+        <main class="contenido-dashboard contenido-bitacora">
+            <header class="cabecera-dashboard cabecera-bitacora">
+                <div>
+                    <h1>Bitácora del sistema</h1>
+                    <p>
+                        Consulta de la trazabilidad de alertas, despachos,
+                        evaluaciones y eventos técnicos registrados en el sistema.
+                    </p>
+                </div>
+
+                {% include "web/components/usuario_sesion.html" %}
+            </header>
+
+            <section class="barra-periodo" aria-label="Selección de periodo">
+                <div class="periodo-info">
+                    <strong id="periodoActual">Semana actual</strong>
+                </div>
+
+                <div class="periodo-controles">
+                    <button
+                        type="button"
+                        class="boton-periodo"
+                        id="semanaAnterior"
+                        aria-label="Ver semana anterior"
+                    >
+                        <svg
+                            viewBox="0 0 24 24"
+                            class="icono-flecha-periodo icono-izquierda"
+                            aria-hidden="true"
+                        >
+                            <path d="M19 12H7"></path>
+                            <path d="M11 6l-6 6 6 6"></path>
+                        </svg>
+
+                        <span>Semana anterior</span>
+                    </button>
+
+                    <input
+                        type="date"
+                        id="fechaReferencia"
+                        class="campo-fecha"
+                        aria-label="Seleccionar fecha de referencia"
+                    >
+
+                    <button
+                        type="button"
+                        class="boton-periodo"
+                        id="semanaSiguiente"
+                        aria-label="Ver semana siguiente"
+                    >
+                        <span>Semana siguiente</span>
+
+                        <svg
+                            viewBox="0 0 24 24"
+                            class="icono-flecha-periodo icono-derecha"
+                            aria-hidden="true"
+                        >
+                            <path d="M5 12h12"></path>
+                            <path d="M13 6l6 6-6 6"></path>
+                        </svg>
+                    </button>
+                </div>
+            </section>
+
+            <section class="resumen-bitacora" aria-label="Resumen de eventos">
+                <button
+                    type="button"
+                    class="tarjeta-resumen activa"
+                    data-resumen="todos"
+                >
+                    <span class="tarjeta-resumen-etiqueta">
+                        Todos los eventos
+                    </span>
+                    <strong id="totalEventos">0</strong>
+                    <span>Registros del periodo</span>
+                </button>
+
+                <button
+                    type="button"
+                    class="tarjeta-resumen"
+                    data-resumen="alertas"
+                >
+                    <span class="tarjeta-resumen-etiqueta">
+                        Alertas creadas
+                    </span>
+                    <strong id="totalAlertas">0</strong>
+                    <span>Alertas registradas</span>
+                </button>
+
+                <button
+                    type="button"
+                    class="tarjeta-resumen"
+                    data-resumen="despachos"
+                >
+                    <span class="tarjeta-resumen-etiqueta">
+                        Despachos
+                    </span>
+                    <strong id="totalDespachos">0</strong>
+                    <span>Intentos de notificación</span>
+                </button>
+
+                <button
+                    type="button"
+                    class="tarjeta-resumen"
+                    data-resumen="evaluaciones"
+                >
+                    <span class="tarjeta-resumen-etiqueta">
+                        Atenciones
+                    </span>
+                    <strong id="totalEvaluaciones">0</strong>
+                    <span>Evaluaciones realizadas</span>
+                </button>
+
+                <button
+                    type="button"
+                    class="tarjeta-resumen"
+                    data-resumen="tecnicos"
+                >
+                    <span class="tarjeta-resumen-etiqueta">
+                        Eventos técnicos
+                    </span>
+                    <strong id="totalTecnicos">0</strong>
+                    <span>Procesos e integraciones</span>
+                </button>
+            </section>
+
+            <section class="panel-bitacora">
+                <div class="cabecera-panel-bitacora">
+                    <div>
+                        <h2>Eventos de la bitácora</h2>
+                    </div>
+
+                    <button
+                        type="button"
+                        class="boton-secundario"
+                        id="recargarBitacora"
+                    >
+                        Actualizar
+                    </button>
+                </div>
+
+                <form class="filtros-bitacora" id="formFiltros">
+                    <div class="grupo-filtro">
+                        <label for="filtroAlerta">ID de alerta</label>
+                        <input
+                            type="text"
+                            id="filtroAlerta"
+                            placeholder="UUID de la alerta"
+                            autocomplete="off"
+                        >
+                    </div>
+
+                    <div class="grupo-filtro">
+                        <label for="filtroAccion">Tipo de evento</label>
+                        <select id="filtroAccion">
+                            <option value="">Todos</option>
+                            <option value="alerts.register">
+                                Registro de alerta
+                            </option>
+                            <option value="alerts.evaluate">
+                                Evaluación
+                            </option>
+                            <option value="notifications.send">
+                                Notificación
+                            </option>
+                            <option value="analysis.speechmatics">
+                                Speechmatics
+                            </option>
+                            <option value="analysis.jev">
+                                JEV
+                            </option>
+                            <option value="alerts.flow">
+                                Flujo de alerta
+                            </option>
+                        </select>
+                    </div>
+
+                    <div class="grupo-filtro">
+                        <label for="filtroResultado">Resultado</label>
+                        <select id="filtroResultado">
+                            <option value="">Todos</option>
+                            <option value="success">Exitoso</option>
+                            <option value="failure">Fallido</option>
+                            <option value="skipped">Omitido</option>
+                        </select>
+                    </div>
+
+                    <div class="grupo-filtro">
+                        <label for="filtroOrden">Orden</label>
+                        <select id="filtroOrden">
+                            <option value="desc">
+                                Más recientes primero
+                            </option>
+                            <option value="asc">
+                                Más antiguos primero
+                            </option>
+                        </select>
+                    </div>
+
+                    <div class="acciones-filtros">
+                        <button
+                            type="submit"
+                            class="boton-principal"
+                        >
+                            Aplicar filtros
+                        </button>
+
+                        <button
+                            type="button"
+                            class="boton-limpiar"
+                            id="limpiarFiltros"
+                        >
+                            Limpiar
+                        </button>
+                    </div>
+                </form>
+
+                <div
+                    class="estado-bitacora"
+                    id="estadoCarga"
+                    hidden
+                    aria-live="polite"
+                >
+                    <div class="spinner"></div>
+                    <span>
+                        Cargando eventos de la bitácora...
+                    </span>
+                </div>
+
+                <div
+                    class="estado-bitacora estado-error"
+                    id="estadoError"
+                    hidden
+                    role="alert"
+                >
+                    <strong>
+                        No fue posible cargar la bitácora.
+                    </strong>
+
+                    <span id="mensajeError">
+                        Intenta nuevamente.
+                    </span>
+
+                    <button
+                        type="button"
+                        class="boton-secundario"
+                        id="reintentarBitacora"
+                    >
+                        Reintentar
+                    </button>
+                </div>
+
+                <div
+                    class="estado-bitacora"
+                    id="estadoVacio"
+                    hidden
+                >
+                    <strong>
+                        No hay eventos para mostrar
+                    </strong>
+
+                    <span>
+                        No se encontraron registros para el periodo o filtros seleccionados.
+                    </span>
+                </div>
+
+                <div
+                    class="contenedor-tabla-bitacora"
+                    id="contenedorTabla"
+                >
+                    <table class="tabla-bitacora">
+                        <thead>
+                            <tr>
+                                <th>Fecha y hora</th>
+                                <th>Acción</th>
+                                <th>Resultado</th>
+                                <th>Actor</th>
+                                <th>Alerta</th>
+                                <th>Canal</th>
+                                <th>Detalle</th>
+                            </tr>
+                        </thead>
+
+                        <tbody id="tablaEventos"></tbody>
+                    </table>
+                </div>
+
+                <div
+                    class="paginacion-bitacora"
+                    id="paginacionBitacora"
+                >
+                    <span id="textoPaginacion">
+                        0 eventos
+                    </span>
+
+                    <div class="botones-paginacion">
+                        <button
+                            type="button"
+                            class="boton-paginacion"
+                            id="paginaAnterior"
+                            disabled
+                        >
+                            Anterior
+                        </button>
+
+                        <button
+                            type="button"
+                            class="boton-paginacion"
+                            id="paginaSiguiente"
+                            disabled
+                        >
+                            Siguiente
+                        </button>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <div
+        class="panel-detalle-fondo"
+        id="detalleFondo"
+        hidden
+    >
+        <aside
+            class="panel-detalle-evento"
+            id="panelDetalle"
+            aria-labelledby="tituloDetalleEvento"
+            aria-modal="true"
+            role="dialog"
+        >
+            <div class="cabecera-detalle-evento">
+                <div>
+                    <h2 id="tituloDetalleEvento">
+                        Detalle del evento
+                    </h2>
+                </div>
+
+                <button
+                    type="button"
+                    class="boton-cerrar-detalle"
+                    id="cerrarDetalle"
+                    aria-label="Cerrar detalle"
+                >
+                    ×
+                </button>
+            </div>
+
+            <div class="contenido-detalle-evento">
+                <div class="dato-detalle">
+                    <span>Fecha y hora</span>
+                    <strong id="detalleFecha">—</strong>
+                </div>
+
+                <div class="dato-detalle">
+                    <span>Acción</span>
+                    <strong id="detalleAccion">—</strong>
+                </div>
+
+                <div class="dato-detalle">
+                    <span>Resultado</span>
+                    <strong id="detalleResultado">—</strong>
+                </div>
+
+                <div class="dato-detalle">
+                    <span>Actor</span>
+                    <strong id="detalleActor">—</strong>
+                </div>
+
+                <div class="dato-detalle">
+                    <span>ID de alerta</span>
+                    <strong id="detalleAlerta">—</strong>
+                </div>
+
+                <div class="dato-detalle">
+                    <span>ID de sesión</span>
+                    <strong id="detalleSesion">—</strong>
+                </div>
+
+                <div class="dato-detalle">
+                    <span>Secuencia</span>
+                    <strong id="detalleSecuencia">—</strong>
+                </div>
+
+                <div class="dato-detalle">
+                    <span>Canal</span>
+                    <strong id="detalleCanal">—</strong>
+                </div>
+
+                <div class="dato-detalle">
+                    <span>Código de error</span>
+                    <strong id="detalleError">—</strong>
+                </div>
+
+                <div class="dato-detalle">
+                    <span>Duración</span>
+                    <strong id="detalleDuracion">—</strong>
+                </div>
+            </div>
+
+            <button
+                type="button"
+                class="boton-principal boton-ver-alerta"
+                id="verEventosAlerta"
+                hidden
+            >
+                Ver eventos relacionados con esta alerta
+            </button>
+        </aside>
+    </div>
+
+    <script src="{% static 'web/js/solicitudes.js' %}"></script>
+    <script src="{% static 'web/js/estados.js' %}"></script>
+    <script src="{% static 'web/js/api.js' %}"></script>
+    <script src="{% static 'web/js/components.js' %}"></script>
+    <script src="{% static 'web/js/bitacora.js' %}"></script>
+</body>
+</html>

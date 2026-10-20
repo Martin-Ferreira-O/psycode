@@ -22,7 +22,7 @@ Endpoints sin barra final; el prefijo sí se escribe `/api/v1/`. No depender de 
 | POST | `/api/v1/auth/admin/users` | `accounts:admin_user_create` | Protegido (solo rol admin) |
 | PATCH | `/api/v1/auth/admin/users/{user_id}` | `accounts:admin_user_update` | Protegido (solo rol admin) |
 | PATCH | `/api/v1/auth/admin/users/{user_id}/toggle-active` | `accounts:admin_user_toggle_active` | Protegido (solo rol admin) |
-| GET | `/api/v1/audit-events` | `alerts:audit-list` | Protegido (admin/supervisor) |
+| GET | `/api/v1/audit-events` | `alerts:audit-list` | Protegido (solo rol admin) |
 | GET | `/api/v1/alerts` | `alerts:list` | Protegido |
 | GET | `/api/v1/alerts/{alerta_id}` | `alerts:detail` | Protegido |
 | GET, POST | `/api/v1/alerts/{alerta_id}/evaluacion` | `alerts:evaluation` | Protegido |
@@ -676,7 +676,7 @@ Errores: `NOTIFICATION_TIMEOUT`, `NOTIFICATION_CONNECTION_FAILED`, `NOTIFICATION
 
 ### Consulta de bitácora (SCRUM-65)
 
-`GET /api/v1/audit-events`, JWT obligatorio; solo usuarios activos con rol `admin` o `supervisor`, o superusuarios. Anónimo → 401, rol no autorizado → 403, persistencia indisponible → 503. Otros métodos → 405.
+`GET /api/v1/audit-events`, JWT obligatorio; solo usuarios activos con rol `admin`, o superusuarios. Anónimo → 401, rol no autorizado → 403, persistencia indisponible → 503. Otros métodos → 405.
 
 | Parámetro | Regla |
 |---|---|

@@ -239,17 +239,26 @@ h1,h2,h3 {
 .registro-contenido {display: flex;align-items: flex-start;gap: 11px;}
 
 .registro-icono {
-    display: grid;
-    width: 35px;
-    height: 35px;
-    flex: 0 0 35px;
-    place-items: center;
-    border-radius: 9px;
-    background: var(--azul-claro);
-    color: var(--azul);
-    font-size: 14px;
-    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    flex: 0 0 36px;
+    border-radius: 10px;
+    background: #fff0f1;
+    border: 1px solid #efbec4;
+    color: #c74b5b;
 }
+
+.icono-registro-svg {
+    display: block;
+    width: 18px;
+    height: 18px;
+    fill: none;
+    stroke: currentColor;
+}
+
 
 .registro-id,
 .registro-tipo,

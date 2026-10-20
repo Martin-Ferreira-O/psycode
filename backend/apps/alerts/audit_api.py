@@ -1,4 +1,4 @@
-"""Consulta de bitácora para administradores y supervisores activos."""
+"""Consulta de bitácora para administradores activos."""
 from datetime import timezone
 
 from rest_framework import serializers
@@ -14,7 +14,7 @@ from .repositories import AlertsRepository
 class AuditPermission(BasePermission):
     def has_permission(self, request, view):
         user = request.user
-        return bool(user.is_active and (user.is_superuser or user.role in (Role.ADMIN, Role.SUPERVISOR)))
+        return bool(user.is_active and (user.is_superuser or user.role == Role.ADMIN))
 
 
 class AuditQuerySerializer(serializers.Serializer):

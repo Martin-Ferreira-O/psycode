@@ -35,6 +35,16 @@
         >
             Gestión de usuarios
         </a>
+
+        <a
+            href="{% url 'web:bitacora' %}"
+            class="enlace-menu{% if seccion_activa == 'bitacora' %} activo{% endif %}"
+            data-admin-only
+            hidden
+            {% if seccion_activa == "bitacora" %}aria-current="page"{% endif %}
+        >
+            Bitácora
+        </a>
     </nav>
 
     <div class="espacio-lateral"></div>

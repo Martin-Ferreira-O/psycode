@@ -25,5 +25,9 @@ def usuarios(request):
     return render(request, "web/usuarios.html")
 
 
+def bitacora(request):
+    return render(request, "web/bitacora.html")
+
+
 def password_reset_confirm(request):
     return render(request, "web/password_reset_confirm.html")

@@ -11,6 +11,7 @@ urlpatterns = [
     path("alertas", views.alertas, name="alertas"),
     path("evaluaciones", views.evaluaciones, name="evaluaciones"),
     path("usuarios", views.usuarios, name="usuarios"),
+    path("bitacora", views.bitacora, name="bitacora"),
     path(
         "password-reset/confirm",
         views.password_reset_confirm,

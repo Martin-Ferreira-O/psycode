@@ -8,7 +8,6 @@ const datos = {
         { etiqueta: "Sáb", total: 2 },
         { etiqueta: "Dom", total: 1 },
     ],
-
     mes: [
         { etiqueta: "Sem 1", total: 15 },
         { etiqueta: "Sem 2", total: 22 },
@@ -95,7 +94,36 @@ function mostrarRegistros() {
             return `
                 <article class="registro">
                     <div class="registro-contenido">
-                        <span class="registro-icono">!</span>
+                        <span class="registro-icono" aria-hidden="true">
+                            <svg
+                                viewBox="0 0 24 24"
+                                width="18"
+                                height="18"
+                                class="icono-registro-svg"
+                                style="width:18px;height:18px;display:block;fill:none;stroke:#c74b5b;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;"
+                            >
+                                <circle
+                                    cx="12"
+                                    cy="12"
+                                    r="9"
+                                    fill="none"
+                                    stroke="#c74b5b"
+                                ></circle>
+
+                                <path
+                                    d="M12 7.5v6"
+                                    fill="none"
+                                    stroke="#c74b5b"
+                                ></path>
+
+                                <path
+                                    d="M12 16.8h.01"
+                                    fill="none"
+                                    stroke="#c74b5b"
+                                    stroke-width="3"
+                                ></path>
+                            </svg>
+                        </span>
 
                         <div>
                             <span class="registro-id">

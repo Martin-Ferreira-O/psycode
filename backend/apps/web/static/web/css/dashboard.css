@@ -500,6 +500,120 @@
     color: #102641;
 }
 
+.tarjeta-resumen {
+    position: relative;
+    overflow: hidden;
+}
+
+.tarjeta-total {
+    background: linear-gradient(
+        135deg,
+        #ffffff 55%,
+        #edf5ff 100%
+    );
+    border-color: #c7dbf3;
+}
+
+.tarjeta-pendientes {
+    background: linear-gradient(
+        135deg,
+        #ffffff 55%,
+        #fff8eb 100%
+    );
+    border-color: #ead8b5;
+}
+
+.tarjeta-revisadas {
+    background: linear-gradient(
+        135deg,
+        #ffffff 55%,
+        #eef9f3 100%
+    );
+    border-color: #c2dece;
+}
+
+.tarjeta-total::before,
+.tarjeta-pendientes::before,
+.tarjeta-revisadas::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 4px;
+    height: 100%;
+}
+
+.tarjeta-total::before {
+    background: #4b86bd;
+}
+
+.tarjeta-pendientes::before {
+    background: #d5a04b;
+}
+
+.tarjeta-revisadas::before {
+    background: #5da77c;
+}
+
+.resumen-contenido {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+}
+
+.flecha-estadisticas {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: #e3effa;
+    color: #255e94;
+    transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.icono-flecha {
+    width: 20px;
+    height: 20px;
+    stroke: currentColor;
+    stroke-width: 2.6;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.tarjeta-total:hover .flecha-estadisticas {
+    transform: translateX(4px);
+    background: #d4e7f7;
+}
+
+.resumen-indicacion {
+    display: block;
+    margin-top: 8px;
+    font-size: 12px;
+    font-weight: 400;
+    color: #69829b;
+}
+
+.tarjeta-total:hover .flecha-estadisticas {
+    transform: translateX(4px);
+    background: #d4e7f7;
+}
+
+.tarjeta-total:hover {
+    border-color: #9ebfdf;
+}
+
+.tarjeta-pendientes:hover {
+    border-color: #d8bc83;
+}
+
+.tarjeta-revisadas:hover {
+    border-color: #94c5a9;
+}
+
 @media (max-width: 1200px) {
     .contenido-dashboard {
         padding: 30px;
