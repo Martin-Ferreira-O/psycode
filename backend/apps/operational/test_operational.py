@@ -29,9 +29,14 @@ class OperationalConfigTests(APITestCase):
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         self.assertEqual(res.data["data"]["primary_email"], "cliente@clinica.cl")
         self.assertEqual(res.data["data"]["backup_email"], "sergio@clinica.cl")
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["data"]["timezone"], "America/Santiago")
 
-    def test_supervisor_no_puede_modificar(self):
+    def test_supervisor_no_puede_consultar_ni_modificar(self):
         self.client.force_authenticate(user=self.supervisor)
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         payload = {"open_time": "08:00"}
         res = self.client.put(self.url, payload, format="json")
         self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)

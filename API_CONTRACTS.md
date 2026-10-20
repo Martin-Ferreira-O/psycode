@@ -23,13 +23,14 @@ Endpoints sin barra final; el prefijo sí se escribe `/api/v1/`. No depender de 
 | PATCH | `/api/v1/auth/admin/users/{user_id}` | `accounts:admin_user_update` | Protegido (solo rol admin) |
 | PATCH | `/api/v1/auth/admin/users/{user_id}/toggle-active` | `accounts:admin_user_toggle_active` | Protegido (solo rol admin) |
 | GET | `/api/v1/audit-events` | `alerts:audit-list` | Protegido (solo rol admin) |
+| GET, PUT | `/api/v1/configuracion-operativa` | `operational:configuracion_operativa` | Protegido (solo rol admin) |
 | GET | `/api/v1/alerts` | `alerts:list` | Protegido |
 | GET | `/api/v1/alerts/{alerta_id}` | `alerts:detail` | Protegido |
 | GET, POST | `/api/v1/alerts/{alerta_id}/evaluacion` | `alerts:evaluation` | Protegido |
 | GET | `/api/v1/dashboard/resumen` | `dashboard:summary` | Protegido |
 | GET | `/api/v1/dashboard/estadisticas` | `dashboard:statistics` | Protegido |
 
-Protegido significa profesional autenticado y activo. No hay roles adicionales definidos para alertas y métricas: todos los usuarios activos acceden a consulta y evaluación. Las rutas bajo `/api/v1/auth/admin/` exigen rol `admin` (`403 AUTH_FORBIDDEN` para supervisores). No existe registro público de usuarios. GET lee y POST acciona o crea evaluación. PUT/PATCH/DELETE no están definidos para estos recursos, salvo PATCH en la administración de cuentas.
+Protegido significa profesional autenticado y activo. No hay roles adicionales definidos para alertas y métricas: todos los usuarios activos acceden a consulta y evaluación. Las rutas bajo `/api/v1/auth/admin/` y `/api/v1/configuracion-operativa` exigen rol `admin` (`403 AUTH_FORBIDDEN` para supervisores). La configuración operativa permite GET y PUT; su formulario administra días habilitados, horario local y destinatarios de alertas, sin credenciales SMTP. No existe registro público de usuarios. GET lee y POST acciona o crea evaluación. PUT/PATCH/DELETE no están definidos para los demás recursos, salvo PATCH en la administración de cuentas.
 
 ### Tipos, validación y respuestas
 

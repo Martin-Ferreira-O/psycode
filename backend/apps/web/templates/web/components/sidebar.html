@@ -45,6 +45,16 @@
         >
             Bitácora
         </a>
+
+        <a
+            href="{% url 'web:configuracion_operativa' %}"
+            class="enlace-menu{% if seccion_activa == 'configuracion_operativa' %} activo{% endif %}"
+            data-admin-only
+            hidden
+            {% if seccion_activa == "configuracion_operativa" %}aria-current="page"{% endif %}
+        >
+            Configuración operativa
+        </a>
     </nav>
 
     <div class="espacio-lateral"></div>

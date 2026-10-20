@@ -1,0 +1,124 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configuración operativa | Psycode</title>
+    <link rel="stylesheet" href="{% static 'web/css/styles.css' %}">
+    <link rel="stylesheet" href="{% static 'web/css/dashboard.css' %}">
+    <link rel="stylesheet" href="{% static 'web/css/estados.css' %}">
+    <link rel="stylesheet" href="{% static 'web/css/configuracion_operativa.css' %}">
+</head>
+<body>
+    <div class="aplicacion">
+        {% include "web/components/sidebar.html" with seccion_activa="configuracion_operativa" %}
+
+        <main class="contenido-dashboard">
+            <header class="cabecera-dashboard">
+                <div>
+                    <h1>Configuración operativa</h1>
+                    <p class="descripcion-pagina">
+                        Administra los días, el horario clínico y los destinatarios de alertas.
+                    </p>
+                </div>
+                {% include "web/components/usuario_sesion.html" %}
+            </header>
+
+            <section class="panel-configuracion" aria-labelledby="tituloConfiguracion">
+                <div
+                    id="estadoConfiguracion"
+                    class="estado-solicitud"
+                    role="status"
+                    aria-live="polite"
+                >
+                    Verificando permisos y cargando configuración…
+                </div>
+
+                <div id="accesoDenegado" class="estado-solicitud" role="alert" hidden>
+                    Esta pantalla y sus datos están disponibles únicamente para administradores.
+                </div>
+
+                <div id="contenidoConfiguracion" hidden>
+                    <div class="configuracion-cabecera">
+                        <div>
+                            <h2 id="tituloConfiguracion">Horario clínico y alertas</h2>
+                            <p>La configuración vigente se carga desde el servidor.</p>
+                        </div>
+                        <div class="zona-horaria">
+                            <span>Zona horaria utilizada</span>
+                            <strong id="zonaHoraria">—</strong>
+                        </div>
+                    </div>
+
+                    <form id="formularioConfiguracion" novalidate>
+                        <fieldset class="grupo-configuracion">
+                            <legend>Días habilitados</legend>
+                            <p class="ayuda-configuracion">Selecciona los días en que se autoriza la operación clínica.</p>
+                            <div class="dias-semana" id="diasSemana">
+                                <label class="dia-semana"><input type="checkbox" name="enabled_days" value="0"><span>Lunes</span></label>
+                                <label class="dia-semana"><input type="checkbox" name="enabled_days" value="1"><span>Martes</span></label>
+                                <label class="dia-semana"><input type="checkbox" name="enabled_days" value="2"><span>Miércoles</span></label>
+                                <label class="dia-semana"><input type="checkbox" name="enabled_days" value="3"><span>Jueves</span></label>
+                                <label class="dia-semana"><input type="checkbox" name="enabled_days" value="4"><span>Viernes</span></label>
+                                <label class="dia-semana"><input type="checkbox" name="enabled_days" value="5"><span>Sábado</span></label>
+                                <label class="dia-semana"><input type="checkbox" name="enabled_days" value="6"><span>Domingo</span></label>
+                            </div>
+                        </fieldset>
+
+                        <fieldset class="grupo-configuracion">
+                            <legend>Horario clínico</legend>
+                            <div class="campos-horario">
+                                <label class="campo-configuracion" for="horaApertura">
+                                    <span>Apertura</span>
+                                    <input id="horaApertura" name="open_time" type="time" required>
+                                </label>
+                                <label class="campo-configuracion" for="horaCierre">
+                                    <span>Cierre</span>
+                                    <input id="horaCierre" name="close_time" type="time" required>
+                                </label>
+                            </div>
+                            <p class="ayuda-configuracion">La hora de apertura debe ser anterior a la de cierre.</p>
+                        </fieldset>
+
+                        <fieldset class="grupo-configuracion">
+                            <legend>Destinatarios de alertas</legend>
+                            <div class="campos-correos">
+                                <label class="campo-configuracion" for="correoPrincipal">
+                                    <span>Correo principal</span>
+                                    <input id="correoPrincipal" name="primary_email" type="email"
+                                           maxlength="254" autocomplete="email" required>
+                                </label>
+                                <label class="campo-configuracion" for="correoRespaldo">
+                                    <span>Correo de respaldo</span>
+                                    <input id="correoRespaldo" name="backup_email" type="email"
+                                           maxlength="254" autocomplete="email" required>
+                                </label>
+                            </div>
+                            <p class="ayuda-configuracion">
+                                El correo de respaldo se utiliza solo si el envío al destinatario principal falla o agota el tiempo de espera.
+                            </p>
+                        </fieldset>
+
+                        <div id="mensajeFormularioConfiguracion" class="mensaje-formulario" role="alert" hidden></div>
+                        <div id="confirmacionConfiguracion" class="estado-solicitud" role="status" hidden></div>
+
+                        <div class="acciones-configuracion">
+                            <span id="ultimaActualizacion" class="ultima-actualizacion"></span>
+                            <button id="guardarConfiguracion" class="boton-guardar-configuracion" type="submit">
+                                Guardar configuración
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="{% static 'web/js/solicitudes.js' %}"></script>
+    <script src="{% static 'web/js/estados.js' %}"></script>
+    <script src="{% static 'web/js/api.js' %}"></script>
+    <script src="{% static 'web/js/components.js' %}"></script>
+    <script src="{% static 'web/js/configuracion_operativa.js' %}"></script>
+</body>
+</html>
