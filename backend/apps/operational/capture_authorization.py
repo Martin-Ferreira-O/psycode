@@ -57,6 +57,11 @@ class BoxCaptureAuthorization:
         }
 
 
+def _load_clinical_config() -> OperationalConfiguration | None:
+    """Consulta el horario existente sin crear una configuración que autorice captura."""
+    return OperationalConfiguration.objects.filter(pk=1).first()
+
+
 def _resolve_clinical_window(config, current_dt: datetime) -> tuple[datetime, datetime] | None:
     """Calcula la ventana [apertura, cierre) del horario clínico para la fecha local de current_dt."""
     if config is None:
@@ -112,12 +117,12 @@ class CaptureAuthorizationService:
     def __init__(
         self,
         agenda_service: AgendaService | None = None,
-        config_loader: Callable[[], OperationalConfiguration] | None = None,
+        config_loader: Callable[[], OperationalConfiguration | None] | None = None,
     ):
         # Si se reinicia el proceso, una instancia nueva de AgendaService inicia vacía (no disponible)
         self.agenda = agenda_service if agenda_service is not None else AgendaService()
-        self.config_loader = config_loader if config_loader is not None else OperationalConfiguration.load
-        self._last_states: dict[str, BoxCaptureAuthorization] = {}
+        self.config_loader = config_loader if config_loader is not None else _load_clinical_config
+        self._last_states: dict[str, bool] = {}
         self._logged_conditions: dict[str, str] = {}
         self._lock = Lock()
 
@@ -139,9 +144,10 @@ class CaptureAuthorizationService:
             self._logged_conditions[box_name] = condition_key
         AuditWriter.record(action, outcome, error_code=error_code)
 
-    def _clear_audit_condition(self, box_name: str):
+    def _clear_audit_condition(self, box_name: str, condition_key: str | None = None):
         with self._lock:
-            self._logged_conditions.pop(box_name, None)
+            if condition_key is None or self._logged_conditions.get(box_name) == condition_key:
+                self._logged_conditions.pop(box_name, None)
 
     def evaluate_box(self, box: str | int, when: datetime | None = None) -> BoxCaptureAuthorization:
         """Determina si el box está autorizado para capturar en el instante indicado."""
@@ -166,6 +172,9 @@ class CaptureAuthorizationService:
                 origen=ORIGIN_NONE,
             )
 
+        # Una lectura exitosa termina el incidente, incluso fuera de horario.
+        # Conserva la deduplicación de los registros de respaldo de la agenda.
+        self._clear_audit_condition(box_name, "config_error")
         clinical_window = _resolve_clinical_window(config, current_dt)
         if clinical_window is None:
             return BoxCaptureAuthorization(
@@ -245,13 +254,13 @@ class CaptureAuthorizationService:
         )
 
     def evaluate_transition(self, box: str | int, when: datetime | None = None) -> BoxCaptureAuthorization | None:
-        """Informa una sola transición por cada cambio de autorización del box."""
+        """Informa el estado inicial y cada cambio entre autorizado y denegado."""
         current = self.evaluate_box(box, when)
         with self._lock:
             previous = self._last_states.get(current.box)
-            if previous == current:
+            if previous == current.authorized:
                 return None
-            self._last_states[current.box] = current
+            self._last_states[current.box] = current.authorized
         AuditWriter.record(
             "capture.authorization.transition",
             "success" if current.authorized else "skipped",

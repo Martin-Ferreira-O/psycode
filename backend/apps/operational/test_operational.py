@@ -214,6 +214,20 @@ class CaptureAuthorizationIntegrationTests(APITestCase):
         res_sin_config = self.auth_service.evaluate_box(5, datetime(2026, 10, 19, 10, 0, tzinfo=SANTIAGO))
         self.assertFalse(res_sin_config.authorized)
 
+    def test_deniega_sin_fila_de_configuracion_y_no_crea_horario_por_defecto(self):
+        self._load_box(3)
+        OperationalConfiguration.objects.all().delete()
+        when = datetime(2026, 10, 19, 9, 30, tzinfo=SANTIAGO)
+
+        # Box 3 tiene cita vigente; box 4 no tiene agenda disponible.
+        for box in (3, 4):
+            with self.subTest(box=box):
+                result = self.auth_service.evaluate_box(box, when)
+                self.assertFalse(result.authorized)
+                self.assertIsNone(result.inicio)
+                self.assertIsNone(result.termino)
+                self.assertFalse(OperationalConfiguration.objects.exists())
+
     def test_recorta_ventana_de_cita_a_limites_del_horario_clinico(self):
         # Cita de 17:30 a 18:30, pero el horario clínico termina a las 18:00
         self._load_box(3, [("19/10/2026", "17:30", "01:00", "REALIZADA")])
@@ -247,6 +261,75 @@ class CaptureAuthorizationIntegrationTests(APITestCase):
         # Cuarta evaluación que sigue sin cita: sin cambio -> None
         fourth = self.auth_service.evaluate_transition(3, t_10_30)
         self.assertIsNone(fourth)
+
+    def test_no_emite_transicion_si_solo_cambia_origen_de_denegacion(self):
+        self._load_box(3, [])
+        with patch("backend.common.audit.AuditWriter.emit") as audit_emit:
+            initial = self.auth_service.evaluate_transition(3, datetime(2026, 10, 19, 7, 59, tzinfo=SANTIAGO))
+            self.assertIsNotNone(initial)
+            self.assertFalse(initial.authorized)
+            self.assertEqual(initial.origen, ORIGIN_CLINICAL_SCHEDULE)
+            self.assertIsNone(self.auth_service.evaluate_transition(3, datetime(2026, 10, 19, 8, 0, tzinfo=SANTIAGO)))
+            self.assertIsNone(self.auth_service.evaluate_transition(3, datetime(2026, 10, 19, 18, 0, tzinfo=SANTIAGO)))
+
+        self.assertEqual(audit_emit.call_count, 1)
+        self.assertEqual(audit_emit.call_args.args[0]["action"], "capture.authorization.transition")
+
+    def test_no_emite_transicion_entre_citas_consecutivas_sin_interrupcion(self):
+        self._load_box(3, [
+            ("19/10/2026", "09:00", "01:00", "CONFIRMADA"),
+            ("19/10/2026", "10:00", "01:00", "CONFIRMADA"),
+        ])
+        with patch("backend.common.audit.AuditWriter.emit") as audit_emit:
+            initial = self.auth_service.evaluate_transition(3, datetime(2026, 10, 19, 9, 59, tzinfo=SANTIAGO))
+            self.assertTrue(initial.authorized)
+            self.assertIsNone(self.auth_service.evaluate_transition(3, datetime(2026, 10, 19, 10, 0, tzinfo=SANTIAGO)))
+            self.assertIsNone(self.auth_service.evaluate_transition(3, datetime(2026, 10, 19, 10, 59, tzinfo=SANTIAGO)))
+            end = self.auth_service.evaluate_transition(3, datetime(2026, 10, 19, 11, 0, tzinfo=SANTIAGO))
+            self.assertFalse(end.authorized)
+
+        self.assertEqual(audit_emit.call_count, 2)
+
+    def test_no_emite_transicion_al_recuperar_agenda_si_sigue_autorizado(self):
+        when = datetime(2026, 10, 19, 9, 30, tzinfo=SANTIAGO)
+        initial = self.auth_service.evaluate_transition(3, when)
+        self.assertTrue(initial.authorized)
+        self.assertEqual(initial.origen, ORIGIN_CLINICAL_SCHEDULE)
+
+        self._load_box(3)
+        with patch("backend.common.audit.AuditWriter.emit") as audit_emit:
+            self.assertIsNone(self.auth_service.evaluate_transition(3, when))
+        audit_emit.assert_not_called()
+        self.assertEqual(self.auth_service.evaluate_box(3, when).origen, ORIGIN_AGENDA)
+
+        self._load_box(3, [])
+        self.assertFalse(self.auth_service.evaluate_transition(3, when).authorized)
+
+    def test_registra_nuevo_fallo_de_configuracion_tras_recuperacion_fuera_de_horario(self):
+        config = OperationalConfiguration.objects.get(pk=1)
+        outcomes = [RuntimeError("fallo inicial"), RuntimeError("fallo continuo"), config,
+                    RuntimeError("nuevo fallo"), RuntimeError("nuevo fallo continuo")]
+        times = [(10, 0), (10, 1), (20, 0), (20, 1), (20, 2)]
+        with patch.object(self.auth_service, "config_loader", side_effect=outcomes):
+            with patch("backend.common.audit.AuditWriter.emit") as audit_emit:
+                for hour, minute in times:
+                    result = self.auth_service.evaluate_box(3, datetime(2026, 10, 19, hour, minute, tzinfo=SANTIAGO))
+                    self.assertFalse(result.authorized)
+
+        self.assertEqual(audit_emit.call_count, 2)
+        for call in audit_emit.call_args_list:
+            self.assertEqual(call.args[0]["error_code"], "CLINICAL_SCHEDULE_UNAVAILABLE")
+            self.assertEqual(call.args[0]["outcome"], "failure")
+
+    def test_no_repite_registro_de_respaldo_en_consultas_consecutivas(self):
+        with patch("backend.common.audit.AuditWriter.emit") as audit_emit:
+            for minute in (0, 1, 2):
+                result = self.auth_service.evaluate_box(3, datetime(2026, 10, 19, 10, minute, tzinfo=SANTIAGO))
+                self.assertTrue(result.authorized)
+                self.assertEqual(result.origen, ORIGIN_CLINICAL_SCHEDULE)
+
+        self.assertEqual(audit_emit.call_count, 1)
+        self.assertEqual(audit_emit.call_args.args[0]["error_code"], "AGENDA_NOT_AVAILABLE")
 
     def test_registra_fallos_de_agenda_y_usa_respaldo(self):
         when = datetime(2026, 10, 19, 11, 0, tzinfo=SANTIAGO)
