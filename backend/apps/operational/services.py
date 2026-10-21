@@ -1,15 +1,19 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from datetime import datetime, time
 from zoneinfo import ZoneInfo
 from django.db import transaction
 from backend.common.errors import ServiceError
+from .capture_authorization import BoxCaptureAuthorization, CaptureAuthorizationService
 from .models import OperationalConfiguration
 
 SANTIAGO_TZ = ZoneInfo("America/Santiago")
 
 
 class OperationalService:
+    def __init__(self, agenda_service=None):
+        self._capture_auth = CaptureAuthorizationService(agenda_service=agenda_service)
+
     def get_config(self):
         config = OperationalConfiguration.load()
         return {
@@ -99,3 +103,11 @@ class OperationalService:
             "primary_email": config.primary_email,
             "backup_email": config.backup_email,
         }
+
+    def authorize_box_capture(self, box: str | int, check_time: datetime | None = None) -> BoxCaptureAuthorization:
+        """SCRUM-70: Evalúa autorización de captura para un box combinando agenda y horario clínico."""
+        return self._capture_auth.evaluate_box(box, check_time)
+
+    def authorize_box_transition(self, box: str | int, check_time: datetime | None = None) -> BoxCaptureAuthorization | None:
+        """SCRUM-70: Devuelve la autorización solo cuando ocurre una transición de estado."""
+        return self._capture_auth.evaluate_transition(box, check_time)

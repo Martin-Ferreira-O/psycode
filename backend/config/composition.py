@@ -1,8 +1,10 @@
-from backend.apps.accounts.clients import EmailClient
+﻿from backend.apps.accounts.clients import EmailClient
 from backend.apps.accounts.repositories import AccountsRepository
 from backend.apps.accounts.services import AccountsService
+from backend.apps.agenda.services import AgendaService
 from backend.apps.alerts.repositories import AlertsRepository
 from backend.apps.alerts.services import AlertsService
+from backend.apps.operational.capture_authorization import CaptureAuthorizationService
 
 
 def accounts_service():
@@ -17,6 +19,14 @@ def alerts_service(store=None):
     from backend.apps.notifications.services import NotificationService
     repository = store if store is not None else AlertsRepository()
     return AlertsService(repository, NotificationService(store=repository))
+
+
+def capture_authorization_service(agenda_service=None, config_loader=None):
+    """SCRUM-70: Construye el servicio de autorización de captura por box para SCRUM-71."""
+    return CaptureAuthorizationService(
+        agenda_service=agenda_service if agenda_service is not None else AgendaService(),
+        config_loader=config_loader,
+    )
 
 
 def analysis_worker(*, settings=None, directory=None, speechmatics_http=None, jev_http=None,
