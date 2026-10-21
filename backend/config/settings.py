@@ -71,6 +71,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "backend.apps.web.apps.WebConfig",
     "backend.apps.operational.apps.OperationalConfig",
+    "backend.apps.capture.apps.CaptureConfig",
 ]
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",

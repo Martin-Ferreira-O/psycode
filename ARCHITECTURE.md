@@ -6,7 +6,7 @@
 
 Un **monolito modular con capas ligeras** permite desplegar un solo backend y repartir trabajo por módulos. Los contratos separan el desarrollo de frontend, consultas, persistencia, evaluaciones y notificaciones. Las capas son responsabilidades dentro de cada módulo, no servicios distribuidos.
 
-No se incorporan microservicios, buses de eventos, CQRS, contenedores de inyección, repositorios genéricos, colas ni componentes de negocio preconstruidos. Tampoco se incorporan captura de audio, transcripción, clasificación automática, gestión de pacientes o CRUD de sesiones/boxes. `sesion_id` y `box` son referencias recibidas por el caso de uso interno de registro.
+No se incorporan microservicios, buses de eventos, CQRS, contenedores de inyección, repositorios genéricos, colas ni componentes de negocio preconstruidos. SCRUM-71 incorpora [sesiones persistentes de captura y su bandeja de órdenes SQL](backend/apps/capture/README.md), integradas con la autorización de SCRUM-70. No incorpora ejecución de captura, gestión de pacientes ni CRUD público de sesiones/boxes. Para alertas, `sesion_id` y `box` siguen siendo referencias recibidas por el caso de uso interno de registro, sin relación entre bases de datos.
 
 ### Base tecnológica prevista
 
@@ -82,6 +82,13 @@ Firmas conceptuales que deben respetar las futuras implementaciones. Los DTO de 
 Accounts tendrá un usuario propio basado en las capacidades de Django, con UUID estable desde la primera migración. Conservará usuario, correo institucional único, nombre, contraseña hasheada y estado activo. Los nombres internos de Django se traducen a los nombres públicos del contrato. El usuario se define antes de iniciar migraciones; los usuarios de prueba pertenecen a SCRUM-31.
 
 Refresh y revocaciones se almacenan en SQLite. La sesión de autenticación no es la sesión clínica indicada por `sesion_id`. No se crean relaciones SQL con colecciones MongoDB.
+
+SCRUM-71 almacena además `CaptureSession`, `AgentCommand`, `AcceptedSequence` y
+`CaptureEvent` en SQL. La sesión y sus órdenes/eventos se confirman atómicamente.
+La bitácora técnica de captura se mantiene en SQL y el logger compartido; la
+consulta MongoDB de bitácora de alertas conserva su contrato. El agente consume
+una interfaz interna con DTO; su transporte y ejecución pertenecen al adaptador
+del box. No se guardan archivos ni contenido clínico.
 
 ### MongoDB
 

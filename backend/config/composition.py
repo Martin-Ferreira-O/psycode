@@ -29,6 +29,14 @@ def capture_authorization_service(agenda_service=None, config_loader=None):
     )
 
 
+def capture_session_service(agenda_service=None, config_loader=None, **timeouts):
+    """Crear una vez en el coordinador, compartiendo la agenda de SCRUM-70."""
+    from backend.apps.capture.services import CaptureSessionService
+    return CaptureSessionService(
+        capture_authorization_service(agenda_service, config_loader), **timeouts,
+    )
+
+
 def analysis_worker(*, settings=None, directory=None, speechmatics_http=None, jev_http=None,
                     alert_store=None, audit=None):
     """Crear una vez dentro del trabajador interno. No iniciar en AppConfig/WSGI.

@@ -19,7 +19,7 @@ El nombre técnico de la base es `psycode`. `_id` es ObjectId interno de MongoDB
 
 1. **Una alerta, un documento.** Historial, detalle, dashboard y evaluación leen la misma colección. No hay proyección histórica del estado de evaluación: se muestra el estado actual.
 2. **Evaluación incrustada.** Una sola evaluación por alerta, objeto `evaluacion` o `null`. La escritura es atómica y condicionada a `estado_evaluacion=pendiente`, que es el mecanismo del 201/409 concurrente. Una colección aparte exigiría transacción multi-documento sin beneficio en v1.
-3. **Box y sesión no son entidades.** `box` es un atributo string; `sesion_id` es una referencia opaca al sistema clínico externo. El backlog no incluye CRUD de boxes ni de sesiones.
+3. **Box y sesión no son entidades de MongoDB.** `box` es un atributo string y `sesion_id` una referencia opaca. SCRUM-71 agrega [sesiones técnicas de captura en SQL](../backend/apps/capture/README.md), sin relaciones entre bases ni CRUD público de boxes/sesiones. Las alertas conservan su contrato de referencia UUID.
 4. **Semáforo derivado.** `semaforo` se calcula desde `nivel_severidad` (Anexo A). El documento lo materializa para filtrar y notificar, pero no es una segunda autoridad.
 5. **Bitácora aparte, no un arreglo en la alerta.** `audit_events` registra alta, evaluación e intentos de aviso sin inflar el documento clínico ni mezclar autenticación.
 6. **Identidad en SQLite, copia de trazabilidad en MongoDB.** `usuario_id` y `usuario` se copian al evaluar. Un cambio posterior de nombre en SQLite no reescribe evaluaciones ya guardadas.

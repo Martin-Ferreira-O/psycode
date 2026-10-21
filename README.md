@@ -216,6 +216,19 @@ en memoria.
 uv run python manage.py test backend.apps.agenda --settings=backend.config.test_settings
 ```
 
+## Sesiones de captura (SCRUM-71)
+
+La autorización de SCRUM-70 se integra con sesiones persistentes, órdenes de
+inicio/detención y confirmaciones mediante una interfaz interna del agente.
+Incluye secuencias sin duplicados por concurrencia, bitácora técnica SQL y
+recuperación de sesiones interrumpidas. No guarda audio ni datos de pacientes.
+[Contrato, integración y límites](backend/apps/capture/README.md).
+
+Después de actualizar, ejecuta `manage.py migrate`. El coordinador debe evaluar
+la autorización y recuperar sesiones periódicamente; la recuperación también
+puede ejecutarse con `manage.py recover_capture_sessions`. El comando no inicia
+capturas y `runserver` no arranca un coordinador automáticamente.
+
 ## Comprobar los cambios
 
 Ejecuta desde la raíz:
