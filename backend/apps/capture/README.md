@@ -7,6 +7,11 @@ origen, estados, fechas, secuencias, metadatos de archivo y códigos técnicos.
 El audio queda solo en archivos privados temporales. Los UUID de captura son
 distintos de las sesiones JWT.
 
+Para implementar el agente del box, consultar el
+[traspaso de integración SCRUM-72](../../../docs/SCRUM-72-INTEGRACION.md),
+que distingue la API de archivos disponible de los acuerdos pendientes para
+transportar órdenes y definir duración/solapamiento.
+
 ## Integración con SCRUM-70
 
 `OperationalService.authorize_box_capture()` y `authorize_box_transition()`
