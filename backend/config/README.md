@@ -1,21 +1,29 @@
 # Configuración del backend
 
-Aquí se configuran Django, las rutas raíz y la construcción del servicio de accounts. Las demás apps tienen rutas vacías hasta implementar sus tareas.
+Aquí se configuran Django, las rutas raíz y la composición de los servicios.
+
+La ingesta de captura está implementada en `/api/v1/internal/fragments`, con
+credencial de agente, archivos privados y cola SQL. La composición expone
+`fragment_storage()` y `fragment_ingestion_service()` sin iniciar trabajadores.
 
 ## Archivos y métodos
 
 - `settings.py`: configuración por entorno; secretos leídos del entorno, nunca escritos en documentación.
-- `urls.py`: monta `accounts`, `alerts` y `dashboard` bajo `/api/v1/`.
-- `composition.py`: `accounts_service` y `alerts_service` / `alerts_repository`. DashboardService sigue pendiente.
+- `urls.py`: monta autenticación, alertas, dashboard, configuración operativa, captura interna y web.
+- `composition.py`: construye servicios de cuentas, alertas, autorización/sesiones de captura, ingesta y análisis.
 - `asgi.py` y `wsgi.py`: puntos de entrada de la aplicación.
 - `test_settings.py`: base de tests separada, correo simulado y configuración sin secretos reales.
 
-Las rutas disponibles son las de autenticación. El resto de [API_CONTRACTS.md](../../API_CONTRACTS.md) está pendiente. Define las rutas sin barra final; el cliente debe usar la URL exacta, especialmente en solicitudes POST.
+Los contratos implementados y pendientes se describen en [API_CONTRACTS.md](../../API_CONTRACTS.md). Define las rutas sin barra final; el cliente debe usar la URL exacta, especialmente en solicitudes POST.
 
 ## Configuración
 
 | Variable | Uso |
 |---|---|
+| `CAPTURE_AGENTS` | JSON de identidades a `{box, token_sha256}`; hash del token completo; `{}` deniega toda ingesta. |
+| `CAPTURE_FRAGMENT_ROOT` | Volumen privado persistente POSIX; por defecto `.local/capture-fragments`. |
+| `CAPTURE_FRAGMENT_MAX_BYTES` | Tamaño máximo de archivo, `26214400` por defecto; multipart permite 64 KiB adicionales. |
+| `CAPTURE_ORPHAN_MAX_AGE_SECONDS` | Antigüedad mínima de huérfanos en `cleanup_capture_uploads`, `3600` por defecto. |
 | `DJANGO_SECRET_KEY` | Obligatorio fuera de DEBUG; en local se genera una clave persistente privada si falta |
 | `DJANGO_DEBUG` | `false`; habilitar solo localmente |
 | `DJANGO_ALLOWED_HOSTS` | Lista explícita por entorno |

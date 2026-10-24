@@ -1,9 +1,11 @@
-# Sesiones de captura (SCRUM-71)
+# Sesiones de captura e ingesta interna
 
-Persistencia SQL de la autorización de SCRUM-70 hasta el cierre. No lee Excel,
-controla OBS, recibe archivos ni ejecuta análisis. Solo almacena identificadores,
-box, origen, estados, fechas, números de secuencia y códigos técnicos permitidos.
-Los UUID de captura son distintos de las sesiones JWT.
+Persistencia SQL de la autorización de SCRUM-70 hasta el cierre (SCRUM-71) e
+ingesta autenticada de fragmentos a almacenamiento privado y cola SQL. No lee
+Excel, controla OBS ni ejecuta análisis. En SQL guarda identificadores, box,
+origen, estados, fechas, secuencias, metadatos de archivo y códigos técnicos.
+El audio queda solo en archivos privados temporales. Los UUID de captura son
+distintos de las sesiones JWT.
 
 ## Integración con SCRUM-70
 
@@ -47,12 +49,13 @@ del cierre; no se solapan ventanas durante la finalización.
 
 ## Contrato del agente
 
-`ports.BoxAgentControl` define la interfaz interna, implementada por
+`ports.BoxAgentControl` define la interfaz interna de control, implementada por
 `CaptureSessionService`. Todos los métodos validan el box y la pertenencia del
-identificador recibido. El adaptador futuro HTTP, IPC o mensajería debe autenticar
-al agente y fijar el box desde esa identidad. No hay rutas públicas de ingesta ni
-se concede acceso mediante el JWT de un profesional. La elección de transporte,
-provisión de identidad y ejecución en el box requieren su contrato de integración.
+identificador recibido. El transporte de órdenes/confirmaciones debe autenticar
+al agente y fijar el box desde esa identidad; no se agregan rutas HTTP para esas
+operaciones. Para archivos ya existe `POST /api/v1/internal/fragments`, con
+credencial `Agent` vinculada al box; no admite JWT de profesionales. Su contrato
+completo está en [API_CONTRACTS.md, sección 5](../../../API_CONTRACTS.md#5-ingesta-interna-de-fragmentos).
 
 ```python
 # El adaptador invoca esta interfaz en el backend; no comparte SQL con el box.
@@ -66,9 +69,9 @@ for order in control.commands("box-3"):
         control.acknowledge("box-3", order.command_id, occurred_at=started_at)
 
 control.heartbeat("box-3", session.session_id)
-accepted = control.accept_sequence(
-    "box-3", session.session_id, number=0, captured_at=captured_at,
-)
+# El agente envía el archivo a POST /api/v1/internal/fragments.
+# La API registra la secuencia y el trabajo juntos; no llamar además a
+# accept_sequence() para ese mismo fragmento.
 
 # Después de recibir una orden de detención y la respuesta del agente:
 control.acknowledge(
@@ -90,6 +93,12 @@ confirmación; la entrega es **al menos una vez**. El agente debe deduplicar por
 `command_id`, aplicar las órdenes exclusivamente a su `session_id` y rechazar
 inicios fuera de su ventana. Una consulta no prueba que el agente ejecutó la
 orden. Si el backend cae después de publicarla, el siguiente poll la repite.
+
+`accept_sequence` conserva su contrato anterior para integraciones internas sin
+archivo. La API de ingesta usa la misma regla de secuencia bajo la transacción
+que crea `FragmentJob`. Un registro histórico creado solo por ese puerto no se
+convierte en trabajo al reintentarlo por HTTP: devuelve
+`SEQUENCE_ALREADY_REGISTERED`, sin reemplazarlo.
 
 Las confirmaciones idénticas son idempotentes; las contradictorias se rechazan.
 `occurred_at` es el instante real de ejecución con zona horaria, distinto del
@@ -122,6 +131,77 @@ Solo se completa cuando existe confirmación exitosa de detención y se han
 aceptado **todas** las secuencias hasta `last_sequence`. Ambas llegadas pueden
 ocurrir en cualquier orden o concurrentemente. Se rechazan nuevas secuencias en
 sesiones completadas o fallidas. No se invoca ningún analizador al aceptarlas.
+
+## Ingesta HTTP y cola persistente
+
+`POST /api/v1/internal/fragments` recibe multipart con `archivo`, `box`,
+`session_id`, `secuencia`, `formato`, `checksum` y `captured_at`. Todos son
+obligatorios. `captured_at` permite comprobar la ventana real de captura incluso
+si el fragmento llega durante la finalización. Solo se admite WAV RIFF PCM mono
+a 16 kHz y 16 bits, alineado con Speechmatics; se valida su estructura real,
+tamaño y SHA-256. El nombre original y el MIME no se usan como evidencia.
+
+`authentication.py` valida `Authorization: Agent <agent_id>.<secret>` antes de
+leer audio. La identidad debe existir en `CAPTURE_AGENTS` y estar asignada al box
+solicitado. El hash SHA-256 se calcula sobre el token completo, sin `Agent `;
+usar secretos aleatorios de al menos 32 bytes. La configuración vacía deniega
+todo acceso. Para revocar o rotar, cambiar el entorno y reiniciar los procesos.
+No hay emisión pública de credenciales ni permisos heredados de profesionales.
+
+`uploads.py` limita los bytes mientras escribe el multipart a un temporal
+privado y comprueba que la carga tenga su cierre completo. `storage.py` valida
+el archivo y sincroniza sus bytes y directorio antes de aceptar. `ingestion.py`
+registra la secuencia, contador, trabajo pendiente y eventos en una única
+transacción SQL durable. La vista responde solo después del commit.
+
+`FragmentJob.sequence` es uno a uno con `AcceptedSequence`, cuya clave única es
+`(session_id, number)`. Un reintento idéntico devuelve 200 con el mismo `job_id`
+y datos originales; uno nuevo devuelve 201. Otro checksum, formato, tamaño o
+instante de captura para esa clave devuelve conflicto. Los reintentos no cambian
+el trabajo aunque ya esté en procesamiento o la sesión haya cerrado. Una vez
+confirmada `last_sequence`, se rechaza cualquier secuencia superior.
+
+No hay transacción distribuida con el filesystem: el orden archivo → commit
+SQL evita confirmar trabajos sin archivo aceptado. Una caída previa al commit
+puede dejar un huérfano recuperable. Si el resultado del commit es incierto,
+se conserva el archivo para no romper un trabajo ya persistido y se devuelve
+error; el agente debe reintentar la misma clave y contenido.
+
+La cola es SQL (`FragmentJob`) y sobrevive reinicios. La API crea únicamente
+estado `pendiente`; el modelo contempla `procesando`, `completado` y `fallido`
+para el consumidor futuro. No se arranca un trabajador ni se conecta esta ruta
+al análisis, alertas o notificaciones. La adquisición de trabajos y eliminación
+de archivos aceptados después de procesar son responsabilidad de esa integración.
+
+## Configuración y limpieza
+
+| Variable | Predeterminado / uso |
+|---|---|
+| `CAPTURE_AGENTS` | `{}`; objeto JSON de identidades a `{box, token_sha256}`. Detalle y restricciones en el contrato. |
+| `CAPTURE_FRAGMENT_ROOT` | `.local/capture-fragments`; volumen persistente privado, fuera de estáticos/media. |
+| `CAPTURE_FRAGMENT_MAX_BYTES` | `26214400` (25 MiB); archivo, incluyendo cabecera WAV. Cuerpo multipart limitado a este valor + 64 KiB. |
+| `CAPTURE_ORPHAN_MAX_AGE_SECONDS` | `3600`; antigüedad mínima para eliminar huérfanos. |
+
+El directorio es 0700 y los archivos 0600. API y limpieza deben compartir base
+SQL y volumen Linux/POSIX con `flock` y `fsync`. Los nombres de almacenamiento
+son aleatorios; no incluyen nombres recibidos, sesiones ni contexto clínico.
+Audio, transcripciones, checksums, rutas y secretos no aparecen en la bitácora.
+
+El request elimina temporales en errores y al interrumpirse la carga. Ejecutar
+al arrancar y periódicamente para recuperar archivos abandonados por caídas:
+
+```sh
+uv run python manage.py cleanup_capture_uploads
+uv run python manage.py cleanup_capture_uploads --older-than-seconds 3600
+```
+
+`cleanup.py` solo elimina nombres gestionados y antiguos sin trabajo asociado.
+Cada carga mantiene un lock exclusivo de archivo hasta terminar su aceptación;
+la limpieza omite esos locks sin esperar, aun cuando la carga sea muy lenta.
+El lock de asignación evita eliminar un archivo entre su creación y la toma
+de su lease. No sigue enlaces simbólicos. Ante error SQL falla sin inferir que
+el archivo no tiene trabajo. Conserva archivos de todos los estados de trabajo;
+no implementa expiración de archivos aceptados. La salida contiene solo conteos.
 
 ## Recuperación y bitácora
 
@@ -168,3 +248,10 @@ independientes contra un archivo SQLite de pruebas; no simulan la persistencia.
 La configuración existente usa `transaction_mode=IMMEDIATE` y timeout para
 serializar escritores SQLite. También se bloquean filas con `select_for_update`
 en motores que lo soporten. No se necesitan MongoDB, agentes ni credenciales.
+
+Las pruebas de ingesta usan audio sintético y directorios temporales aislados.
+Cubren autenticación y revocación, pertenencia/estado/ventanas de sesiones,
+última secuencia, estructura/tamaño/formato/checksum, multipart truncado,
+reintentos y conflictos concurrentes, rollback, commit de resultado incierto,
+privacidad y limpieza concurrente. Una prueba termina abruptamente un proceso
+para verificar la recuperación posterior de su temporal sin ejecutar finalizers.
