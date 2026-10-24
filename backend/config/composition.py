@@ -37,6 +37,17 @@ def capture_session_service(agenda_service=None, config_loader=None, **timeouts)
     )
 
 
+def fragment_storage():
+    from django.conf import settings
+    from backend.apps.capture.storage import FragmentStorage
+    return FragmentStorage(settings.CAPTURE_FRAGMENT_ROOT, settings.CAPTURE_FRAGMENT_MAX_BYTES)
+
+
+def fragment_ingestion_service():
+    from backend.apps.capture.ingestion import FragmentIngestionService
+    return FragmentIngestionService(fragment_storage())
+
+
 def analysis_worker(*, settings=None, directory=None, speechmatics_http=None, jev_http=None,
                     alert_store=None, audit=None):
     """Crear una vez dentro del trabajador interno. No iniciar en AppConfig/WSGI.

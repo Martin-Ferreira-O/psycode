@@ -1,5 +1,7 @@
 """Configuración compartida. El modo local debe habilitarse explícitamente."""
+import json
 import os
+import re
 import secrets
 from datetime import timedelta
 from pathlib import Path
@@ -193,3 +195,21 @@ NOTIFICATIONS_ENABLED = env_bool("NOTIFICATIONS_ENABLED", False)
 NOTIFICATION_EMAIL_TO = os.getenv("NOTIFICATION_EMAIL_TO", "").strip()
 NOTIFICATION_EMAIL_BACKUP_TO = os.getenv("NOTIFICATION_EMAIL_BACKUP_TO", "").strip()
 TEAMS_ENABLED = False  # Webhook y continuidad pendientes de decisión.
+
+# Ingesta interna: credenciales independientes del JWT de profesionales.
+CAPTURE_FRAGMENT_ROOT = local_path("CAPTURE_FRAGMENT_ROOT", ".local/capture-fragments")
+CAPTURE_FRAGMENT_MAX_BYTES = positive_int("CAPTURE_FRAGMENT_MAX_BYTES", 25 * 1024 * 1024)
+CAPTURE_ORPHAN_MAX_AGE_SECONDS = positive_int("CAPTURE_ORPHAN_MAX_AGE_SECONDS", 3600)
+try:
+    CAPTURE_AGENTS = json.loads(os.getenv("CAPTURE_AGENTS", "{}"))
+    if not isinstance(CAPTURE_AGENTS, dict):
+        raise ValueError
+    for agent_id, credential in CAPTURE_AGENTS.items():
+        if (not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", agent_id)
+                or not isinstance(credential, dict) or set(credential) != {"box", "token_sha256"}
+                or credential["box"] not in {f"box-{n}" for n in range(3, 8)}
+                or not isinstance(credential["token_sha256"], str)
+                or not re.fullmatch(r"[0-9a-f]{64}", credential["token_sha256"])):
+            raise ValueError
+except (TypeError, ValueError):
+    raise ImproperlyConfigured("CAPTURE_AGENTS debe contener identidades, boxes y hashes SHA-256 válidos.") from None
