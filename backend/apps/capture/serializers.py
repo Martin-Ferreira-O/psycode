@@ -7,10 +7,10 @@ class FragmentSerializer(serializers.Serializer):
     archivo = serializers.FileField(allow_empty_file=True)
     box = serializers.ChoiceField(choices=[f"box-{n}" for n in range(3, 8)])
     session_id = serializers.UUIDField()
-    secuencia = serializers.RegexField(r"^(0|[1-9][0-9]{0,18})$", max_length=19)
-    formato = serializers.CharField(max_length=16)
-    checksum = serializers.RegexField(r"^[0-9a-f]{64}$", min_length=64, max_length=64)
-    captured_at = serializers.CharField(max_length=40)
+    secuencia = serializers.RegexField(r"\A(0|[1-9][0-9]{0,18})\Z", max_length=19, trim_whitespace=False)
+    formato = serializers.CharField(max_length=16, trim_whitespace=False)
+    checksum = serializers.RegexField(r"\A[0-9a-f]{64}\Z", min_length=64, max_length=64, trim_whitespace=False)
+    captured_at = serializers.CharField(max_length=40, trim_whitespace=False)
 
     def to_internal_value(self, data):
         # No reflejar nombres de campos, valores ni nombres de archivos recibidos.
