@@ -1,12 +1,13 @@
 import hashlib
 import struct
+from dataclasses import replace
 from datetime import timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, OperationalError, connection, transaction
 from django.test import TestCase, TransactionTestCase
 
 from .domain import CaptureError
@@ -161,6 +162,35 @@ class FragmentIngestionTests(IngestionFixtures, TestCase):
         self.assertEqual(self.blobs(), [])
         self.assertFalse(AcceptedSequence.objects.exists())
 
+    def test_rejects_other_pcm_profiles_compression_and_forged_chunks(self):
+        original = wav_bytes()
+        for offset, packed in ((20, struct.pack("<H", 3)), (22, struct.pack("<H", 2)),
+                               (24, struct.pack("<I", 44100)), (34, struct.pack("<H", 8))):
+            content = original[:offset] + packed + original[offset + len(packed):]
+            with self.subTest(offset=offset), self.assertRaises(FragmentError) as caught:
+                self.receive(content=content)
+            self.assertEqual(caught.exception.code, "FRAGMENT_FORMAT_UNSUPPORTED")
+        content = original[:40] + struct.pack("<I", 1000000) + original[44:]
+        with self.assertRaises(FragmentError) as caught:
+            self.receive(content=content)
+        self.assertEqual(caught.exception.code, "INVALID_FRAGMENT_FILE")
+        self.assertEqual(self.blobs(), [])
+
+    def test_same_number_is_independent_between_sessions_but_each_has_one_job(self):
+        self.receive()
+        authorization = replace(self.authorization, box="box-4")
+        other = self.service.apply_authorization(authorization, now=NOW)
+        command, = self.service.commands("box-4", now=NOW)
+        self.service.acknowledge("box-4", command.command_id, now=NOW)
+        self.receive(box="box-4", session_id=other.session_id)
+        self.assertEqual(FragmentJob.objects.count(), 2)
+        self.assertEqual(AcceptedSequence.objects.count(), 2)
+        self.assertEqual(len(self.blobs()), 2)
+        job = FragmentJob.objects.first()
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            FragmentJob.objects.create(sequence=job.sequence, storage_key="0" * 32 + ".blob",
+                                       checksum=job.checksum, size=job.size)
+
     def test_does_not_attach_a_job_to_a_sequence_registered_by_the_legacy_port(self):
         self.accept(self.session)
         with self.assertRaises(FragmentError) as caught:
@@ -214,3 +244,42 @@ class FragmentConcurrencyTests(IngestionFixtures, TransactionTestCase):
         self.assertFalse(FragmentJob.objects.exists())
         self.assertFalse(AcceptedSequence.objects.exists())
         self.assertEqual(self.blobs(), [])
+
+    def test_uncertain_commit_keeps_file_and_retry_returns_committed_receipt(self):
+        original = connection.commit
+        calls = 0
+
+        def commit():
+            nonlocal calls
+            calls += 1
+            original()
+            if calls == 3:  # Recuperaciones previas y commit de aceptación.
+                raise OperationalError("Simulated lost commit acknowledgement")
+
+        with patch.object(connection, "commit", side_effect=commit):
+            with self.assertRaises(OperationalError):
+                self.receive()
+        self.assertEqual(FragmentJob.objects.count(), 1)
+        self.assertEqual(len(self.blobs()), 1)
+        result, created = self.receive()
+        self.assertFalse(created)
+        self.assertEqual(result.job_id, FragmentJob.objects.get().pk)
+
+    def test_failed_commit_leaves_only_an_orphan_for_safe_cleanup(self):
+        original = connection.commit
+        calls = 0
+
+        def commit():
+            nonlocal calls
+            calls += 1
+            if calls == 3:
+                raise OperationalError("Simulated rejected commit")
+            original()
+
+        with patch.object(connection, "commit", side_effect=commit):
+            with self.assertRaises(OperationalError):
+                self.receive()
+        self.assertFalse(FragmentJob.objects.exists())
+        self.assertFalse(AcceptedSequence.objects.exists())
+        self.assertEqual(CaptureSession.objects.get().next_sequence, 0)
+        self.assertEqual(len(self.blobs()), 1)
