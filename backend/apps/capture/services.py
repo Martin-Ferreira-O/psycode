@@ -294,29 +294,33 @@ class CaptureSessionService:
         self._recover_one(box, session_id, now)
         with transaction.atomic():
             session = self._load(box, session_id)
-            existing = AcceptedSequence.objects.filter(session=session, number=number).first()
-            if existing:
-                if existing.captured_at != captured_at:
-                    raise CaptureError("SEQUENCE_CONFLICT")
-                return False
-            if session.state not in (SessionState.ACTIVE, SessionState.STOPPING) or session.actual_start is None:
-                raise CaptureError("SESSION_NOT_ACCEPTING_SEQUENCES")
-            if number != session.next_sequence or (session.final_sequence is not None and number > session.final_sequence):
-                raise CaptureError("SEQUENCE_OUT_OF_ORDER")
-            upper = min(value for value in (session.scheduled_end, session.stop_requested_at, session.actual_end, now)
-                        if value is not None)
-            if not session.actual_start <= captured_at <= upper:
-                raise CaptureError("SEQUENCE_OUTSIDE_CAPTURE_WINDOW")
-            previous = AcceptedSequence.objects.filter(session=session, number=number - 1).first()
-            if previous and captured_at < previous.captured_at:
-                raise CaptureError("INVALID_TIMESTAMP")
-            AcceptedSequence.objects.create(session=session, number=number, captured_at=captured_at, accepted_at=now)
-            session.next_sequence += 1
-            session.last_seen_at = max(session.last_seen_at, now)
-            session.save(update_fields=["next_sequence", "last_seen_at"])
-            _event(session, "sequence.accepted", now, sequence=number)
-            self._complete(session, now)
-            return True
+            return self._accept_sequence(session, number, captured_at, now)
+
+    def _accept_sequence(self, session, number, captured_at, now):
+        """Registra bajo el bloqueo de sesión y la transacción del llamador."""
+        existing = AcceptedSequence.objects.filter(session=session, number=number).first()
+        if existing:
+            if existing.captured_at != captured_at:
+                raise CaptureError("SEQUENCE_CONFLICT")
+            return False
+        if session.state not in (SessionState.ACTIVE, SessionState.STOPPING) or session.actual_start is None:
+            raise CaptureError("SESSION_NOT_ACCEPTING_SEQUENCES")
+        if number != session.next_sequence or (session.final_sequence is not None and number > session.final_sequence):
+            raise CaptureError("SEQUENCE_OUT_OF_ORDER")
+        upper = min(value for value in (session.scheduled_end, session.stop_requested_at, session.actual_end, now)
+                    if value is not None)
+        if not session.actual_start <= captured_at <= upper:
+            raise CaptureError("SEQUENCE_OUTSIDE_CAPTURE_WINDOW")
+        previous = AcceptedSequence.objects.filter(session=session, number=number - 1).first()
+        if previous and captured_at < previous.captured_at:
+            raise CaptureError("INVALID_TIMESTAMP")
+        AcceptedSequence.objects.create(session=session, number=number, captured_at=captured_at, accepted_at=now)
+        session.next_sequence += 1
+        session.last_seen_at = max(session.last_seen_at, now)
+        session.save(update_fields=["next_sequence", "last_seen_at"])
+        _event(session, "sequence.accepted", now, sequence=number)
+        self._complete(session, now)
+        return True
 
     def _recover_one(self, box, session_id, now):
         # Confirmaciones o secuencias tardías no reviven una sesión vencida.

@@ -1,4 +1,4 @@
-"""Metadatos técnicos de captura. Nunca contenido clínico ni rutas de archivos."""
+"""Metadatos técnicos de captura; archivos privados referenciados por claves opacas."""
 import uuid
 
 from django.db import models
@@ -97,3 +97,29 @@ class CaptureEvent(models.Model):
 
     class Meta:
         ordering = ["timestamp", "event_id"]
+
+
+class FragmentJob(models.Model):
+    """Cola SQL durable. Una secuencia aceptada solo puede tener un trabajo."""
+    class State(models.TextChoices):
+        PENDING = "pendiente"
+        PROCESSING = "procesando"
+        COMPLETED = "completado"
+        FAILED = "fallido"
+
+    job_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    sequence = models.OneToOneField(AcceptedSequence, on_delete=models.PROTECT, related_name="fragment_job")
+    storage_key = models.CharField(max_length=37, unique=True)
+    checksum = models.CharField(max_length=64)
+    format = models.CharField(max_length=8, default="wav")
+    size = models.PositiveBigIntegerField()
+    state = models.CharField(max_length=16, choices=State.choices, default=State.PENDING)
+
+    class Meta:
+        indexes = [models.Index(fields=["state", "job_id"], name="capture_pending_jobs")]
+        constraints = [
+            models.CheckConstraint(condition=models.Q(state__in=["pendiente", "procesando", "completado", "fallido"]),
+                                   name="capture_valid_job_state"),
+            models.CheckConstraint(condition=models.Q(size__gt=0), name="capture_nonempty_fragment"),
+            models.CheckConstraint(condition=models.Q(format="wav"), name="capture_fragment_format"),
+        ]

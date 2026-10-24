@@ -221,13 +221,29 @@ uv run python manage.py test backend.apps.agenda --settings=backend.config.test_
 La autorización de SCRUM-70 se integra con sesiones persistentes, órdenes de
 inicio/detención y confirmaciones mediante una interfaz interna del agente.
 Incluye secuencias sin duplicados por concurrencia, bitácora técnica SQL y
-recuperación de sesiones interrumpidas. No guarda audio ni datos de pacientes.
+recuperación de sesiones interrumpidas. La ingesta interna guarda fragmentos
+de audio en almacenamiento temporal privado y trabajos pendientes en SQL.
 [Contrato, integración y límites](backend/apps/capture/README.md).
 
 Después de actualizar, ejecuta `manage.py migrate`. El coordinador debe evaluar
 la autorización y recuperar sesiones periódicamente; la recuperación también
 puede ejecutarse con `manage.py recover_capture_sessions`. El comando no inicia
 capturas y `runserver` no arranca un coordinador automáticamente.
+
+`POST /api/v1/internal/fragments` recibe WAV PCM mono, 16 kHz y 16 bits,
+checksum y metadatos de captura mediante multipart. Exige una credencial de
+agente vinculada al box, independiente de los JWT de profesionales. Configura
+`CAPTURE_AGENTS` y `CAPTURE_FRAGMENT_ROOT` según el
+[contrato de ingesta](API_CONTRACTS.md#5-ingesta-interna-de-fragmentos);
+sin agentes configurados se deniega todo acceso. El límite por defecto es 25 MiB.
+
+Un reintento idéntico devuelve la confirmación existente sin duplicar trabajo;
+un checksum distinto para la misma sesión/secuencia genera conflicto. La API
+confirma solo tras guardar archivo y trabajo, y no ejecuta análisis ni envíos.
+Ejecuta `manage.py cleanup_capture_uploads` al arrancar y periódicamente para
+eliminar huérfanos antiguos; conserva cargas en curso y archivos de trabajos.
+El consumidor de la cola y la eliminación de archivos aceptados tras procesar
+pertenecen a una integración posterior.
 
 ## Comprobar los cambios
 
@@ -237,6 +253,7 @@ Ejecuta desde la raíz:
 uv run python manage.py check
 uv run python manage.py makemigrations --check --dry-run
 uv run python manage.py test backend.apps.accounts backend.apps.alerts --settings=backend.config.test_settings
+uv run python manage.py test backend.apps.capture backend.apps.operational --settings=backend.config.test_settings --noinput
 ```
 
 Con pip, usa el mismo reemplazo de `uv run python` indicado arriba. Las pruebas crean una base separada y no modifican tu usuario local. Si cambias modelos, genera y revisa la migración correspondiente antes de comprobar que no quedan migraciones pendientes.

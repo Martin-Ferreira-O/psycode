@@ -6,7 +6,7 @@
 
 Un **monolito modular con capas ligeras** permite desplegar un solo backend y repartir trabajo por módulos. Los contratos separan el desarrollo de frontend, consultas, persistencia, evaluaciones y notificaciones. Las capas son responsabilidades dentro de cada módulo, no servicios distribuidos.
 
-No se incorporan microservicios, buses de eventos, CQRS, contenedores de inyección, repositorios genéricos, colas ni componentes de negocio preconstruidos. SCRUM-71 incorpora [sesiones persistentes de captura y su bandeja de órdenes SQL](backend/apps/capture/README.md), integradas con la autorización de SCRUM-70. No incorpora ejecución de captura, gestión de pacientes ni CRUD público de sesiones/boxes. Para alertas, `sesion_id` y `box` siguen siendo referencias recibidas por el caso de uso interno de registro, sin relación entre bases de datos.
+No se incorporan microservicios, buses de eventos, CQRS, contenedores de inyección, repositorios genéricos ni componentes de negocio preconstruidos. SCRUM-71 incorpora [sesiones persistentes de captura y su bandeja de órdenes SQL](backend/apps/capture/README.md), integradas con la autorización de SCRUM-70. La ingesta interna agrega almacenamiento privado temporal y una cola SQL de fragmentos, sin broker externo ni consumidor automático. No incorpora ejecución de captura, gestión de pacientes ni CRUD público de sesiones/boxes. Para alertas, `sesion_id` y `box` siguen siendo referencias recibidas por el caso de uso interno de registro, sin relación entre bases de datos.
 
 ### Base tecnológica prevista
 
@@ -33,6 +33,7 @@ backend/
     dashboard/        resumen y estadísticas sobre alertas
     notifications/    correo principal y correo de respaldo
     agenda/           carga manual Excel y consulta temporal de ocupación
+    capture/          sesiones, órdenes, ingesta de archivos y cola persistente SQL
 ```
 
 Cada carpeta de código incluye su propio README. Accounts ya tiene capas implementadas, migraciones, comando y tests; las otras apps tienen archivos base sin comportamiento. Solo se crearán subcarpetas adicionales cuando su contenido lo justifique.
@@ -88,7 +89,23 @@ SCRUM-71 almacena además `CaptureSession`, `AgentCommand`, `AcceptedSequence` y
 La bitácora técnica de captura se mantiene en SQL y el logger compartido; la
 consulta MongoDB de bitácora de alertas conserva su contrato. El agente consume
 una interfaz interna con DTO; su transporte y ejecución pertenecen al adaptador
-del box. No se guardan archivos ni contenido clínico.
+del box. La ingesta implementa `POST /api/v1/internal/fragments` con credenciales
+de agente vinculadas al box, separadas del JWT profesional. Guarda archivos
+temporales en un volumen privado POSIX y `FragmentJob` en SQL, relacionado uno
+a uno con la secuencia aceptada. La clave única sesión/secuencia y el bloqueo
+de sesión evitan duplicados entre procesos. Archivo validado y sincronizado a
+disco precede a la transacción que registra secuencia, trabajo pendiente y
+bitácora; la confirmación HTTP ocurre después del commit. Una caída puede dejar
+un archivo huérfano, pero no una aceptación confirmada sin trabajo.
+
+No hay transacción distribuida con archivos. La limpieza
+`cleanup_capture_uploads` recupera huérfanos antiguos sin referencias SQL y
+omite cargas en curso mediante locks de archivo. Ante un commit de resultado
+incierto conserva el archivo y permite resolver la aceptación con un reintento.
+No borra archivos de trabajos activos o terminados. El consumidor de esta cola
+y la eliminación de archivos aceptados después del procesamiento quedan para
+la integración del trabajador. No se inicia análisis desde la vista ni al
+importar Django. [Contrato de ingesta y límites](API_CONTRACTS.md#5-ingesta-interna-de-fragmentos).
 
 ### MongoDB
 

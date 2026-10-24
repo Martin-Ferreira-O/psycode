@@ -1,8 +1,8 @@
 # Contratos de API — Psycode API
 
-**Nombre técnico:** `psycode-api`. **API:** v1. **Revisión documental:** 1.3, bitácora y correo principal/respaldo actualizados el 2026-10-17. **Implementación actual:** las operaciones descritas se implementan por sus tareas SCRUM correspondientes.
+**Nombre técnico:** `psycode-api`. **API:** v1. **Revisión documental:** 1.4, ingesta interna de fragmentos actualizada el 2026-10-24. **Implementación actual:** las operaciones descritas se implementan por sus tareas SCRUM correspondientes.
 
-**Base URL:** `/api/v1/`. **Autenticación:** JWT `Authorization: Bearer <access_token>`. **JSON:** `application/json`. [Arquitectura](ARCHITECTURE.md) · [Aceptación](docs/ACCEPTANCE.md).
+**Base URL:** `/api/v1/`. **Autenticación:** JWT `Authorization: Bearer <access_token>`. **JSON:** `application/json`. La ingesta interna de la sección 5 utiliza credenciales `Agent` y `multipart/form-data`. [Arquitectura](ARCHITECTURE.md) · [Aceptación](docs/ACCEPTANCE.md).
 
 ## 0. Convenciones comunes
 
@@ -12,6 +12,7 @@ Endpoints sin barra final; el prefijo sí se escribe `/api/v1/`. No depender de 
 
 | Método | Ruta completa | Nombre Django | Acceso |
 |---|---|---|---|
+| POST | `/api/v1/internal/fragments` | `capture:fragment_upload` | Agente autorizado y vinculado al box; multipart |
 | POST | `/api/v1/auth/login` | `accounts:login` | Público |
 | POST | `/api/v1/auth/refresh` | `accounts:refresh` | Refresh válido, no exige access |
 | POST | `/api/v1/auth/logout` | `accounts:logout` | Access válido + refresh propio |
@@ -695,10 +696,226 @@ Cada item incluye `event_id`, `timestamp`, `action`, `outcome`, `actor` (`Sistem
 
 Ejemplo: `/api/v1/audit-events?alerta_id=11111111-1111-4111-8111-111111111111&action=notifications.send&outcome=failure&order=asc&limit=20&offset=0`.
 
-## 5. Seguridad, compatibilidad y cambios
+## 5. Ingesta interna de fragmentos
+
+Implementada: `POST /api/v1/internal/fragments`, sin barra final. Recibe un archivo,
+lo valida y lo deja en almacenamiento privado temporal con un trabajo SQL
+`pendiente`. No controla OBS, analiza audio, genera alertas ni envía notificaciones.
+La respuesta utiliza el envelope JSON común. No hay descarga pública del archivo
+ni rutas HTTP de administración de la cola.
+
+### Autenticación y autorización de agentes
+
+Cabecera obligatoria: `Authorization: Agent <agent_id>.<secret>`. No se admiten
+JWT de profesionales, sesiones de navegador ni tokens en query string o campos
+multipart. La autenticación ocurre antes de leer o almacenar la carga.
+
+`CAPTURE_AGENTS` es un objeto JSON del entorno, vacío por defecto; vacío deniega
+todo acceso. Cada clave identifica un agente y su valor tiene exactamente
+`box` y `token_sha256`. El identificador usa 1–64 caracteres ASCII alfanuméricos,
+`_` o `-`. El secreto usa 43–128 caracteres de ese alfabeto; provisionar al menos
+32 bytes aleatorios, por ejemplo con `secrets.token_urlsafe(32)`.
+`token_sha256` contiene el SHA-256 hexadecimal en minúsculas de **todo** el token
+`<agent_id>.<secret>`, sin el prefijo `Agent `, comparado en tiempo constante.
+El backend conserva el hash; el agente recibe el token por un canal privado.
+
+Ejemplo de estructura, cuyos marcadores deben sustituirse al provisionar:
+
+~~~json
+{
+  "agent-box-3": {
+    "box": "box-3",
+    "token_sha256": "<SHA-256 del token completo: 64 caracteres hexadecimales>"
+  }
+}
+~~~
+
+Cada identidad solo puede enviar para su box asignado (`box-3` a `box-7`).
+Se comprueba además que `session_id` pertenezca al mismo box. Quitar o rotar la
+credencial exige actualizar el entorno y reiniciar todos los procesos API.
+Una configuración mal formada impide arrancar, con un error fijo sin secretos.
+Usar HTTPS y publicar esta ruta únicamente en la red de los agentes.
+
+### Campos y límites
+
+Content-Type: `multipart/form-data; boundary=...`. Exactamente un archivo y los
+seis campos de texto siguientes, todos obligatorios y sin repeticiones. Los
+campos desconocidos se rechazan. Se exige el cierre multipart completo, sin
+epílogo. El nombre del archivo y su MIME declarado no determinan el formato y
+no se guardan ni aparecen en respuestas o errores.
+
+| Campo | Tipo y regla |
+|---|---|
+| `archivo` | Archivo no vacío; WAV RIFF completo, PCM lineal sin compresión, mono, 16 kHz y 16 bits. Debe contener datos no vacíos y frames de 2 bytes completos. Se comprueban longitudes reales de RIFF y chunks. |
+| `box` | Texto exacto `box-3`, `box-4`, `box-5`, `box-6` o `box-7`; debe coincidir con la identidad autenticada. |
+| `session_id` | UUID de sesión de captura persistente, distinto de una sesión JWT. |
+| `secuencia` | Entero decimal desde `0` hasta `9223372036854775806`, sin decimales ni ceros iniciales. Consecutivo por sesión desde `0`. |
+| `formato` | `wav`. Otros formatos o perfiles PCM se rechazan. |
+| `checksum` | SHA-256 de todos los bytes del archivo: exactamente 64 caracteres `[0-9a-f]`, sin prefijo. Se recalcula en el backend. |
+| `captured_at` | Fecha/hora ISO 8601 con zona horaria, máximo 40 caracteres. Es el instante de captura; se exige para validar fragmentos retrasados durante la finalización. |
+
+Límite inclusivo de archivo: **25 MiB (26.214.400 bytes)** por defecto, configurable
+con `CAPTURE_FRAGMENT_MAX_BYTES` (entero positivo). El cuerpo multipart completo
+no puede superar ese límite más **64 KiB (65.536 bytes)**. Se verifican tanto
+Content-Length como los bytes realmente leídos; declarar un tamaño menor no
+evita el límite. La carga se escribe en streaming a un temporal privado, sin
+acumular el audio completo en memoria.
+
+Ejemplo de envío; las variables contienen la URL interna HTTPS, credencial,
+UUID de sesión, checksum real e instante de captura proporcionados por el agente:
+
+~~~sh
+curl --request POST "$PSYCODE_INTERNAL_BASE_URL/api/v1/internal/fragments" \
+  --header "Authorization: Agent $PSYCODE_AGENT_TOKEN" \
+  --form 'archivo=@fragment.wav;type=audio/wav' \
+  --form 'box=box-3' \
+  --form "session_id=$CAPTURE_SESSION_ID" \
+  --form 'secuencia=0' \
+  --form 'formato=wav' \
+  --form "checksum=$FRAGMENT_SHA256" \
+  --form "captured_at=$FRAGMENT_CAPTURED_AT"
+~~~
+
+Una secuencia nueva requiere sesión `activa` o `finalizando` e inicio real
+confirmado. Se recuperan vencimientos antes de aceptarla. `captured_at` no puede
+ser futuro, anterior al inicio real ni anterior a la secuencia previa; tampoco
+puede superar el fin programado, la solicitud de detención o la detención
+confirmada. Se aplica el menor límite disponible. Los tiempos se comparan como
+instantes con zona horaria.
+
+La última secuencia se informa mediante la confirmación de detención de
+`BoxAgentControl.acknowledge(..., last_sequence=N)`, ya existente; no es un campo
+del upload. Una vez informada, **ninguna secuencia mayor que N se acepta**,
+aunque la sesión siga finalizando por fragmentos pendientes. `N=-1` significa
+que no hubo fragmentos. Se completa la sesión solo al confirmar la detención y
+haber aceptado todas las secuencias hasta N; el procesamiento de los trabajos
+es independiente del cierre de captura.
+
+### Aceptación, reintentos y consistencia
+
+La clave única SQL es **(`session_id`, `secuencia`)**. Una relación uno a uno
+impide más de un trabajo por secuencia. La API serializa las actualizaciones
+con el bloqueo transaccional de sesión y las restricciones SQL entre procesos.
+
+| Caso | Resultado |
+|---|---|
+| Secuencia nueva válida | 201; archivo aceptado, secuencia y trabajo `pendiente` persistidos. |
+| Misma clave, checksum, tamaño, formato e instante de captura | 200; misma confirmación, sin crear archivo permanente adicional, trabajo ni evento de aceptación. Se vuelve a validar el archivo enviado. |
+| Misma clave con otro checksum o metadatos de captura contradictorios | 409 `SEQUENCE_CONFLICT`; conserva el archivo y trabajo originales. |
+| Secuencia registrada antes mediante el puerto interno sin trabajo de ingesta | 409 `SEQUENCE_ALREADY_REGISTERED`; no se reemplaza ni se adjunta un archivo a un registro histórico. |
+| Salto de secuencia o número superior al último informado | 409; no crea trabajo. Reintentar saltos después de las secuencias anteriores. |
+
+Los reintentos idénticos siguen devolviendo 200 si la sesión ya se completó o
+falló, o si el trabajo cambió de estado. La credencial debe seguir autorizada.
+El `estado` de la respuesta es la confirmación fija `aceptado`, no el estado
+actual del procesamiento. El `timestamp` del envelope corresponde a cada
+respuesta; los campos de `data` se conservan.
+
+Antes del commit SQL, el archivo validado se sincroniza a disco junto con su
+entrada de directorio. Secuencia, contador de sesión, trabajo y bitácora se
+guardan en **una transacción SQL**. Se responde con éxito solo tras el commit;
+la vista no participa en una transacción externa que pueda revertir después.
+No se introduce una transacción distribuida entre archivos y SQL: una caída
+previa al commit puede dejar un huérfano que elimina la limpieza. Si el resultado
+del commit es incierto, se devuelve error y se conserva el archivo; un reintento
+resuelve si quedó aceptado sin duplicar el trabajo.
+
+### Respuestas
+
+201 para creación; 200 para reintento idéntico. `job_id` identifica el trabajo
+durable, `size_bytes` incluye todos los bytes WAV y `accepted_at` es la primera
+aceptación en UTC. No se exponen rutas, nombres originales ni contenido.
+
+~~~json
+{
+  "success": true,
+  "data": {
+    "job_id": "22222222-2222-4222-8222-222222222222",
+    "session_id": "11111111-1111-4111-8111-111111111111",
+    "box": "box-3",
+    "secuencia": 0,
+    "formato": "wav",
+    "checksum": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "size_bytes": 364,
+    "accepted_at": "2026-10-24T15:00:20Z",
+    "estado": "aceptado"
+  },
+  "message": "Fragmento recibido",
+  "timestamp": "2026-10-24T15:00:20Z"
+}
+~~~
+
+### Errores
+
+Todos usan el envelope común con `details={}`; no reflejan campos, valores,
+nombres de archivos, credenciales, excepciones, audio ni contenido clínico.
+401 utiliza **`WWW-Authenticate: Agent`**, excepción al esquema Bearer público.
+
+| HTTP | Código | Situación |
+|---|---|---|
+| 400 | `VALIDATION_ERROR` | Multipart incompleto o inválido, campos ausentes, desconocidos, repetidos, UUID/checksum/fecha/secuencia inválidos, o más de un archivo. |
+| 401 | `AUTH_REQUIRED` | Sin credencial de agente. |
+| 401 | `AUTH_INVALID_TOKEN` | Credencial inválida, desconocida o revocada; incluye JWT de profesionales. |
+| 403 | `AUTH_FORBIDDEN` | Box enviado distinto del autorizado para el agente. |
+| 404 | `SESSION_NOT_FOUND` | Sesión inexistente o que no pertenece al box autorizado. |
+| 405 | `METHOD_NOT_ALLOWED` | Método distinto de POST/OPTIONS; incluye Allow. |
+| 409 | `SESSION_NOT_ACCEPTING_SEQUENCES` | Secuencia nueva en sesión iniciada, completada, fallida o vencida. |
+| 409 | `SEQUENCE_OUT_OF_ORDER` | Secuencia no consecutiva o superior al último número informado. |
+| 409 | `SEQUENCE_OUTSIDE_CAPTURE_WINDOW` | Instante de captura fuera de la ventana permitida. |
+| 409 | `INVALID_TIMESTAMP` | Instante de captura anterior al de la secuencia previa. |
+| 409 | `SEQUENCE_CONFLICT` | La clave ya existe con otro checksum o metadatos contradictorios. |
+| 409 | `SEQUENCE_ALREADY_REGISTERED` | Registro histórico sin trabajo de ingesta. |
+| 413 | `FRAGMENT_TOO_LARGE` | Límite de archivo, cuerpo o memoria de campos multipart excedido. |
+| 415 | `UNSUPPORTED_MEDIA_TYPE` | Content-Type distinto de multipart/form-data. |
+| 415 | `FRAGMENT_FORMAT_UNSUPPORTED` | Formato declarado o perfil de audio no admitido. |
+| 422 | `EMPTY_FRAGMENT` | Archivo de cero bytes. |
+| 422 | `INVALID_FRAGMENT_FILE` | RIFF/WAV corrupto, truncado, sin datos o con tamaños inconsistentes. |
+| 422 | `CHECKSUM_MISMATCH` | SHA-256 calculado distinto del declarado. |
+| 503 | `FRAGMENT_STORAGE_UNAVAILABLE` | Almacenamiento privado no disponible o fallo de sincronización. |
+| 503 | `PERSISTENCE_UNAVAILABLE` | Persistencia SQL no disponible o commit sin confirmación. |
+| 500 | `INTERNAL_ERROR` | Fallo inesperado; no confirma recepción. |
+
+Cuando coinciden varias causas, el primer control que falla determina el error.
+En sesiones cerradas una secuencia posterior puede responder
+`SESSION_NOT_ACCEPTING_SEQUENCES`; nunca se acepta por haber cerrado.
+
+### Almacenamiento temporal, limpieza y cola
+
+`CAPTURE_FRAGMENT_ROOT` apunta a un directorio privado fuera de estáticos y media,
+por defecto `.local/capture-fragments`. Directorio 0700 y archivos 0600, con nombres
+aleatorios sin contexto clínico. Debe residir en un volumen persistente que
+soporte `fsync` y bloqueos POSIX `flock`; todos los procesos API y de limpieza
+comparten ese volumen y la misma base SQL. La implementación usa Linux/POSIX.
+La bitácora registra solo identificadores técnicos, estado, secuencia y códigos
+permitidos; nunca nombres, bytes, checksum, transcripciones ni secretos. No
+habilitar registro de cuerpos de solicitudes en proxies o instrumentación.
+
+Las cargas interrumpidas se eliminan al cerrar el request. Para recuperar
+temporales abandonados por caídas, ejecutar al arrancar y periódicamente:
+
+~~~sh
+uv run python manage.py cleanup_capture_uploads
+# Ajuste opcional para una ejecución:
+uv run python manage.py cleanup_capture_uploads --older-than-seconds 3600
+~~~
+
+`CAPTURE_ORPHAN_MAX_AGE_SECONDS` fija la antigüedad mínima por defecto (3600 s).
+Solo se eliminan archivos de nombres gestionados, antiguos, sin lease activo
+y sin trabajo SQL que los referencie. Se conservan los archivos de **todos**
+los trabajos, incluidos pendientes y en procesamiento; no se sigue symlinks.
+Un error de SQL impide tratar un archivo como huérfano. El comando informa
+solo cantidades, y no inicia captura, análisis ni otros procesos.
+
+`FragmentJob` es la cola persistente SQL con estados `pendiente`, `procesando`,
+`completado` y `fallido`; la API solo crea `pendiente`. Su consumidor, reintentos
+de procesamiento y eliminación de archivos aceptados tras procesar corresponden
+a la integración del trabajador, fuera de esta entrega. Hasta entonces los
+archivos referenciados permanecen disponibles y la limpieza no los vence.
+
+## 6. Seguridad, compatibilidad y cambios
 
 - HTTPS en producción y CORS restringido al origen del frontend.
-- No guardar audio; no registrar contraseñas, tokens ni URLs secretas. Notificaciones con contenido mínimo.
+- Audio solo en el almacenamiento temporal privado de ingesta descrito en la sección 5; nunca en logs, errores, bitácoras o respuestas. No registrar contraseñas, tokens ni URLs secretas. Notificaciones con contenido mínimo.
 - Auditoría técnica de operaciones críticas; evaluación con trazabilidad persistida.
 - UUID de profesional estable aunque cambie nombre visible; sin joins ni transacción entre bases.
 - Validación de contratos con datos sintéticos no implica validación diagnóstica ni autorización clínica.
