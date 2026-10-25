@@ -270,6 +270,4 @@ Cubren autenticación y revocación, pertenencia/estado/ventanas de sesiones,
 reintentos y conflictos concurrentes, rollback, commit de resultado incierto,
 privacidad y limpieza concurrente. Una prueba termina abruptamente un proceso
 para verificar la recuperación posterior de su temporal sin ejecutar finalizers.
-La matriz de GitHub Actions ejecuta `check`, `migrate` y las pruebas de captura
-y configuración operativa en Windows y Linux con Python 3.12 y 3.13. Una prueba
-adicional ejecuta `check` y migraciones sin permitir importar `fcntl`.
+Una prueba adicional ejecuta `check` y migraciones sin permitir importar `fcntl`.

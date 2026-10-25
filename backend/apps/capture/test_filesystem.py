@@ -81,8 +81,7 @@ finally:
                 lock_file(1)
 
     def test_django_check_and_migrate_import_without_fcntl(self):
-        # Reproduce el traceback original sin requerir Windows en la máquina
-        # local. La matriz CI ejecuta además las pruebas sobre Windows real.
+        # Reproduce el traceback original sin requerir Windows en la máquina local.
         code = """
 import importlib.abc, os, sys
 os.environ['DJANGO_SETTINGS_MODULE'] = 'backend.config.test_settings'
