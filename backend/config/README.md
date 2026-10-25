@@ -21,7 +21,7 @@ Los contratos implementados y pendientes se describen en [API_CONTRACTS.md](../.
 | Variable | Uso |
 |---|---|
 | `CAPTURE_AGENTS` | JSON de identidades a `{box, token_sha256}`; hash del token completo; `{}` deniega toda ingesta. |
-| `CAPTURE_FRAGMENT_ROOT` | Volumen privado persistente POSIX; por defecto `.local/capture-fragments`. |
+| `CAPTURE_FRAGMENT_ROOT` | Volumen local privado persistente en Windows/macOS/Linux; por defecto `.local/capture-fragments`. |
 | `CAPTURE_FRAGMENT_MAX_BYTES` | Tamaño máximo de archivo, `26214400` por defecto; multipart permite 64 KiB adicionales. |
 | `CAPTURE_ORPHAN_MAX_AGE_SECONDS` | Antigüedad mínima de huérfanos en `cleanup_capture_uploads`, `3600` por defecto. |
 | `DJANGO_SECRET_KEY` | Obligatorio fuera de DEBUG; en local se genera una clave persistente privada si falta |

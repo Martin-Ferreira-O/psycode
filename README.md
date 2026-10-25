@@ -85,6 +85,19 @@ Desde la carpeta que contiene `manage.py`, usa el comando de tu instalación:
 
 Después de actualizar el código, vuelve a instalar las dependencias con el comando de tu opción y ejecuta `manage.py migrate` antes de arrancar. No vuelvas a copiar `.env`.
 
+Windows nativo está soportado, incluida la ingesta y limpieza de fragmentos.
+Los bloqueos de archivos usan `LockFileEx` en Windows y `flock` en macOS/Linux;
+no hay que instalar `fcntl`. Si una versión anterior falla con
+`ModuleNotFoundError: No module named 'fcntl'`, actualiza desde PowerShell:
+
+```powershell
+git pull
+uv sync --locked
+uv run python manage.py check
+uv run python manage.py migrate
+uv run python manage.py runserver
+```
+
 ## Speechmatics Batch y JEV: configuración y pruebas
 
 Las variables de análisis están incluidas en [`.env.example`](.env.example). Si ya tienes `.env`, incorpora únicamente las variables nuevas que necesites, conservando su contenido; no lo reemplaces ni subas claves a Git. El análisis externo viene deshabilitado y las claves del ejemplo están vacías.

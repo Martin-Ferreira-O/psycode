@@ -71,7 +71,12 @@ class FragmentCleanupTests(IngestionFixtures, TestCase):
         unrelated = self.root / "PRIVATE-not-managed.txt"
         unrelated.write_text("fixture")
         link = self.root / ("a" * 32 + ".blob")
-        link.symlink_to(unrelated)
+        try:
+            link.symlink_to(unrelated)
+        except OSError as exc:
+            if os.name != "nt" or exc.winerror != 1314:
+                raise
+            self.skipTest("Crear symlinks en Windows requiere Developer Mode o privilegios.")
         result = clean_orphan_fragments(self.storage, older_than_seconds=3600)
         self.assertEqual(result.removed, 0)
         self.assertTrue(orphan.exists())
@@ -127,6 +132,40 @@ os._exit(0)
 
 
 class ConcurrentCleanupTests(IngestionFixtures, TransactionTestCase):
+    def test_cleanup_cannot_enter_while_publication_temporarily_releases_file_lease(self):
+        from .filesystem import publish_file
+
+        ready, release = Event(), Event()
+
+        def publishing(source, destination):
+            ready.set()
+            if not release.wait(timeout=10):
+                raise RuntimeError("Test timed out")
+            publish_file(source, destination)
+
+        def send():
+            close_old_connections()
+            try:
+                return self.receive()
+            finally:
+                connections.close_all()
+
+        with patch("backend.apps.capture.storage.publish_file", side_effect=publishing):
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                pending = executor.submit(send)
+                try:
+                    self.assertTrue(ready.wait(timeout=10))
+                    path, = self.root.glob("incoming-*.part")
+                    os.utime(path, (0, 0))
+                    result = clean_orphan_fragments(self.storage, older_than_seconds=1)
+                    self.assertEqual(result.removed, 0)
+                    self.assertEqual(result.busy, 1)
+                finally:
+                    release.set()
+                self.assertTrue(pending.result(timeout=10)[1])
+        self.assertEqual(FragmentJob.objects.count(), 1)
+        self.assertEqual(self.blobs()[0].read_bytes(), wav_bytes())
+
     def test_cleanup_racing_with_a_slow_upload_cannot_remove_it(self):
         ready, release = Event(), Event()
 
@@ -148,7 +187,7 @@ class ConcurrentCleanupTests(IngestionFixtures, TransactionTestCase):
             pending = executor.submit(send)
             try:
                 self.assertTrue(ready.wait(timeout=10))
-                os.utime(self.blobs()[0], (0, 0))
+                os.utime(next(self.root.glob("incoming-*.part")), (0, 0))
                 result = clean_orphan_fragments(self.storage, older_than_seconds=1)
                 self.assertEqual(result.busy, 1)
                 self.assertEqual(result.removed, 0)

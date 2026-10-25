@@ -155,7 +155,7 @@ No hay emisión pública de credenciales ni permisos heredados de profesionales.
 
 `uploads.py` limita los bytes mientras escribe el multipart a un temporal
 privado y comprueba que la carga tenga su cierre completo. `storage.py` valida
-el archivo y sincroniza sus bytes y directorio antes de aceptar. `ingestion.py`
+el archivo y sincroniza sus bytes y publicación antes de aceptar. `ingestion.py`
 registra la secuencia, contador, trabajo pendiente y eventos en una única
 transacción SQL durable. La vista responde solo después del commit.
 
@@ -187,10 +187,20 @@ de archivos aceptados después de procesar son responsabilidad de esa integraci�
 | `CAPTURE_FRAGMENT_MAX_BYTES` | `26214400` (25 MiB); archivo, incluyendo cabecera WAV. Cuerpo multipart limitado a este valor + 64 KiB. |
 | `CAPTURE_ORPHAN_MAX_AGE_SECONDS` | `3600`; antigüedad mínima para eliminar huérfanos. |
 
-El directorio es 0700 y los archivos 0600. API y limpieza deben compartir base
-SQL y volumen Linux/POSIX con `flock` y `fsync`. Los nombres de almacenamiento
+En macOS/Linux el directorio es 0700 y los archivos 0600. En Windows la
+privacidad depende de las ACL del directorio privado del usuario o servicio.
+API y limpieza deben compartir base SQL y volumen local persistente. Se usan
+los bloqueos compartidos/exclusivos de Django (`flock` en POSIX y `LockFileEx`
+en Windows), sin dependencias adicionales. Los nombres de almacenamiento
 son aleatorios; no incluyen nombres recibidos, sesiones ni contexto clínico.
 Audio, transcripciones, checksums, rutas y secretos no aparecen en la bitácora.
+
+El staging usa archivos `incoming-*.part`. Antes de crear el trabajo se hace
+`fsync` del archivo, se cierra y se publica con el nombre definitivo: en POSIX
+se sincroniza el directorio; en Windows se usa `MoveFileExW` con
+`MOVEFILE_WRITE_THROUGH`. El lock de asignación protege el cambio de nombre
+y la adquisición de la nueva lease. La limpieza cierra los handles antes de
+borrar, manteniendo su lock global exclusivo, como requiere Windows.
 
 El request elimina temporales en errores y al interrumpirse la carga. Ejecutar
 al arrancar y periódicamente para recuperar archivos abandonados por caídas:
@@ -260,3 +270,4 @@ Cubren autenticación y revocación, pertenencia/estado/ventanas de sesiones,
 reintentos y conflictos concurrentes, rollback, commit de resultado incierto,
 privacidad y limpieza concurrente. Una prueba termina abruptamente un proceso
 para verificar la recuperación posterior de su temporal sin ejecutar finalizers.
+Una prueba adicional ejecuta `check` y migraciones sin permitir importar `fcntl`.
