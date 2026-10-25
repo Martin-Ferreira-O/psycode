@@ -6,37 +6,53 @@ import os
 import subprocess
 import wave
 
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from .config import AgentConfig
 
 
 SAMPLE_RATE = 16000
 CHANNELS = 1
-SAMPLE_WIDTH = 2  # PCM de 16 bits
+SAMPLE_WIDTH = 2
 
 
-def save_fragment(folder, box, session_id, sequence, audio):
+def save_fragment(
+    folder: Path,
+    box: str,
+    session_id: UUID,
+    sequence: int,
+    audio: bytes,
+    captured_at: datetime,
+):
+    """Guarda un WAV y su manifiesto local."""
+
+    if captured_at.tzinfo is None or captured_at.utcoffset() is None:
+        raise ValueError("captured_at debe incluir zona horaria")
+
+    if sequence < 0:
+        raise ValueError("La secuencia no puede ser negativa")
+
     folder.mkdir(parents=True, exist_ok=True)
 
     filename = f"{sequence:06d}.wav"
     destination = folder / filename
     temporary = folder / f"{filename}.part"
 
-    # Primero generar completamente el WAV.
     with wave.open(str(temporary), "wb") as wav:
         wav.setnchannels(CHANNELS)
         wav.setsampwidth(SAMPLE_WIDTH)
         wav.setframerate(SAMPLE_RATE)
         wav.writeframes(audio)
 
-    # Publicar el archivo terminado.
     os.replace(temporary, destination)
 
     checksum = hashlib.sha256(
         destination.read_bytes()
     ).hexdigest()
+
+    captured_at_utc = captured_at.astimezone(timezone.utc)
 
     metadata = {
         "box": box,
@@ -44,18 +60,23 @@ def save_fragment(folder, box, session_id, sequence, audio):
         "sequence": sequence,
         "filename": filename,
         "checksum_sha256": checksum,
+        "captured_at": captured_at_utc.isoformat(
+            timespec="milliseconds"
+        ).replace("+00:00", "Z"),
         "duration_seconds": len(audio) / (
             SAMPLE_RATE * SAMPLE_WIDTH
         ),
+        "status": "pending",
+        "attempts": 0,
     }
 
     metadata_path = folder / f"{sequence:06d}.json"
     metadata_temp = folder / f"{sequence:06d}.json.part"
 
-    metadata_temp.write_text(
-        json.dumps(metadata, indent=2),
-        encoding="utf-8",
-    )
+    with metadata_temp.open("w", encoding="utf-8") as file:
+        json.dump(metadata, file, indent=2)
+        file.flush()
+        os.fsync(file.fileno())
 
     os.replace(metadata_temp, metadata_path)
 
@@ -67,14 +88,42 @@ def save_fragment(folder, box, session_id, sequence, audio):
     return metadata
 
 
-def capture_audio(config, seconds, session_id):
+def capture_audio(
+    config: AgentConfig,
+    seconds: int,
+    session_id: UUID,
+    captured_at_start: datetime,
+):
+    """
+    Captura y fragmenta audio RTSP.
+
+    captured_at_start es una referencia temporal de laboratorio.
+    No representa necesariamente el PTS real del primer audio.
+    """
+
+    if seconds <= 0:
+        raise ValueError("La duración debe ser positiva")
+
+    if (
+        captured_at_start.tzinfo is None
+        or captured_at_start.utcoffset() is None
+    ):
+        raise ValueError(
+            "captured_at_start debe incluir zona horaria"
+        )
+
+    session_id = UUID(str(session_id))
+
     duration = config.chunk_duration
     overlap = config.chunk_overlap
 
     bytes_per_second = SAMPLE_RATE * SAMPLE_WIDTH
-    chunk_size = duration * bytes_per_second
-    step_size = (duration - overlap) * bytes_per_second
-    overlap_size = overlap * bytes_per_second
+
+    chunk_size = int(duration * bytes_per_second)
+    step_size = int(
+        (duration - overlap) * bytes_per_second
+    )
+    overlap_size = int(overlap * bytes_per_second)
 
     output = (
         Path(__file__).resolve().parent
@@ -93,16 +142,11 @@ def capture_audio(config, seconds, session_id):
         "-t", str(seconds),
         "-af", "aresample=async=1000:first_pts=0",
         "-ac", "1",
-        "-ar", "16000",
+        "-ar", str(SAMPLE_RATE),
         "-c:a", "pcm_s16le",
         "-f", "s16le",
         "pipe:1",
     ]
-
-    print(f"Box: {config.box_id}")
-    print(f"Sesión de prueba: {session_id}")
-    print(f"Duración: {duration} s")
-    print(f"Solapamiento: {overlap} s")
 
     process = subprocess.Popen(
         command,
@@ -112,6 +156,10 @@ def capture_audio(config, seconds, session_id):
 
     buffer = bytearray()
     sequence = 0
+
+    def fragment_timestamp(number: int) -> datetime:
+        offset = number * (duration - overlap)
+        return captured_at_start + timedelta(seconds=offset)
 
     try:
         while True:
@@ -126,25 +174,27 @@ def capture_audio(config, seconds, session_id):
                 audio = bytes(buffer[:chunk_size])
 
                 save_fragment(
-                    output,
-                    config.box_id,
-                    session_id,
-                    sequence,
-                    audio,
+                    folder=output,
+                    box=config.box_id,
+                    session_id=session_id,
+                    sequence=sequence,
+                    audio=audio,
+                    captured_at=fragment_timestamp(sequence),
                 )
 
                 sequence += 1
                 del buffer[:step_size]
 
-        # Guardar el último fragmento parcial,
-        # evitando publicar solo el solapamiento.
-        if buffer and (sequence == 0 or len(buffer) > overlap_size):
+        if buffer and (
+            sequence == 0 or len(buffer) > overlap_size
+        ):
             save_fragment(
-                output,
-                config.box_id,
-                session_id,
-                sequence,
-                bytes(buffer),
+                folder=output,
+                box=config.box_id,
+                session_id=session_id,
+                sequence=sequence,
+                audio=bytes(buffer),
+                captured_at=fragment_timestamp(sequence),
             )
             sequence += 1
 
@@ -160,7 +210,8 @@ def capture_audio(config, seconds, session_id):
             process.stdout.close()
 
     print(f"Total de fragmentos: {sequence}")
-    print(f"Archivos guardados en: {output}")
+
+    return output
 
 
 def main():
@@ -170,17 +221,27 @@ def main():
         type=int,
         default=35,
     )
+
     args = parser.parse_args()
-
-    if args.seconds <= 0:
-        parser.error("--seconds debe ser positivo")
-
     config = AgentConfig.from_env()
 
     if not config.stream_url:
         raise ValueError("Falta STREAM_URL en .env")
 
-    capture_audio(config, args.seconds, uuid4())
+    # Exclusivamente para pruebas manuales.
+    # SCRUM-71 deberá proporcionar el UUID en producción.
+    session_id = uuid4()
+
+    # Referencia aproximada de laboratorio.
+    # No equivale al timestamp verificado del audio RTSP.
+    captured_at_start = datetime.now(timezone.utc)
+
+    capture_audio(
+        config=config,
+        seconds=args.seconds,
+        session_id=session_id,
+        captured_at_start=captured_at_start,
+    )
 
 
 if __name__ == "__main__":
