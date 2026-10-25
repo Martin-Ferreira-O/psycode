@@ -1,5 +1,4 @@
 """Recuperar archivos huérfanos sin tocar cargas vivas ni archivos de trabajos."""
-import fcntl
 import os
 import re
 import stat
@@ -8,6 +7,7 @@ from dataclasses import dataclass
 from django.utils import timezone
 
 from .models import FragmentJob
+from .filesystem import lock_file, open_private
 
 MANAGED_FILE = re.compile(r"(?:[0-9a-f]{32}\.blob|incoming-[A-Za-z0-9_-]+\.part)")
 
@@ -33,9 +33,9 @@ def clean_orphan_fragments(storage, *, older_than_seconds, now=None):
                     if not MANAGED_FILE.fullmatch(entry.name) or not entry.is_file(follow_symlinks=False):
                         continue
                     try:
-                        fd = os.open(entry.path, os.O_RDWR | os.O_NOFOLLOW | os.O_NONBLOCK)
+                        fd = open_private(entry.path, os.O_RDWR)
                         try:
-                            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                            lock_file(fd, blocking=False)
                             info = os.fstat(fd)
                             if not stat.S_ISREG(info.st_mode) or info.st_mtime > cutoff:
                                 continue
@@ -44,10 +44,13 @@ def clean_orphan_fragments(storage, *, older_than_seconds, now=None):
                             if FragmentJob.objects.filter(storage_key=entry.name).exists():
                                 result.protected += 1
                                 continue
-                            os.unlink(entry.path)
-                            result.removed += 1
                         finally:
                             os.close(fd)
+                        # El lock global sigue exclusivo: cerrar antes de borrar
+                        # también es seguro en Windows, donde unlink de un
+                        # archivo abierto falla.
+                        os.unlink(entry.path)
+                        result.removed += 1
                     except FileNotFoundError:
                         continue  # El parser pudo cerrar y eliminar su temporal.
                     except BlockingIOError:

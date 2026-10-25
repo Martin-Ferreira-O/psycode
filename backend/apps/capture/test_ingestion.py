@@ -1,4 +1,5 @@
 import hashlib
+import os
 import struct
 from dataclasses import replace
 from datetime import timedelta
@@ -58,8 +59,9 @@ class FragmentIngestionTests(IngestionFixtures, TestCase):
         self.assertEqual(job.sequence.number, 0)
         self.assertEqual(CaptureSession.objects.get().next_sequence, 1)
         self.assertEqual(self.blobs()[0].read_bytes(), wav_bytes())
-        self.assertEqual(self.blobs()[0].stat().st_mode & 0o777, 0o600)
-        self.assertEqual(self.root.stat().st_mode & 0o777, 0o700)
+        if os.name != "nt":
+            self.assertEqual(self.blobs()[0].stat().st_mode & 0o777, 0o600)
+            self.assertEqual(self.root.stat().st_mode & 0o777, 0o700)
         self.assertEqual(CaptureEvent.objects.filter(action="capture.fragment.queued").count(), 1)
         self.assertNotIn("sensitive", job.storage_key)
 
@@ -206,6 +208,24 @@ class FragmentIngestionTests(IngestionFixtures, TestCase):
         self.assertNotIn("sensitive", str(caught.exception))
         self.assertFalse(FragmentJob.objects.exists())
         self.assertEqual(self.blobs(), [])
+
+    def test_publication_failure_before_or_after_move_never_confirms_or_leaves_a_job(self):
+        from .filesystem import publish_file
+
+        def moved_then_failed(source, destination):
+            publish_file(source, destination)
+            raise OSError("private publication error")
+
+        for failure in (OSError("private publication error"), moved_then_failed):
+            with self.subTest(after_move=callable(failure)):
+                with patch("backend.apps.capture.storage.publish_file", side_effect=failure):
+                    with self.assertRaises(FragmentError) as caught:
+                        self.receive()
+                self.assertEqual(caught.exception.code, "FRAGMENT_STORAGE_UNAVAILABLE")
+                self.assertFalse(FragmentJob.objects.exists())
+                self.assertFalse(AcceptedSequence.objects.exists())
+                self.assertEqual(self.blobs(), [])
+                self.assertFalse(list(self.root.glob("*.part")))
 
 
 class FragmentConcurrencyTests(IngestionFixtures, TransactionTestCase):

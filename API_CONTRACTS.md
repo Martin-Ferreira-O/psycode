@@ -1,6 +1,6 @@
 # Contratos de API — Psycode API
 
-**Nombre técnico:** `psycode-api`. **API:** v1. **Revisión documental:** 1.4, ingesta interna de fragmentos actualizada el 2026-10-24. **Implementación actual:** las operaciones descritas se implementan por sus tareas SCRUM correspondientes.
+**Nombre técnico:** `psycode-api`. **API:** v1. **Revisión documental:** 1.5, compatibilidad de ingesta con Windows actualizada el 2026-10-25. **Implementación actual:** las operaciones descritas se implementan por sus tareas SCRUM correspondientes.
 
 **Base URL:** `/api/v1/`. **Autenticación:** JWT `Authorization: Bearer <access_token>`. **JSON:** `application/json`. La ingesta interna de la sección 5 utiliza credenciales `Agent` y `multipart/form-data`. [Arquitectura](ARCHITECTURE.md) · [Aceptación](docs/ACCEPTANCE.md).
 
@@ -811,8 +811,9 @@ El `estado` de la respuesta es la confirmación fija `aceptado`, no el estado
 actual del procesamiento. El `timestamp` del envelope corresponde a cada
 respuesta; los campos de `data` se conservan.
 
-Antes del commit SQL, el archivo validado se sincroniza a disco junto con su
-entrada de directorio. Secuencia, contador de sesión, trabajo y bitácora se
+Antes del commit SQL, el archivo validado se sincroniza a disco y se publica
+con el nombre definitivo: `fsync` del directorio en POSIX y `MoveFileExW` con
+`MOVEFILE_WRITE_THROUGH` en Windows. Secuencia, contador de sesión, trabajo y bitácora se
 guardan en **una transacción SQL**. Se responde con éxito solo tras el commit;
 la vista no participa en una transacción externa que pueda revertir después.
 No se introduce una transacción distribuida entre archivos y SQL: una caída
@@ -882,10 +883,13 @@ En sesiones cerradas una secuencia posterior puede responder
 ### Almacenamiento temporal, limpieza y cola
 
 `CAPTURE_FRAGMENT_ROOT` apunta a un directorio privado fuera de estáticos y media,
-por defecto `.local/capture-fragments`. Directorio 0700 y archivos 0600, con nombres
-aleatorios sin contexto clínico. Debe residir en un volumen persistente que
-soporte `fsync` y bloqueos POSIX `flock`; todos los procesos API y de limpieza
-comparten ese volumen y la misma base SQL. La implementación usa Linux/POSIX.
+por defecto `.local/capture-fragments`. En POSIX se usan directorio 0700 y
+archivos 0600; en Windows deben protegerse mediante las ACL del directorio
+privado del usuario o servicio. Los nombres son aleatorios sin contexto clínico.
+Debe residir en un volumen local persistente que soporte sincronización y
+bloqueos de archivo (`flock` en POSIX, `LockFileEx` en Windows). Todos los
+procesos API y de limpieza comparten ese volumen y la misma base SQL.
+Se soportan Windows nativo, macOS y Linux, sin instalar `fcntl` por separado.
 La bitácora registra solo identificadores técnicos, estado, secuencia y códigos
 permitidos; nunca nombres, bytes, checksum, transcripciones ni secretos. No
 habilitar registro de cuerpos de solicitudes en proxies o instrumentación.

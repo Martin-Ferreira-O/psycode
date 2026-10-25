@@ -1,5 +1,4 @@
-"""Archivos privados locales, con leases POSIX compartidas con la limpieza."""
-import fcntl
+"""Archivos privados locales, con leases compartidas con la limpieza."""
 import hashlib
 import os
 import struct
@@ -9,7 +8,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from uuid import uuid4
 
+from django.core.files.base import File
+
 from backend.common.errors import ServiceError
+from .filesystem import lock_file, open_private, publish_file
 
 
 class FragmentError(ServiceError):
@@ -60,6 +62,21 @@ def validate_wav(stream, size):
         raise FragmentError("INVALID_FRAGMENT_FILE")
 
 
+class IncomingFragment(File):
+    def __init__(self, stream, storage):
+        super().__init__(stream, name=stream.name)
+        self.storage = storage
+
+    def close(self):
+        if self.closed:
+            return
+        # Windows requiere cerrar todos los handles antes de eliminar. Evitar
+        # que la limpieza abra el archivo entre el cierre y el unlink.
+        with self.storage.allocation_lock():
+            self.file.close()
+            Path(self.name).unlink(missing_ok=True)
+
+
 class FragmentStorage:
     def __init__(self, root, max_bytes):
         self.root = Path(root)
@@ -68,11 +85,11 @@ class FragmentStorage:
     @contextmanager
     def allocation_lock(self, *, cleanup=False):
         self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
-        self.root.chmod(0o700)
-        fd = os.open(self.root / ".allocation.lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+        if os.name != "nt":
+            self.root.chmod(0o700)
+        fd = open_private(self.root / ".allocation.lock", os.O_CREAT | os.O_RDWR)
         try:
-            operation = (fcntl.LOCK_EX | fcntl.LOCK_NB) if cleanup else fcntl.LOCK_SH
-            fcntl.flock(fd, operation)
+            lock_file(fd, exclusive=cleanup, blocking=not cleanup)
             yield
         finally:
             os.close(fd)
@@ -80,22 +97,30 @@ class FragmentStorage:
     def incoming(self):
         """El parser cierra y elimina este archivo, incluso si interrumpe la carga."""
         with self.allocation_lock():
-            stream = tempfile.NamedTemporaryFile(dir=self.root, prefix="incoming-", suffix=".part")
+            stream = tempfile.NamedTemporaryFile(dir=self.root, prefix="incoming-", suffix=".part", delete=False)
             try:
-                fcntl.flock(stream, fcntl.LOCK_EX)
+                lock_file(stream)
             except BaseException:
                 stream.close()
+                Path(stream.name).unlink(missing_ok=True)
                 raise
-            return stream
+            return IncomingFragment(stream, self)
 
     @contextmanager
     def stage(self, upload, checksum):
         key = uuid4().hex + ".blob"
-        path = self.root / key
+        # Un nombre gestionado permite recuperar también una caída previa a
+        # publicar el blob. El bloqueo protege ambos nombres durante el cambio.
+        path = self.root / ("incoming-" + uuid4().hex + ".part")
         with self.allocation_lock():
-            fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+            fd = open_private(path, os.O_CREAT | os.O_EXCL | os.O_RDWR)
             stream = os.fdopen(fd, "w+b")
-            fcntl.flock(stream, fcntl.LOCK_EX)
+            try:
+                lock_file(stream)
+            except BaseException:
+                stream.close()
+                path.unlink(missing_ok=True)
+                raise
         stored = StoredFragment(key, 0, "")
         try:
             digest = hashlib.sha256()
@@ -112,17 +137,25 @@ class FragmentStorage:
                 raise FragmentError("CHECKSUM_MISMATCH")
             stream.flush()
             validate_wav(stream, stored.size)
-            # Archivo Y entrada de directorio deben ser durables antes del commit SQL.
+            # Archivo y publicación deben ser durables antes del commit SQL.
             os.fsync(stream.fileno())
-            directory = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY)
-            try:
-                os.fsync(directory)
-            finally:
-                os.close(directory)
+            with self.allocation_lock():
+                stream.close()
+                destination = self.root / key
+                try:
+                    publish_file(path, destination)
+                finally:
+                    # La publicación puede haber ocurrido antes de fallar la
+                    # sincronización. No eliminar nunca un destino preexistente.
+                    if not path.exists():
+                        path = destination
+                stream = os.fdopen(open_private(path, os.O_RDWR), "r+b")
+                lock_file(stream)
             yield stored
         finally:
-            try:
-                if not stored.keep:
-                    path.unlink(missing_ok=True)
-            finally:
+            if stored.keep:
                 stream.close()
+            else:
+                with self.allocation_lock():
+                    stream.close()
+                    path.unlink(missing_ok=True)

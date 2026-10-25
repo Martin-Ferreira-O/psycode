@@ -91,7 +91,7 @@ consulta MongoDB de bitácora de alertas conserva su contrato. El agente consume
 una interfaz interna con DTO; su transporte y ejecución pertenecen al adaptador
 del box. La ingesta implementa `POST /api/v1/internal/fragments` con credenciales
 de agente vinculadas al box, separadas del JWT profesional. Guarda archivos
-temporales en un volumen privado POSIX y `FragmentJob` en SQL, relacionado uno
+temporales en un volumen local privado (Windows, macOS o Linux) y `FragmentJob` en SQL, relacionado uno
 a uno con la secuencia aceptada. La clave única sesión/secuencia y el bloqueo
 de sesión evitan duplicados entre procesos. Archivo validado y sincronizado a
 disco precede a la transacción que registra secuencia, trabajo pendiente y
