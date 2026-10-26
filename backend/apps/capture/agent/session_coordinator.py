@@ -1,4 +1,5 @@
-﻿"""Ejecucion local de ordenes SCRUM-71 dentro del agente SCRUM-72."""
+﻿
+"""Ejecucion local de ordenes SCRUM-71 dentro del agente SCRUM-72."""
 
 import threading
 from datetime import datetime, timezone
@@ -14,8 +15,8 @@ class SessionCoordinator:
     Coordina OBS y CaptureRunner.
 
     control: adaptador compatible con BoxAgentControl.
-    En pruebas se utiliza un simulador. El transporte remoto
-    definitivo se conectara cuando este disponible.
+    En pruebas se utiliza un simulador.
+    El transporte remoto se conectara cuando este disponible.
     """
 
     def __init__(
@@ -25,12 +26,14 @@ class SessionCoordinator:
         controller=None,
         runner_factory=CaptureRunner,
         stop_timeout=60,
+        journal=None,
     ):
         self.config = config
         self.control = control
         self.controller = controller or OBSController(config)
         self.runner_factory = runner_factory
         self.stop_timeout = stop_timeout
+        self.journal = journal
 
         self.session_id = None
         self.runner = None
@@ -47,8 +50,59 @@ class SessionCoordinator:
     def _now():
         return datetime.now(timezone.utc)
 
+
+    def inspect_recovery(self, command: Command):
+        """Inspecciona una orden persistida y el estado actual de OBS."""
+
+        if not isinstance(command, Command):
+            raise TypeError("Se esperaba un Command de SCRUM-71")
+
+        if command.box != self.config.box_id:
+            raise ValueError("La orden pertenece a otro box")
+
+        if self.journal is None:
+            raise RuntimeError("No existe un registro persistente configurado")
+
+        if self.session_id is not None:
+            raise RuntimeError("No se puede recuperar con una sesion activa")
+
+        saved = self.journal.get(command.command_id)
+
+        if saved is None:
+            return None
+
+        if (
+            saved["session_id"] != str(command.session_id)
+            or saved["box"] != command.box
+            or saved["kind"] != command.kind
+        ):
+            raise ValueError("Los datos de la orden no coinciden")
+
+        if saved["state"] not in ("prepared", "executed", "acknowledged"):
+            raise ValueError("Estado persistido desconocido")
+
+        try:
+            self.controller.connect()
+            obs_status = self.controller.status()
+        finally:
+            self.controller.disconnect()
+
+        return {
+            "command_id": command.command_id,
+            "session_id": command.session_id,
+            "kind": command.kind,
+            "journal_state": saved["state"],
+            "occurred_at": saved["occurred_at"],
+            "last_sequence": saved["last_sequence"],
+            "recording": obs_status["recording"],
+            "streaming": obs_status["streaming"],
+            "requires_reconciliation": True,
+        }
+
+
     def handle_command(self, command: Command):
         """Ejecuta una orden previamente recibida del backend."""
+
         if not isinstance(command, Command):
             raise TypeError("Se esperaba un Command de SCRUM-71")
 
@@ -62,10 +116,20 @@ class SessionCoordinator:
             return self._start(command)
 
         if command.kind == "detencion":
+            if self.session_id is None and self.journal is not None:
+                saved = self.journal.get(command.command_id)
+
+                if saved is not None and saved["state"] in (
+                    "executed",
+                    "acknowledged",
+                ):
+                    # Recuperar la detencion sin volver a ejecutar OBS.
+                    return self.recover_stop_confirmation(command)
+
             return self._stop(command)
 
-        raise ValueError("Tipo de orden desconocido")
 
+        raise ValueError("Tipo de orden desconocido")
 
     def _start(self, command):
         """Inicia OBS una sola vez y recupera confirmaciones pendientes."""
@@ -95,6 +159,19 @@ class SessionCoordinator:
                     "Inicio fuera de la ventana autorizada"
                 )
 
+            # Registrar la orden antes de ejecutar OBS.
+            if self.journal is not None:
+                existing = self.journal.get(command.command_id)
+
+                if existing is not None:
+                    # Evitar repetir una orden recuperada sin verificar OBS.
+                    raise RuntimeError(
+                        "Orden recuperada del disco: requiere "
+                        "reconciliar el estado de OBS antes de continuar"
+                    )
+
+                self.journal.prepare(command)
+
             runner = self.runner_factory(self.config)
 
             try:
@@ -117,8 +194,7 @@ class SessionCoordinator:
 
             started_at = self._now()
 
-            # OBS ya se inicio. Conservar los datos para
-            # evitar repetir la operacion ante un timeout.
+            # Conservar el inicio para evitar repetir OBS ante un timeout.
             self._pending_start = (
                 command.command_id,
                 command.session_id,
@@ -126,9 +202,14 @@ class SessionCoordinator:
                 runner,
             )
 
+        # Registrar la ejecucion antes de confirmar al backend.
+        if self.journal is not None:
+            self.journal.mark_executed(
+                command,
+                occurred_at=started_at,
+            )
+
         # Confirmar el inicio con SCRUM-71.
-        # Si falla la comunicacion, conservar _pending_start.
-        # No repetir start_capture() en el siguiente intento.
         self.control.acknowledge(
             self.config.box_id,
             command.command_id,
@@ -136,7 +217,10 @@ class SessionCoordinator:
             occurred_at=started_at,
         )
 
-        # Inicio confirmado.
+        # Guardar la confirmacion en el registro persistente.
+        if self.journal is not None:
+            self.journal.mark_acknowledged(command)
+
         self._pending_start = None
 
         self.session_id = command.session_id
@@ -182,13 +266,28 @@ class SessionCoordinator:
 
         return command.session_id
 
-
     def _stop(self, command):
-        """Finaliza la captura y confirma la ultima secuencia."""
+        """Finaliza la captura y persiste la ultima secuencia."""
+
         if self.session_id != command.session_id:
-            raise RuntimeError("La orden no corresponde a la sesion activa")
+            raise RuntimeError(
+                "La orden no corresponde a la sesion activa"
+            )
 
         if self._stop_confirmation is None:
+
+            # Registrar la orden antes de detener OBS.
+            if self.journal is not None:
+                existing = self.journal.get(command.command_id)
+
+                if existing is not None:
+                    raise RuntimeError(
+                        "Detencion recuperada del disco: requiere "
+                        "reconciliar el estado de OBS antes de continuar"
+                    )
+
+                self.journal.prepare(command)
+
             try:
                 if self.thread is not None:
                     self.runner.stop()
@@ -199,7 +298,7 @@ class SessionCoordinator:
                             "La captura no finalizo dentro del plazo"
                         )
 
-                # Primero finaliza FFmpeg, luego se detiene OBS.
+                # Finalizar OBS despues de terminar FFmpeg.
                 self.controller.stop_capture()
 
                 last_sequence = self.runner.store.last_sequence(
@@ -207,13 +306,6 @@ class SessionCoordinator:
                 )
 
                 ended_at = self._now()
-
-                # Conservar el mismo instante si hay que reintentar.
-                self._stop_confirmation = (
-                    command.command_id,
-                    ended_at,
-                    last_sequence,
-                )
 
             except Exception:
                 self.control.acknowledge(
@@ -225,11 +317,28 @@ class SessionCoordinator:
                 )
                 raise
 
-        saved_command_id, ended_at, last_sequence = self._stop_confirmation
+            # Persistir la detencion antes de confirmarla al backend.
+            if self.journal is not None:
+                self.journal.mark_executed(
+                    command,
+                    occurred_at=ended_at,
+                    last_sequence=last_sequence,
+                )
+
+            self._stop_confirmation = (
+                command.command_id,
+                ended_at,
+                last_sequence,
+            )
+
+        saved_command_id, ended_at, last_sequence = (
+            self._stop_confirmation
+        )
 
         if saved_command_id != command.command_id:
             raise RuntimeError("Existe otra detencion pendiente")
 
+        # Confirmar la detencion conservando su secuencia final.
         self.control.acknowledge(
             self.config.box_id,
             command.command_id,
@@ -237,6 +346,10 @@ class SessionCoordinator:
             last_sequence=last_sequence,
             occurred_at=ended_at,
         )
+
+        # Guardar la confirmacion recibida de SCRUM-71.
+        if self.journal is not None:
+            self.journal.mark_acknowledged(command)
 
         self.controller.disconnect()
 
@@ -250,12 +363,90 @@ class SessionCoordinator:
 
         return last_sequence
 
+
+    def recover_stop_confirmation(self, command: Command):
+        """Recupera la confirmacion de una detencion ya ejecutada."""
+
+        if not isinstance(command, Command):
+            raise TypeError("Se esperaba un Command de SCRUM-71")
+
+        if command.box != self.config.box_id:
+            raise ValueError("La orden pertenece a otro box")
+
+        if command.kind != "detencion":
+            raise ValueError("Solo se recuperan detenciones")
+
+        if self.journal is None:
+            raise RuntimeError("No existe un registro persistente")
+
+        if self.session_id is not None:
+            raise RuntimeError("Existe una sesion activa")
+
+        saved = self.journal.get(command.command_id)
+
+        if saved is None:
+            raise RuntimeError("La orden no existe en el registro")
+
+        if (
+            saved["session_id"] != str(command.session_id)
+            or saved["box"] != command.box
+            or saved["kind"] != command.kind
+        ):
+            raise ValueError("Los datos de la orden no coinciden")
+
+        # Verificar el estado antes de validar la secuencia.
+        if saved["state"] not in ("executed", "acknowledged"):
+            raise RuntimeError("La detencion requiere reconciliacion")
+
+        last_sequence = saved["last_sequence"]
+
+        if (
+            not isinstance(last_sequence, int)
+            or isinstance(last_sequence, bool)
+            or last_sequence < -1
+        ):
+            raise ValueError("Ultima secuencia persistida invalida")
+
+        if saved["state"] == "acknowledged":
+            self._completed_commands[command.command_id] = last_sequence
+            return last_sequence
+
+
+        # Verificar OBS antes de reenviar la confirmacion.
+        status = self.inspect_recovery(command)
+
+        if status["recording"] or status["streaming"]:
+            raise RuntimeError(
+                "OBS sigue activo: no se puede confirmar la detencion"
+            )
+
+        occurred_at = datetime.fromisoformat(saved["occurred_at"])
+
+        if occurred_at.tzinfo is None:
+            raise ValueError("La fecha persistida requiere zona horaria")
+
+        # Reutilizar los datos originales de la detencion.
+        self.control.acknowledge(
+            self.config.box_id,
+            command.command_id,
+            success=True,
+            last_sequence=last_sequence,
+            occurred_at=occurred_at,
+        )
+
+        self.journal.mark_acknowledged(command)
+
+        self._completed_commands[command.command_id] = last_sequence
+
+        return last_sequence
+
+
     def heartbeat(self):
         """Informa actividad mediante el adaptador de SCRUM-71."""
+
         if self.session_id is None:
             raise RuntimeError("No existe una sesion activa")
 
-        
         if self.capture_error is not None:
             if not self._interruption_reported:
                 self.control.interrupted(
@@ -268,7 +459,7 @@ class SessionCoordinator:
             raise RuntimeError(
                 "La captura termino con un fallo tecnico"
             ) from self.capture_error
-        
+
         return self.control.heartbeat(
             self.config.box_id,
             self.session_id,
