@@ -176,16 +176,14 @@ class FFmpegUploadIntegrationTests(unittest.TestCase):
                         "FFmpeg no generó el segundo fragmento",
                     )
 
-                    # El segundo fragmento apareció sin
-                    # que el primer envío haya terminado.
+                    # El segundo fragmento apareció sin que el primer envío haya terminado.
                     self.assertFalse(
                         client.first_upload_finished.is_set(),
                         "El primer envío terminó antes de la comprobación",
                     )
 
                 finally:
-                    # Detener FFmpeg y liberar el backend
-                    # para permitir el cierre controlado.
+                    # Detener FFmpeg y liberar el backend para permitir el cierre controlado.
                     runner.stop()
                     client.release_first_upload.set()
                     thread.join(timeout=20)

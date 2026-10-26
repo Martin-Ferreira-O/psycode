@@ -88,12 +88,10 @@ class UploadWorkerTests(unittest.TestCase):
                 "No se realizó la primera revisión",
             )
 
-            # Simulamos que aparece un último WAV
-            # después de la primera revisión.
+            # Simulamos que aparece un último WAV después de la primera revisión.
             queue.has_pending = True
 
-            # finish() debe despertar el worker
-            # y procesarlo antes de terminar.
+            # finish() debe despertar el worker y procesarlo antes de terminar.
             finished = worker.finish(timeout=3)
 
             self.assertTrue(

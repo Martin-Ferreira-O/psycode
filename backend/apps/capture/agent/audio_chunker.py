@@ -242,8 +242,7 @@ def capture_audio(
 
                 del buffer[:step_size]
 
-        # Guardar el último fragmento cuando contenga
-        # audio nuevo y no solo muestras de solapamiento.
+        # Guardar el último fragmento cuando contenga audio nuevo y no solo muestras de solapamiento.
         if buffer and (
             sequence == 0 or len(buffer) > overlap_size
         ):

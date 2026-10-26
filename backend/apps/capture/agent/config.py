@@ -28,6 +28,7 @@ class AgentConfig:
     retry_backoff: float = 2.0
     command_poll_interval: float = 5.0
     heartbeat_interval: float = 30.0
+    control_max_failures: int = 6
 
     @classmethod
     def from_env(cls):
@@ -110,6 +111,15 @@ class AgentConfig:
         if heartbeat_interval <= 0:
             raise ValueError("HEARTBEAT_INTERVAL debe ser positivo")
 
+        control_max_failures = int(
+            os.getenv("CONTROL_MAX_FAILURES", "6")
+        )
+
+        if control_max_failures < 1:
+            raise ValueError(
+                "CONTROL_MAX_FAILURES debe ser al menos 1"
+            )
+
         return cls(
             box_id=box_id,
             obs_host=os.getenv("OBSW_HOST", "127.0.0.1"),
@@ -125,4 +135,5 @@ class AgentConfig:
             retry_backoff=retry_backoff,
             command_poll_interval=command_poll_interval,
             heartbeat_interval=heartbeat_interval,
+            control_max_failures=control_max_failures,
         )

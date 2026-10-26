@@ -93,7 +93,6 @@ class AudioChunkerTests(unittest.TestCase):
 
         self.guardar(0, self.start_time)
 
-        # Referencia temporal de laboratorio:
         # fragmentos de 10 s con 1 s de solapamiento.
         self.guardar(
             1,

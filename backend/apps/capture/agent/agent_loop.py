@@ -3,6 +3,8 @@
 import threading
 import time
 
+import httpx
+
 from .session_coordinator import SessionCoordinator
 
 
@@ -26,12 +28,20 @@ class AgentLoop:
 
         self.poll_interval = config.command_poll_interval
         self.heartbeat_interval = config.heartbeat_interval
+        self.max_control_failures = getattr(
+            config,
+            "control_max_failures",
+            6,
+        )
 
         if self.poll_interval <= 0:
             raise ValueError("Intervalo de consulta invalido")
 
         if self.heartbeat_interval <= 0:
             raise ValueError("Intervalo de heartbeat invalido")
+
+        if self.max_control_failures < 1:
+            raise ValueError("Maximo de fallos invalido")
 
         self._last_heartbeat_at = None
         self._heartbeat_session_id = None
@@ -53,7 +63,6 @@ class AgentLoop:
 
         now = self.clock()
 
-        # Una sesion nueva debe iniciar su propio calendario de heartbeats.
         if session_id != self._heartbeat_session_id:
             self._last_heartbeat_at = None
             self._heartbeat_session_id = session_id
@@ -63,12 +72,10 @@ class AgentLoop:
             or now - self._last_heartbeat_at >= self.heartbeat_interval
         ):
             self.coordinator.heartbeat()
-
-            # Solo registrar el heartbeat si fue exitoso.
             self._last_heartbeat_at = self.clock()
 
     def run(self, stop_event=None):
-        """Ejecuta el ciclo hasta recibir una senal de detencion."""
+        """Ejecuta el ciclo y tolera fallos temporales de transporte."""
 
         stop_event = (
             stop_event
@@ -76,6 +83,29 @@ class AgentLoop:
             else threading.Event()
         )
 
+        consecutive_failures = 0
+
         while not stop_event.is_set():
-            self.tick()
+            try:
+                self.tick()
+
+            except (
+                TimeoutError,
+                ConnectionError,
+                OSError,
+                httpx.RequestError,
+            ) as exc:
+                consecutive_failures += 1
+
+                if consecutive_failures >= self.max_control_failures:
+                    raise RuntimeError(
+                        "Transporte de control no disponible "
+                        "tras agotar los reintentos"
+                    ) from exc
+
+            else:
+                # Una comunicacion exitosa reinicia el contador.
+                consecutive_failures = 0
+
+            # Espera interrumpible, sin bloquear el apagado.
             stop_event.wait(self.poll_interval)

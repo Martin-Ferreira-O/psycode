@@ -57,8 +57,7 @@ class UploadWorker:
 
         while not self._stop_event.is_set():
 
-            # Si se solicitó finalizar antes de esta
-            # iteración, esta será la última revisión.
+            # Si se solicitó finalizar antes de esta iteración, esta será la última revisión.
             finishing_this_pass = (
                 self._finish_requested.is_set()
             )

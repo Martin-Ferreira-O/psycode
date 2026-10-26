@@ -54,8 +54,7 @@ class FFmpegRealTests(unittest.TestCase):
             real_popen = subprocess.Popen
 
             def use_local_audio(command, **kwargs):
-                # Solo en esta prueba sustituimos RTSP
-                # por el archivo WAV sintético.
+                # Solo en esta prueba sustituimos RTSP por el archivo WAV sintético.
                 command = list(command)
 
                 index = command.index("-rtsp_transport")
