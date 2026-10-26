@@ -1,5 +1,7 @@
+
 import time
 import obsws_python as obs
+
 
 class OBSController:
     def __init__(self, config):
@@ -66,9 +68,7 @@ class OBSController:
             )
 
         except Exception:
-            # Recuperación de un inicio parcial.
-            # Solo intentar detener las salidas iniciadas
-            # por esta operación.
+            # Recuperación de un inicio parcial
             if streaming_started:
                 try:
                     self.client.stop_stream()
@@ -87,19 +87,28 @@ class OBSController:
         current = self.status()
 
         if current["streaming"]:
+            print("Deteniendo streaming...")
             self.client.stop_stream()
 
         if current["recording"]:
+            print("Deteniendo grabación...")
             self.client.stop_record()
 
-        current = self.status()
+        # Esperar hasta 10 segundos por la detención
+        deadline = time.monotonic() + 10
 
-        if any(current.values()):
-            raise RuntimeError(
-                "OBS no detuvo ambas salidas"
-            )
+        while time.monotonic() < deadline:
+            current = self.status()
 
-        return current
+            if not current["streaming"] and not current["recording"]:
+                print("Grabación y streaming detenidos")
+                return current
+
+            time.sleep(0.5)
+
+        raise RuntimeError(
+            "OBS no detuvo ambas salidas en 10 segundos"
+        )
 
     def disconnect(self):
         if self.client is not None:

@@ -9,7 +9,7 @@ from .upload_queue import UploadQueue
 import httpx
 
 from django.core.wsgi import get_wsgi_application
-from django.test import TestCase, override_settings
+from django.test import TransactionTestCase, override_settings
 
 from backend.apps.capture.models import (
     AcceptedSequence,
@@ -25,7 +25,7 @@ from .config import AgentConfig
 from .fragment_store import FragmentStore
 
 
-class AgentHTTPIntegrationTests(IngestionFixtures, TestCase):
+class AgentHTTPIntegrationTests(IngestionFixtures, TransactionTestCase):
     """Integración real del agente con la API Django."""
 
     def setUp(self):
