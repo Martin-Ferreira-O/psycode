@@ -26,6 +26,8 @@ class AgentConfig:
     http_timeout: float = 15.0
     max_retries: int = 3
     retry_backoff: float = 2.0
+    command_poll_interval: float = 5.0
+    heartbeat_interval: float = 30.0
 
     @classmethod
     def from_env(cls):
@@ -94,6 +96,20 @@ class AgentConfig:
                 "RETRY_BACKOFF no puede ser negativo"
             )
 
+        command_poll_interval = float(
+            os.getenv("COMMAND_POLL_INTERVAL", "5")
+        )
+
+        heartbeat_interval = float(
+            os.getenv("HEARTBEAT_INTERVAL", "30")
+        )
+
+        if command_poll_interval <= 0:
+            raise ValueError("COMMAND_POLL_INTERVAL debe ser positivo")
+
+        if heartbeat_interval <= 0:
+            raise ValueError("HEARTBEAT_INTERVAL debe ser positivo")
+
         return cls(
             box_id=box_id,
             obs_host=os.getenv("OBSW_HOST", "127.0.0.1"),
@@ -107,4 +123,6 @@ class AgentConfig:
             http_timeout=http_timeout,
             max_retries=max_retries,
             retry_backoff=retry_backoff,
+            command_poll_interval=command_poll_interval,
+            heartbeat_interval=heartbeat_interval,
         )
