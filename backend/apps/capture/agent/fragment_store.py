@@ -2,6 +2,7 @@
 import json
 import os
 from pathlib import Path
+from uuid import UUID
 
 
 class FragmentStoreError(Exception):
@@ -133,3 +134,51 @@ class FragmentStore:
         audio_path.unlink()
 
         return metadata
+
+    def last_sequence(self, session_id: str | UUID) -> int:
+        """
+        Devuelve la última secuencia generada en una sesión.
+
+        Incluye fragmentos aceptados y pendientes.
+        Devuelve -1 si no existen fragmentos.
+        """
+        try:
+            session_id = str(UUID(str(session_id)))
+        except (ValueError, TypeError, AttributeError) as exc:
+            raise FragmentStoreError(
+                "Identificador de sesión inválido"
+            ) from exc
+
+        folder = self.root / session_id
+
+        if not folder.exists():
+            return -1
+
+        last = -1
+
+        for metadata_path in folder.glob("*.json"):
+            metadata = self._read_metadata(metadata_path)
+
+            sequence = metadata.get("sequence")
+
+            if type(sequence) is not int or sequence < 0:
+                raise FragmentStoreError(
+                    "Secuencia local inválida"
+                )
+
+            if metadata.get("session_id") != session_id:
+                raise FragmentStoreError(
+                    "El manifiesto pertenece a otra sesión"
+                )
+
+            if (
+                metadata_path.name != f"{sequence:06d}.json"
+                or metadata.get("filename") != f"{sequence:06d}.wav"
+            ):
+                raise FragmentStoreError(
+                    "Nombre de fragmento inconsistente"
+                )
+
+            last = max(last, sequence)
+
+        return last 
