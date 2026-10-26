@@ -4,10 +4,12 @@ import hashlib
 import json
 import os
 import subprocess
+import threading
 import wave
 
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Callable
 from uuid import UUID, uuid4
 
 from .config import AgentConfig
@@ -90,19 +92,36 @@ def save_fragment(
 
 def capture_audio(
     config: AgentConfig,
-    seconds: int,
+    seconds: int | None,
     session_id: UUID,
     captured_at_start: datetime,
+    stop_event: threading.Event | None = None,
+    on_fragment_saved: Callable[[dict], None] | None = None,
 ):
     """
     Captura y fragmenta audio RTSP.
 
-    captured_at_start es una referencia temporal de laboratorio.
-    No representa necesariamente el PTS real del primer audio.
+    seconds:
+        Duración limitada en segundos, o None para captura continua.
+
+    stop_event:
+        Permite solicitar una detención externa.
+
+    on_fragment_saved:
+        Notifica después de guardar un fragmento completo.
+
+    captured_at_start:
+        Referencia temporal de laboratorio.
+        No representa necesariamente el PTS real del audio.
     """
 
-    if seconds <= 0:
+    if seconds is not None and seconds <= 0:
         raise ValueError("La duración debe ser positiva")
+
+    if seconds is None and stop_event is None:
+        raise ValueError(
+            "La captura continua requiere un stop_event"
+        )
 
     if (
         captured_at_start.tzinfo is None
@@ -120,9 +139,11 @@ def capture_audio(
     bytes_per_second = SAMPLE_RATE * SAMPLE_WIDTH
 
     chunk_size = int(duration * bytes_per_second)
+
     step_size = int(
         (duration - overlap) * bytes_per_second
     )
+
     overlap_size = int(overlap * bytes_per_second)
 
     output = (
@@ -139,7 +160,11 @@ def capture_audio(
         "-i", config.stream_url,
         "-map", "0:a:0",
         "-vn",
-        "-t", str(seconds),
+        *(
+            ["-t", str(seconds)]
+            if seconds is not None
+            else []
+        ),
         "-af", "aresample=async=1000:first_pts=0",
         "-ac", "1",
         "-ar", str(SAMPLE_RATE),
@@ -154,12 +179,52 @@ def capture_audio(
         stderr=subprocess.DEVNULL,
     )
 
+    capture_finished = threading.Event()
+
+    def watch_stop_request():
+        """Detiene FFmpeg ante una solicitud externa."""
+
+        while not capture_finished.wait(0.1):
+            if stop_event is not None and stop_event.is_set():
+                if process.poll() is None:
+                    process.terminate()
+                return
+
+    watcher = None
+
+    if stop_event is not None:
+        watcher = threading.Thread(
+            target=watch_stop_request,
+            name="capture-stop-watcher",
+            daemon=True,
+        )
+        watcher.start()
+
     buffer = bytearray()
     sequence = 0
 
     def fragment_timestamp(number: int) -> datetime:
         offset = number * (duration - overlap)
         return captured_at_start + timedelta(seconds=offset)
+
+    def publish_fragment(audio: bytes):
+        """Guarda y notifica un fragmento."""
+
+        nonlocal sequence
+
+        metadata = save_fragment(
+            folder=output,
+            box=config.box_id,
+            session_id=session_id,
+            sequence=sequence,
+            audio=audio,
+            captured_at=fragment_timestamp(sequence),
+        )
+
+        if on_fragment_saved is not None:
+            on_fragment_saved(metadata)
+
+        sequence += 1
 
     try:
         while True:
@@ -173,41 +238,36 @@ def capture_audio(
             while len(buffer) >= chunk_size:
                 audio = bytes(buffer[:chunk_size])
 
-                save_fragment(
-                    folder=output,
-                    box=config.box_id,
-                    session_id=session_id,
-                    sequence=sequence,
-                    audio=audio,
-                    captured_at=fragment_timestamp(sequence),
-                )
+                publish_fragment(audio)
 
-                sequence += 1
                 del buffer[:step_size]
 
+        # Guardar el último fragmento cuando contenga
+        # audio nuevo y no solo muestras de solapamiento.
         if buffer and (
             sequence == 0 or len(buffer) > overlap_size
         ):
-            save_fragment(
-                folder=output,
-                box=config.box_id,
-                session_id=session_id,
-                sequence=sequence,
-                audio=bytes(buffer),
-                captured_at=fragment_timestamp(sequence),
-            )
-            sequence += 1
+            publish_fragment(bytes(buffer))
 
-        if process.wait() != 0:
+        return_code = process.wait()
+
+        if return_code != 0 and not (
+            stop_event is not None and stop_event.is_set()
+        ):
             raise RuntimeError("FFmpeg terminó con error")
 
     finally:
+        capture_finished.set()
+
         if process.poll() is None:
             process.terminate()
             process.wait()
 
         if process.stdout:
             process.stdout.close()
+
+        if watcher is not None:
+            watcher.join(timeout=1)
 
     print(f"Total de fragmentos: {sequence}")
 
@@ -216,6 +276,7 @@ def capture_audio(
 
 def main():
     parser = argparse.ArgumentParser()
+
     parser.add_argument(
         "--seconds",
         type=int,
@@ -228,12 +289,11 @@ def main():
     if not config.stream_url:
         raise ValueError("Falta STREAM_URL en .env")
 
-    # Exclusivamente para pruebas manuales.
-    # SCRUM-71 deberá proporcionar el UUID en producción.
+    # UUID de laboratorio.
+    # SCRUM-71 proporcionará el UUID real.
     session_id = uuid4()
 
-    # Referencia aproximada de laboratorio.
-    # No equivale al timestamp verificado del audio RTSP.
+    # Referencia temporal aproximada de laboratorio.
     captured_at_start = datetime.now(timezone.utc)
 
     capture_audio(
