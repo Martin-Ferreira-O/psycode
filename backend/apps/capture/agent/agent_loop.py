@@ -6,6 +6,7 @@ import time
 import httpx
 
 from .session_coordinator import SessionCoordinator
+from .command_journal import CommandJournal
 
 
 class AgentLoop:
@@ -18,11 +19,27 @@ class AgentLoop:
     ):
         self.config = config
         self.control = control
-        self.coordinator = (
-            coordinator
-            if coordinator is not None
-            else SessionCoordinator(config, control)
-        )
+        if coordinator is None:
+            state_root = getattr(config, "agent_state_root", "")
+
+            if not state_root:
+                raise ValueError(
+                    "AGENT_STATE_ROOT no esta configurado"
+                )
+
+            journal = CommandJournal(
+                root=state_root,
+                box_id=config.box_id,
+            )
+
+            coordinator = SessionCoordinator(
+                config=config,
+                control=control,
+                journal=journal,
+            )
+
+        self.coordinator = coordinator
+
 
         self.clock = clock or time.monotonic
 

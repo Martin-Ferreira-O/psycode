@@ -29,6 +29,7 @@ class AgentConfig:
     command_poll_interval: float = 5.0
     heartbeat_interval: float = 30.0
     control_max_failures: int = 6
+    agent_state_root: str = ""
 
     @classmethod
     def from_env(cls):
@@ -120,6 +121,16 @@ class AgentConfig:
                 "CONTROL_MAX_FAILURES debe ser al menos 1"
             )
 
+        agent_state_root = Path(
+            os.getenv(
+                "AGENT_STATE_ROOT",
+                str(Path.home() / ".psycode" / "capture-agent-state"),
+            )
+        ).expanduser()
+
+        if not agent_state_root.is_absolute():
+            raise ValueError("AGENT_STATE_ROOT debe ser una ruta absoluta")
+
         return cls(
             box_id=box_id,
             obs_host=os.getenv("OBSW_HOST", "127.0.0.1"),
@@ -136,4 +147,5 @@ class AgentConfig:
             command_poll_interval=command_poll_interval,
             heartbeat_interval=heartbeat_interval,
             control_max_failures=control_max_failures,
+            agent_state_root=str(agent_state_root),
         )
