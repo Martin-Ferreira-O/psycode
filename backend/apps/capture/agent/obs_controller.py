@@ -1,4 +1,4 @@
-
+import subprocess
 import time
 import obsws_python as obs
 
@@ -82,6 +82,58 @@ class OBSController:
                     print("No se pudo detener la grabación")
 
             raise
+
+
+    def wait_for_audio_stream(self, timeout=15.0, retry_interval=0.5):
+        """Espera hasta que MediaMTX publique una pista de audio."""
+
+        if timeout <= 0 or retry_interval <= 0:
+            raise ValueError("Intervalos de espera invalidos")
+
+        deadline = time.monotonic() + timeout
+
+        while time.monotonic() < deadline:
+            remaining = deadline - time.monotonic()
+
+            command = [
+                "ffprobe",
+                "-v", "error",
+                "-rtsp_transport", "tcp",
+                "-i", self.config.stream_url,
+                "-select_streams", "a:0",
+                "-show_entries", "stream=codec_type",
+                "-of", "csv=p=0",
+            ]
+
+            try:
+                result = subprocess.run(
+                    command,
+                    capture_output=True,
+                    text=True,
+                    timeout=min(3.0, max(0.1, remaining)),
+                )
+
+                if (
+                    result.returncode == 0
+                    and "audio" in result.stdout.splitlines()
+                ):
+                    return
+
+            except FileNotFoundError as exc:
+                raise RuntimeError(
+                    "AGENT_FFPROBE_UNAVAILABLE"
+                ) from exc
+
+            except subprocess.TimeoutExpired:
+                pass
+
+            remaining = deadline - time.monotonic()
+
+            if remaining > 0:
+                time.sleep(min(retry_interval, remaining))
+
+        raise RuntimeError("AGENT_STREAM_NOT_READY")
+
 
     def stop_capture(self):
         current = self.status()

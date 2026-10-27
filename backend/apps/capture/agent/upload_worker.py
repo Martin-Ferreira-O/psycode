@@ -67,7 +67,7 @@ class UploadWorker:
                 self.uploaded += count
 
             except (FragmentUploadError, FragmentStoreError) as exc:
-                self.failure = type(exc).__name__
+                self.failure = f"{type(exc).__name__}: {exc}"
                 return
 
             except Exception as exc:

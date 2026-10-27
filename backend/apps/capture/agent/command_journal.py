@@ -172,3 +172,74 @@ class CommandJournal:
 
         self._write(command.command_id, data)
         return data
+
+    def unresolved_sessions(self):
+        """Identifica sesiones persistidas sin una detencion ejecutada."""
+
+        records = []
+
+        for path in sorted(self.root.glob("*.json")):
+            try:
+                command_id = UUID(path.stem)
+
+                with path.open("r", encoding="utf-8") as file:
+                    data = json.load(file)
+
+                if not isinstance(data, dict):
+                    raise ValueError("El registro no es un objeto")
+
+                if (
+                    data.get("command_id") != str(command_id)
+                    or data.get("box") != self.root.name
+                    or data.get("kind") not in ("inicio", "detencion")
+                    or data.get("state") not in (
+                        "prepared",
+                        "executed",
+                        "acknowledged",
+                    )
+                ):
+                    raise ValueError("Datos inconsistentes")
+
+                session_id = str(UUID(data["session_id"]))
+
+                if data["session_id"] != session_id:
+                    raise ValueError("UUID de sesion invalido")
+
+            except (ValueError, TypeError, KeyError, OSError) as exc:
+                raise RuntimeError(
+                    "AGENT_JOURNAL_INVALID"
+                ) from exc
+
+            records.append(data)
+
+        # Una detencion ejecutada indica que OBS fue detenido.
+        completed_sessions = {
+            record["session_id"]
+            for record in records
+            if record["kind"] == "detencion"
+            and record["state"] in ("executed", "acknowledged")
+        }
+
+        unresolved = []
+
+        for record in records:
+            if record["session_id"] in completed_sessions:
+                continue
+
+            if (
+                record["kind"] == "inicio"
+                or (
+                    record["kind"] == "detencion"
+                    and record["state"] == "prepared"
+                )
+            ):
+                unresolved.append(
+                    {
+                        "session_id": record["session_id"],
+                        "command_id": record["command_id"],
+                        "kind": record["kind"],
+                        "state": record["state"],
+                    }
+                )
+
+        return unresolved

@@ -45,6 +45,7 @@ class SessionCoordinator:
         self._stop_confirmation = None
         self._completed_commands = {}
         self._pending_start = None
+        self._reported_recovered_starts = set()
 
     @staticmethod
     def _now():
@@ -113,6 +114,14 @@ class SessionCoordinator:
             return self._completed_commands[command.command_id]
 
         if command.kind == "inicio":
+            if (
+                self.session_id is None
+                and self._pending_start is None
+                and self.journal is not None
+                and self.journal.get(command.command_id) is not None
+            ):
+                return self.recover_start_interruption(command)
+
             return self._start(command)
 
         if command.kind == "detencion":
@@ -174,11 +183,25 @@ class SessionCoordinator:
 
             runner = self.runner_factory(self.config)
 
+            obs_started = False
+
             try:
                 self.controller.connect()
                 self.controller.start_capture()
+                obs_started = True
+
+                # Esperar el audio RTSP antes de confirmar el inicio.
+                self.controller.wait_for_audio_stream()
 
             except Exception:
+                stop_failed = False
+
+                if obs_started:
+                    try:
+                        self.controller.stop_capture()
+                    except Exception:
+                        stop_failed = True
+
                 try:
                     self.control.acknowledge(
                         self.config.box_id,
@@ -189,6 +212,9 @@ class SessionCoordinator:
                     )
                 finally:
                     self.controller.disconnect()
+
+                if stop_failed:
+                    raise RuntimeError("AGENT_OBS_STOP_FAILED")
 
                 raise
 
@@ -364,6 +390,61 @@ class SessionCoordinator:
         return last_sequence
 
 
+    def recover_start_interruption(self, command: Command):
+        """Detecta inicios persistidos sin captura activa en el proceso."""
+
+        if not isinstance(command, Command):
+            raise TypeError("Se esperaba un Command de SCRUM-71")
+
+        if command.box != self.config.box_id:
+            raise ValueError("La orden pertenece a otro box")
+
+        if command.kind != "inicio":
+            raise ValueError("Solo se recuperan inicios")
+
+        if self.journal is None:
+            raise RuntimeError("No existe un registro persistente")
+
+        if self.session_id is not None or self._pending_start is not None:
+            raise RuntimeError("Existe una captura activa o pendiente")
+
+        saved = self.journal.get(command.command_id)
+
+        if saved is None:
+            raise RuntimeError("La orden no existe en el registro")
+
+        if (
+            saved["session_id"] != str(command.session_id)
+            or saved["box"] != command.box
+            or saved["kind"] != command.kind
+        ):
+            raise ValueError("Los datos de la orden no coinciden")
+
+        if saved["state"] == "prepared":
+            raise RuntimeError(
+                "Inicio preparado: requiere reconciliacion manual"
+            )
+
+        if saved["state"] not in ("executed", "acknowledged"):
+            raise ValueError("Estado persistido desconocido")
+
+        # El proceso reiniciado no conserva el CaptureRunner anterior.
+        if command.command_id not in self._reported_recovered_starts:
+            self.control.interrupted(
+                self.config.box_id,
+                command.session_id,
+                error_code="AGENT_INTERRUPTED",
+            )
+
+            self._reported_recovered_starts.add(command.command_id)
+
+        # No reiniciar OBS ni confirmar una captura sin verificar.
+        raise RuntimeError(
+            "Inicio recuperado sin CaptureRunner activo: "
+            "requiere reconciliacion manual"
+        )
+
+
     def recover_stop_confirmation(self, command: Command):
         """Recupera la confirmacion de una detencion ya ejecutada."""
 
@@ -439,6 +520,47 @@ class SessionCoordinator:
         self._completed_commands[command.command_id] = last_sequence
 
         return last_sequence
+
+
+    def shutdown_after_control_failure(self):
+        """Intenta cerrar la captura al perder el control remoto."""
+
+        if self.session_id is None and self._pending_start is None:
+            return
+
+        failures = []
+
+        # Solicitar el cierre del audio y esperar al worker.
+        if self.runner is not None and self.thread is not None:
+            try:
+                self.runner.stop()
+
+                if self.thread.is_alive():
+                    self.thread.join(timeout=self.stop_timeout)
+
+                    if self.thread.is_alive():
+                        failures.append("AGENT_CAPTURE_STOP_TIMEOUT")
+
+            except Exception:
+                failures.append("AGENT_CAPTURE_STOP_FAILED")
+
+        # Intentar detener OBS incluso si el audio no finalizo.
+        try:
+            self.controller.stop_capture()
+        except Exception:
+            failures.append("AGENT_OBS_STOP_FAILED")
+        finally:
+            try:
+                self.controller.disconnect()
+            except Exception:
+                failures.append("AGENT_OBS_DISCONNECT_FAILED")
+
+        if failures:
+            raise RuntimeError(
+                "Cierre de captura incompleto: "
+                + ", ".join(failures)
+            )
+
 
 
     def heartbeat(self):

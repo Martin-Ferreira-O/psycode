@@ -347,9 +347,8 @@ class CaptureRunnerTests(unittest.TestCase):
 
             self.assertEqual(
                 runner.worker.failure,
-                "FragmentUploadError",
+                "FragmentUploadError: Fallo de conexión simulado",
             )
-
 
 
 

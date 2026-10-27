@@ -63,6 +63,60 @@ class AgentLoop:
         self._last_heartbeat_at = None
         self._heartbeat_session_id = None
 
+
+    def check_startup_recovery(self):
+        """Verifica el journal y el estado de OBS antes de arrancar."""
+
+        journal = getattr(self.coordinator, "journal", None)
+
+        if not isinstance(journal, CommandJournal):
+            return []
+
+        unresolved = journal.unresolved_sessions()
+
+        if unresolved:
+            sessions = sorted(
+                {item["session_id"] for item in unresolved}
+            )
+
+            raise RuntimeError(
+                "AGENT_RECOVERY_REQUIRED: "
+                + ", ".join(sessions)
+            )
+
+        # Comprobar OBS antes de aceptar nuevas sesiones.
+        controller = self.coordinator.controller
+
+        try:
+            controller.connect()
+            status = controller.status()
+
+        except Exception as exc:
+            raise RuntimeError(
+                "AGENT_OBS_STATUS_UNAVAILABLE"
+            ) from exc
+
+        finally:
+            try:
+                controller.disconnect()
+            except Exception as exc:
+                raise RuntimeError(
+                    "AGENT_OBS_DISCONNECT_FAILED"
+                ) from exc
+
+        if (
+            not isinstance(status, dict)
+            or not isinstance(status.get("recording"), bool)
+            or not isinstance(status.get("streaming"), bool)
+        ):
+            raise RuntimeError("AGENT_OBS_STATUS_INVALID")
+
+        if status["recording"] or status["streaming"]:
+            raise RuntimeError("AGENT_OBS_BUSY_STARTUP")
+
+        return []
+
+
     def tick(self):
         """Consulta ordenes y comunica actividad de la sesion."""
 
@@ -94,6 +148,9 @@ class AgentLoop:
     def run(self, stop_event=None):
         """Ejecuta el ciclo y tolera fallos temporales de transporte."""
 
+        # Revisar sesiones anteriores antes de aceptar ordenes.
+        self.check_startup_recovery()
+
         stop_event = (
             stop_event
             if stop_event is not None
@@ -115,6 +172,14 @@ class AgentLoop:
                 consecutive_failures += 1
 
                 if consecutive_failures >= self.max_control_failures:
+                    try:
+                        self.coordinator.shutdown_after_control_failure()
+                    except Exception as shutdown_exc:
+                        raise RuntimeError(
+                            "Transporte agotado y cierre "
+                            "de captura incompleto"
+                        ) from shutdown_exc
+
                     raise RuntimeError(
                         "Transporte de control no disponible "
                         "tras agotar los reintentos"
