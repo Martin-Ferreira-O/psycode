@@ -160,40 +160,32 @@ class AgentLoop:
 
         consecutive_failures = 0
 
-        while not stop_event.is_set():
-            try:
-                self.tick()
+        try:
+            while not stop_event.is_set():
+                try:
+                    self.tick()
 
-            except StopCaptureError:
-                consecutive_failures += 1
-                if consecutive_failures >= self.max_control_failures:
-                    raise
+                except StopCaptureError:
+                    consecutive_failures += 1
+                    if consecutive_failures >= self.max_control_failures:
+                        raise
 
-            except (
-                TimeoutError,
-                ConnectionError,
-                OSError,
-                httpx.RequestError,
-            ) as exc:
-                consecutive_failures += 1
-
-                if consecutive_failures >= self.max_control_failures:
-                    try:
-                        self.coordinator.shutdown_after_control_failure()
-                    except Exception as shutdown_exc:
+                except (
+                    TimeoutError,
+                    ConnectionError,
+                    OSError,
+                    httpx.RequestError,
+                ) as exc:
+                    consecutive_failures += 1
+                    if consecutive_failures >= self.max_control_failures:
                         raise RuntimeError(
-                            "Transporte agotado y cierre "
-                            "de captura incompleto"
-                        ) from shutdown_exc
+                            "Transporte de control no disponible "
+                            "tras agotar los reintentos"
+                        ) from exc
+                else:
+                    consecutive_failures = 0
 
-                    raise RuntimeError(
-                        "Transporte de control no disponible "
-                        "tras agotar los reintentos"
-                    ) from exc
-
-            else:
-                # Una comunicacion exitosa reinicia el contador.
-                consecutive_failures = 0
-
-            # Espera interrumpible, sin bloquear el apagado.
-            stop_event.wait(self.poll_interval)
+                stop_event.wait(self.poll_interval)
+        finally:
+            # También cerrar ante stop_event, errores de captura o Ctrl+C.
+            self.coordinator.shutdown_after_control_failure()

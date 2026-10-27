@@ -1,4 +1,5 @@
 ﻿import unittest
+import threading
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -39,6 +40,7 @@ class SafeShutdownTests(unittest.TestCase):
 
     def test_detiene_runner_antes_de_obs(self):
         self.activate_session()
+        thread = self.coordinator.thread
 
         operations = Mock()
         operations.attach_mock(
@@ -61,7 +63,7 @@ class SafeShutdownTests(unittest.TestCase):
             ["runner_stop", "thread_join", "obs_stop"],
         )
 
-        self.coordinator.thread.join.assert_called_once_with(
+        thread.join.assert_called_once_with(
             timeout=3
         )
         self.controller.disconnect.assert_called_once()
@@ -114,6 +116,52 @@ class SafeShutdownTests(unittest.TestCase):
 
         self.controller.stop_capture.assert_not_called()
         self.controller.disconnect.assert_not_called()
+
+    def test_cierre_idempotente(self):
+        self.activate_session()
+        self.coordinator.shutdown_after_control_failure()
+        self.coordinator.shutdown_after_control_failure()
+        self.controller.stop_capture.assert_called_once()
+        self.assertIsNone(self.coordinator.session_id)
+
+    def test_stop_event_cierra_la_sesion_activa(self):
+        self.activate_session()
+        runner = self.coordinator.runner
+        stopped = threading.Event()
+
+        def commands(box):
+            stopped.set()
+            return ()
+
+        self.control.commands.side_effect = commands
+        loop = AgentLoop(self.config, self.control, coordinator=self.coordinator)
+        loop.run(stop_event=stopped)
+
+        runner.stop.assert_called_once()
+        self.controller.stop_capture.assert_called_once()
+        self.controller.disconnect.assert_called_once()
+
+    def test_fallo_de_captura_cierra_obs_antes_de_salir(self):
+        self.activate_session()
+        self.coordinator.capture_error = RuntimeError("FFmpeg falló")
+        self.control.commands.return_value = ()
+        loop = AgentLoop(self.config, self.control, coordinator=self.coordinator)
+
+        with self.assertRaisesRegex(RuntimeError, "fallo tecnico"):
+            loop.run()
+
+        self.control.interrupted.assert_called_once()
+        self.controller.stop_capture.assert_called_once()
+
+    def test_interrupcion_de_teclado_tambien_cierra_obs(self):
+        self.activate_session()
+        self.control.commands.side_effect = KeyboardInterrupt()
+        loop = AgentLoop(self.config, self.control, coordinator=self.coordinator)
+
+        with self.assertRaises(KeyboardInterrupt):
+            loop.run()
+
+        self.controller.stop_capture.assert_called_once()
 
 
 class AgentLoopShutdownTests(unittest.TestCase):

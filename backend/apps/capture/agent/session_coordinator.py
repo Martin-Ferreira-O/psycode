@@ -544,7 +544,7 @@ class SessionCoordinator:
 
 
     def shutdown_after_control_failure(self):
-        """Intenta cerrar la captura al perder el control remoto."""
+        """Cierra los recursos locales al terminar el bucle de control."""
 
         if self.session_id is None and self._pending_start is None:
             return
@@ -581,6 +581,15 @@ class SessionCoordinator:
                 "Cierre de captura incompleto: "
                 + ", ".join(failures)
             )
+
+        self.session_id = None
+        self.runner = None
+        self.thread = None
+        self._pending_start = None
+        self._pending_confirmation = None
+        self._stop_confirmation = None
+        self._stop_command_id = None
+        self._stop_failed_at = None
 
 
 
