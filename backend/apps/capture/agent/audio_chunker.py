@@ -19,6 +19,7 @@ from .config import AgentConfig
 SAMPLE_RATE = 16000
 CHANNELS = 1
 SAMPLE_WIDTH = 2
+FFMPEG_STOP_TIMEOUT = 2.0
 
 
 def save_fragment(
@@ -184,13 +185,21 @@ def capture_audio(
 
     capture_finished = threading.Event()
 
+    def stop_process():
+        if process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=FFMPEG_STOP_TIMEOUT)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=FFMPEG_STOP_TIMEOUT)
+
     def watch_stop_request():
         """Detiene FFmpeg ante una solicitud externa."""
 
         while not capture_finished.wait(0.1):
             if stop_event is not None and stop_event.is_set():
-                if process.poll() is None:
-                    process.terminate()
+                stop_process()
                 return
 
     watcher = None
@@ -261,15 +270,13 @@ def capture_audio(
     finally:
         capture_finished.set()
 
-        if process.poll() is None:
-            process.terminate()
-            process.wait()
+        if watcher is not None:
+            watcher.join(timeout=2 * FFMPEG_STOP_TIMEOUT + 1)
+
+        stop_process()
 
         if process.stdout:
             process.stdout.close()
-
-        if watcher is not None:
-            watcher.join(timeout=1)
 
     print(f"Total de fragmentos: {sequence}")
 

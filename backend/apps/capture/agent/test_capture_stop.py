@@ -1,5 +1,6 @@
 
 import threading
+import subprocess
 import unittest
 
 from datetime import datetime, timezone
@@ -44,8 +45,9 @@ class FakeProcess:
         self.returncode = -15
         self.stdout.terminated.set()
 
-    def wait(self):
-        self.stdout.terminated.wait(timeout=3)
+    def wait(self, timeout=None):
+        if not self.stdout.terminated.wait(timeout=timeout or 3):
+            raise subprocess.TimeoutExpired("ffmpeg", timeout)
         return self.returncode
 
 
@@ -284,6 +286,31 @@ class CaptureStopTests(unittest.TestCase):
             notifications[0]["box"],
             "box-5",
         )
+
+    def test_stop_mata_ffmpeg_si_ignora_terminate(self):
+        class StubbornProcess(FakeProcess):
+            def terminate(self):
+                pass
+
+            def kill(self):
+                self.returncode = -9
+                self.stdout.terminated.set()
+
+        process = StubbornProcess()
+        stopped = threading.Event()
+        with (
+            patch("backend.apps.capture.agent.audio_chunker.subprocess.Popen", return_value=process),
+            patch("backend.apps.capture.agent.audio_chunker.FFMPEG_STOP_TIMEOUT", 0.01),
+            patch("backend.apps.capture.agent.audio_chunker.save_fragment", return_value={}),
+        ):
+            capture_audio(
+                self.config, None, uuid4(), datetime.now(timezone.utc),
+                stop_event=stopped,
+                on_fragment_saved=lambda metadata: stopped.set(),
+            )
+
+        self.assertEqual(process.returncode, -9)
+        self.assertTrue(process.stdout.closed)
 
 
 if __name__ == "__main__":
