@@ -79,7 +79,7 @@ class AudioChunkerTests(unittest.TestCase):
 
         self.assertEqual(
             metadata["captured_at"],
-            "2026-10-24T15:00:00.000Z",
+            "2026-10-24T15:00:00.000000Z",
         )
 
         saved_metadata = json.loads(
@@ -111,7 +111,7 @@ class AudioChunkerTests(unittest.TestCase):
 
         self.assertEqual(
             pending[1]["metadata"]["captured_at"],
-            "2026-10-24T15:00:09.000Z",
+            "2026-10-24T15:00:09.000000Z",
         )
 
     def test_rechazar_timestamp_sin_zona_horaria(self):

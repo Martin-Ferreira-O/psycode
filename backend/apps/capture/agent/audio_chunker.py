@@ -63,7 +63,7 @@ def save_fragment(
         "filename": filename,
         "checksum_sha256": checksum,
         "captured_at": captured_at_utc.isoformat(
-            timespec="milliseconds"
+            timespec="microseconds"
         ).replace("+00:00", "Z"),
         "duration_seconds": len(audio) / (
             SAMPLE_RATE * SAMPLE_WIDTH

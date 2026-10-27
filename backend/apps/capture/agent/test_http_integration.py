@@ -1,7 +1,7 @@
 
 import json
 import tempfile
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 from .upload_queue import UploadQueue
@@ -14,6 +14,7 @@ from django.test import TransactionTestCase, override_settings
 from backend.apps.capture.models import (
     AcceptedSequence,
     FragmentJob,
+    CaptureSession,
 )
 from backend.apps.capture.test_api import AGENTS, TOKEN
 from backend.apps.capture.test_ingestion import IngestionFixtures
@@ -168,6 +169,29 @@ class AgentHTTPIntegrationTests(IngestionFixtures, TransactionTestCase):
         )
 
         self.assertEqual(store.pending(), [])
+
+    def test_primer_fragmento_conserva_precision_del_inicio(self):
+        started_at = NOW + timedelta(seconds=1, microseconds=123456)
+        CaptureSession.objects.filter(pk=self.session.session_id).update(
+            actual_start=started_at,
+        )
+        metadata = save_fragment(
+            folder=self.folder,
+            box="box-3",
+            session_id=self.session.session_id,
+            sequence=0,
+            audio=b"\x00\x00" * 16000,
+            captured_at=started_at,
+        )
+
+        result, created = self.receive(
+            content=self.wav_path.read_bytes(),
+            checksum=metadata["checksum_sha256"],
+            captured_at=datetime.fromisoformat(metadata["captured_at"]),
+        )
+
+        self.assertTrue(created)
+        self.assertEqual(result.sequence, 0)
 
 
 
