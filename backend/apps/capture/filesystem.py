@@ -7,6 +7,51 @@ from pathlib import Path
 from django.core.files import locks
 
 
+def private_directory(path):
+    """Restringir también directorios existentes antes de escribir audio."""
+    path = Path(path)
+    path.mkdir(mode=0o700, parents=True, exist_ok=True)
+    if os.name != "nt":
+        path.chmod(0o700)
+        return
+
+    import ctypes
+    from ctypes import wintypes
+
+    security = ctypes.WinDLL("advapi32", use_last_error=True)
+    descriptor, acl = ctypes.c_void_p(), ctypes.c_void_p()
+    present, defaulted = wintypes.BOOL(), wintypes.BOOL()
+    convert = security.ConvertStringSecurityDescriptorToSecurityDescriptorW
+    convert.argtypes = [wintypes.LPCWSTR, wintypes.DWORD,
+                        ctypes.POINTER(ctypes.c_void_p), ctypes.c_void_p]
+    convert.restype = wintypes.BOOL
+    get_acl = security.GetSecurityDescriptorDacl
+    get_acl.argtypes = [ctypes.c_void_p, ctypes.POINTER(wintypes.BOOL),
+                       ctypes.POINTER(ctypes.c_void_p), ctypes.POINTER(wintypes.BOOL)]
+    get_acl.restype = wintypes.BOOL
+    set_acl = security.SetNamedSecurityInfoW
+    set_acl.argtypes = [wintypes.LPWSTR, wintypes.DWORD, wintypes.DWORD,
+                       ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
+    set_acl.restype = wintypes.DWORD
+    free = ctypes.WinDLL("kernel32").LocalFree
+    free.argtypes = [ctypes.c_void_p]
+    free.restype = ctypes.c_void_p
+
+    # ACL protegida y heredable: sistema, administradores y propietario.
+    if not convert("D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;FA;;;OW)",
+                   1, ctypes.byref(descriptor), None):
+        raise ctypes.WinError(ctypes.get_last_error())
+    try:
+        if not get_acl(descriptor, ctypes.byref(present), ctypes.byref(acl), ctypes.byref(defaulted)):
+            raise ctypes.WinError(ctypes.get_last_error())
+        # SE_FILE_OBJECT; DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION.
+        error = set_acl(str(path.absolute()), 1, 0x80000004, None, None, acl, None)
+        if error:
+            raise ctypes.WinError(error)
+    finally:
+        free(descriptor)
+
+
 def lock_file(file, *, exclusive=True, blocking=True):
     flags = locks.LOCK_EX if exclusive else locks.LOCK_SH
     if not blocking:
@@ -44,7 +89,12 @@ def _open_windows(path, flags):
     create.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
                        wintypes.LPVOID, wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE]
     create.restype = wintypes.HANDLE
-    disposition = 1 if flags & os.O_EXCL else (4 if flags & os.O_CREAT else 3)
+    if flags & os.O_CREAT:
+        # CREATE_NEW, CREATE_ALWAYS u OPEN_ALWAYS.
+        disposition = 1 if flags & os.O_EXCL else (2 if flags & os.O_TRUNC else 4)
+    else:
+        # TRUNCATE_EXISTING u OPEN_EXISTING.
+        disposition = 5 if flags & os.O_TRUNC else 3
     # GENERIC_READ | GENERIC_WRITE; FILE_SHARE_READ | FILE_SHARE_WRITE.
     # OPEN_REPARSE_POINT abre el enlace mismo para rechazarlo con fstat.
     handle = create(str(Path(path).absolute()), 0xC0000000, 0x3, None,

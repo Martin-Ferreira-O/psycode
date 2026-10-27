@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from uuid import UUID
 
+from backend.apps.capture.filesystem import private_directory
 
 class CommandJournal:
     """Conserva el estado de cada orden en archivos JSON."""
@@ -16,7 +17,7 @@ class CommandJournal:
             raise ValueError("Box invalido")
 
         self.root = Path(root) / box_id
-        self.root.mkdir(parents=True, exist_ok=True)
+        private_directory(self.root)
 
     def _path(self, command_id):
         command_id = UUID(str(command_id))

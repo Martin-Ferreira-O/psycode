@@ -80,6 +80,14 @@ finally:
             with self.assertRaises(BlockingIOError):
                 lock_file(1)
 
+    def test_private_open_truncates_existing_temporary_file(self):
+        path = self.root / "manifest.json.part"
+        path.write_bytes(b"old manifest longer than replacement")
+        fd = open_private(path, os.O_CREAT | os.O_TRUNC | os.O_RDWR)
+        with os.fdopen(fd, "wb") as file:
+            file.write(b"new")
+        self.assertEqual(path.read_bytes(), b"new")
+
     def test_django_check_and_migrate_import_without_fcntl(self):
         # Reproduce el traceback original sin requerir Windows en la máquina local.
         code = """

@@ -352,6 +352,7 @@ La especificación de integración compartida por el equipo se encuentra en [`do
 ## 15. Seguridad y archivos locales
 - **Nunca subir a Git** `.env`, tokens, contraseñas ni grabaciones reales o de prueba.
 - Restringir el acceso a los WAV, JSON de metadatos y archivos persistentes del journal.
+- El agente protege los directorios locales, incluidos los existentes: permisos `0700` en POSIX y ACL de propietario, administradores y sistema en Windows. Los nuevos WAV y manifiestos se crean con permisos privados antes de escribirlos; si no puede proteger el directorio, no escribe audio.
 - Los archivos que aún no tienen confirmación válida de SCRUM-73 deben conservarse para reintentos y análisis de errores.
 - El uso de datos reales requiere las autorizaciones y controles de protección de información definidos para Psycode.
 

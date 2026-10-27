@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Callable
 from uuid import UUID, uuid4
 
+from backend.apps.capture.filesystem import open_private, private_directory
 from .config import AgentConfig
 
 
@@ -36,17 +37,18 @@ def save_fragment(
     if sequence < 0:
         raise ValueError("La secuencia no puede ser negativa")
 
-    folder.mkdir(parents=True, exist_ok=True)
+    private_directory(folder)
 
     filename = f"{sequence:06d}.wav"
     destination = folder / filename
     temporary = folder / f"{filename}.part"
 
-    with wave.open(str(temporary), "wb") as wav:
-        wav.setnchannels(CHANNELS)
-        wav.setsampwidth(SAMPLE_WIDTH)
-        wav.setframerate(SAMPLE_RATE)
-        wav.writeframes(audio)
+    with os.fdopen(open_private(temporary, os.O_CREAT | os.O_TRUNC | os.O_RDWR), "w+b") as audio_file:
+        with wave.open(audio_file, "wb") as wav:
+            wav.setnchannels(CHANNELS)
+            wav.setsampwidth(SAMPLE_WIDTH)
+            wav.setframerate(SAMPLE_RATE)
+            wav.writeframes(audio)
 
     os.replace(temporary, destination)
 
@@ -75,7 +77,8 @@ def save_fragment(
     metadata_path = folder / f"{sequence:06d}.json"
     metadata_temp = folder / f"{sequence:06d}.json.part"
 
-    with metadata_temp.open("w", encoding="utf-8") as file:
+    with os.fdopen(open_private(metadata_temp, os.O_CREAT | os.O_TRUNC | os.O_RDWR),
+                   "w", encoding="utf-8") as file:
         json.dump(metadata, file, indent=2)
         file.flush()
         os.fsync(file.fileno())

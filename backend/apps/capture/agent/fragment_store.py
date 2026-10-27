@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 from uuid import UUID
 
+from backend.apps.capture.filesystem import open_private, private_directory
 
 class FragmentStoreError(Exception):
     """Error al gestionar el estado local de un fragmento."""
@@ -12,13 +13,14 @@ class FragmentStoreError(Exception):
 class FragmentStore:
     def __init__(self, root: str | Path):
         self.root = Path(root)
-        self.root.mkdir(parents=True, exist_ok=True)
+        private_directory(self.root)
 
     def _write_metadata(self, path: Path, metadata: dict):
         """Guardar cambios sin reemplazar un JSON con datos parciales."""
         temporary = path.with_name(path.name + ".part")
 
-        with temporary.open("w", encoding="utf-8") as file:
+        with os.fdopen(open_private(temporary, os.O_CREAT | os.O_TRUNC | os.O_RDWR),
+                       "w", encoding="utf-8") as file:
             json.dump(metadata, file, indent=2)
             file.flush()
             os.fsync(file.fileno())

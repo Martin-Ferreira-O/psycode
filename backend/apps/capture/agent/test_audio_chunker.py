@@ -1,6 +1,7 @@
 
 import hashlib
 import json
+import os
 import tempfile
 import unittest
 import wave
@@ -8,6 +9,7 @@ import wave
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import UUID
+from unittest.mock import patch
 
 from .audio_chunker import save_fragment
 from .fragment_store import FragmentStore
@@ -125,6 +127,35 @@ class AudioChunkerTests(unittest.TestCase):
         self.assertFalse(
             (self.folder / "000000.wav").exists()
         )
+
+    @unittest.skipIf(os.name == "nt", "Windows protege los archivos mediante ACL")
+    def test_archivos_privados_independientes_de_umask(self):
+        previous = os.umask(0o022)
+        try:
+            self.guardar(0, self.start_time)
+            store = FragmentStore(self.root)
+            store.record_attempt(self.folder / "000000.json")
+        finally:
+            os.umask(previous)
+
+        self.assertEqual(self.root.stat().st_mode & 0o777, 0o700)
+        self.assertEqual(self.folder.stat().st_mode & 0o777, 0o700)
+        for name in ("000000.wav", "000000.json"):
+            self.assertEqual((self.folder / name).stat().st_mode & 0o777, 0o600)
+
+    @unittest.skipIf(os.name == "nt", "Windows protege los archivos mediante ACL")
+    def test_restringe_directorio_preexistente(self):
+        self.folder.mkdir(parents=True)
+        self.folder.chmod(0o755)
+        self.guardar(0, self.start_time)
+        self.assertEqual(self.folder.stat().st_mode & 0o777, 0o700)
+
+    def test_no_escribe_audio_si_no_puede_proteger_directorio(self):
+        with patch("backend.apps.capture.agent.audio_chunker.private_directory",
+                   side_effect=PermissionError("No se pudo proteger el directorio")):
+            with self.assertRaises(PermissionError):
+                self.guardar(0, self.start_time)
+        self.assertFalse(self.folder.exists())
 
 
 if __name__ == "__main__":
