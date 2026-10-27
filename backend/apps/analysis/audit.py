@@ -17,3 +17,11 @@ class AnalysisAudit:
                   "analysis.jev" if code.startswith("JEV") else "alerts.flow")
         return self.trail.record(action, "failure", error_code=code,
                                  alerta_id=alerta_id, sesion_id=sesion_id, sequence=sequence)
+
+    def recovery(self, *, sesion_id=None, sequence=None):
+        return self.trail.record(
+            "alerts.flow",
+            "success",
+            sesion_id=sesion_id,
+            sequence=sequence,
+        )

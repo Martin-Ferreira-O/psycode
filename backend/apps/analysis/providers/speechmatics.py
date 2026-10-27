@@ -67,6 +67,37 @@ def parse_transcript(data, chunk, job_id):
         prefix = ""
     return words
 
+def read_pcm(path, chunk):
+    expected = (chunk.end - chunk.context_start) * 2
+
+    try:
+        with path.open("rb") as source:
+            magic = source.read(12)
+            source.seek(0)
+
+            if len(magic) == 12 and magic[:4] == b"RIFF" and magic[8:12] == b"WAVE":
+                with wave.open(source, "rb") as wav:
+                    if (
+                        wav.getnchannels() != 1
+                        or wav.getsampwidth() != 2
+                        or wav.getframerate() != RATE
+                        or wav.getcomptype() != "NONE"
+                    ):
+                        raise ProviderError("Formato WAV incompatible")
+                    if chunk.end > wav.getnframes():
+                        raise ProviderError("Audio incompleto")
+                    wav.setpos(chunk.context_start)
+                    pcm = wav.readframes(chunk.end - chunk.context_start)
+            else:
+                source.seek(chunk.context_start * 2)
+                pcm = source.read(expected)
+    except (OSError, wave.Error):
+        raise ProviderError("Audio inválido") from None
+
+    if len(pcm) != expected:
+        raise ProviderError("Audio incompleto")
+
+    return pcm
 
 class BatchClient:
     def __init__(self, settings: Settings, journal_dir: Path, client=None, sleep=time.sleep):
@@ -77,11 +108,7 @@ class BatchClient:
         self.settings.validate("speechmatics")
         if not 0 <= chunk.context_start <= chunk.start < chunk.end:
             raise ProviderError("Intervalo inválido")
-        with path.open("rb") as source:
-            source.seek(chunk.context_start * 2)
-            pcm = source.read((chunk.end - chunk.context_start) * 2)
-        if len(pcm) != (chunk.end - chunk.context_start) * 2:
-            raise ProviderError("Audio incompleto")
+        pcm = read_pcm(path, chunk)
         audio = io.BytesIO()
         with wave.open(audio, "wb") as wav:
             wav.setnchannels(1)

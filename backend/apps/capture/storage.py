@@ -1,6 +1,7 @@
 """Archivos privados locales, con leases compartidas con la limpieza."""
 import hashlib
 import os
+import re
 import struct
 import tempfile
 from contextlib import contextmanager
@@ -25,6 +26,9 @@ class StoredFragment:
     size: int
     checksum: str
     keep: bool = False
+
+
+STORED_KEY = re.compile(r"[0-9a-f]{32}\.blob")
 
 
 def validate_wav(stream, size):
@@ -70,8 +74,6 @@ class IncomingFragment(File):
     def close(self):
         if self.closed:
             return
-        # Windows requiere cerrar todos los handles antes de eliminar. Evitar
-        # que la limpieza abra el archivo entre el cierre y el unlink.
         with self.storage.allocation_lock():
             self.file.close()
             Path(self.name).unlink(missing_ok=True)
@@ -81,6 +83,41 @@ class FragmentStorage:
     def __init__(self, root, max_bytes):
         self.root = Path(root)
         self.max_bytes = max_bytes
+
+    def path(self, key):
+        if not isinstance(key, str) or not STORED_KEY.fullmatch(key):
+            raise FragmentError("INVALID_STORAGE_KEY", 500)
+        path = self.root / key
+        if not path.is_file():
+            raise FragmentError("FRAGMENT_NOT_FOUND", 500)
+        return path
+
+    @contextmanager
+    def lease(self, key):
+        path = self.path(key)
+        lock_path = self.root / f".{key}.lock"
+        fd = open_private(lock_path, os.O_CREAT | os.O_RDWR)
+        try:
+            lock_file(fd, blocking=False)
+            yield path
+        finally:
+            os.close(fd)
+
+    def delete(self, key):
+        path = self.path(key)
+        lock_path = self.root / f".{key}.lock"
+        with self.allocation_lock():
+            fd = open_private(lock_path, os.O_CREAT | os.O_RDWR)
+            try:
+                lock_file(fd, blocking=False)
+                path.unlink(missing_ok=True)
+            finally: os.close(fd)
+            
+            try:lock_path.unlink(missing_ok=True)
+            
+            except OSError:
+                pass
+                
 
     @contextmanager
     def allocation_lock(self, *, cleanup=False):
@@ -97,7 +134,12 @@ class FragmentStorage:
     def incoming(self):
         """El parser cierra y elimina este archivo, incluso si interrumpe la carga."""
         with self.allocation_lock():
-            stream = tempfile.NamedTemporaryFile(dir=self.root, prefix="incoming-", suffix=".part", delete=False)
+            stream = tempfile.NamedTemporaryFile(
+                dir=self.root,
+                prefix="incoming-",
+                suffix=".part",
+                delete=False,
+            )
             try:
                 lock_file(stream)
             except BaseException:
@@ -109,8 +151,6 @@ class FragmentStorage:
     @contextmanager
     def stage(self, upload, checksum):
         key = uuid4().hex + ".blob"
-        # Un nombre gestionado permite recuperar también una caída previa a
-        # publicar el blob. El bloqueo protege ambos nombres durante el cambio.
         path = self.root / ("incoming-" + uuid4().hex + ".part")
         with self.allocation_lock():
             fd = open_private(path, os.O_CREAT | os.O_EXCL | os.O_RDWR)
@@ -137,7 +177,6 @@ class FragmentStorage:
                 raise FragmentError("CHECKSUM_MISMATCH")
             stream.flush()
             validate_wav(stream, stored.size)
-            # Archivo y publicación deben ser durables antes del commit SQL.
             os.fsync(stream.fileno())
             with self.allocation_lock():
                 stream.close()
@@ -145,8 +184,6 @@ class FragmentStorage:
                 try:
                     publish_file(path, destination)
                 finally:
-                    # La publicación puede haber ocurrido antes de fallar la
-                    # sincronización. No eliminar nunca un destino preexistente.
                     if not path.exists():
                         path = destination
                 stream = os.fdopen(open_private(path, os.O_RDWR), "r+b")

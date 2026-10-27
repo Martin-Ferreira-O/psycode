@@ -47,9 +47,7 @@ def fragment_ingestion_service():
     from backend.apps.capture.ingestion import FragmentIngestionService
     return FragmentIngestionService(fragment_storage())
 
-
-def analysis_worker(*, settings=None, directory=None, speechmatics_http=None, jev_http=None,
-                    alert_store=None, audit=None):
+def analysis_worker(*, settings=None,directory=None, speechmatics_http=None, jev_http=None, alert_store=None, audit=None, ledger=None):
     """Crear una vez dentro del trabajador interno. No iniciar en AppConfig/WSGI.
 
     Construirlo no abre red ni crea subprocesos. No llamarlo desde una vista HTTP.
@@ -71,7 +69,50 @@ def analysis_worker(*, settings=None, directory=None, speechmatics_http=None, je
 
     return AnalysisService(
         SpeechmaticsTranscriptor(config, root / "jobs", speechmatics_http),
-        JevAnalizador(config, jev_http), FileFragmentLedger(root / "fragments"),
+        JevAnalizador(config, jev_http), ledger if ledger is not None else FileFragmentLedger(root / "fragments"),
         alerts_service(store), audit if audit is not None else AnalysisAudit(events),
         redact_terms=config.redact_terms,
         secrets=(config.speechmatics_key, config.jev_key, config.openrouter_key))
+
+def fragment_job_processor(
+    *,
+    settings=None,
+    directory=None,
+    speechmatics_http=None,
+    jev_http=None,
+    alert_store=None,
+    audit=None,
+    roles_provider=None,
+    max_attempts=3,
+    stuck_after=None,
+):
+    from backend.apps.analysis.audit import AnalysisAudit
+    from backend.apps.capture.processing import FragmentJobProcessor, QueueFragmentLedger
+
+    store = alert_store if alert_store is not None else AlertsRepository()
+    audit_adapter = audit if audit is not None else AnalysisAudit(store._events)
+
+    worker = analysis_worker(
+        settings=settings,
+        directory=directory,
+        speechmatics_http=speechmatics_http,
+        jev_http=jev_http,
+        alert_store=store,
+        audit=audit_adapter,
+        ledger=QueueFragmentLedger(),
+    )
+
+    options = {
+        "roles_provider": roles_provider,
+        "audit": audit_adapter,
+        "max_attempts": max_attempts,
+    }
+
+    if stuck_after is not None:
+        options["stuck_after"] = stuck_after
+
+    return FragmentJobProcessor(
+        fragment_storage(),
+        worker,
+        **options,
+    )

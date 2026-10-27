@@ -98,7 +98,6 @@ class CaptureEvent(models.Model):
     class Meta:
         ordering = ["timestamp", "event_id"]
 
-
 class FragmentJob(models.Model):
     """Cola SQL durable. Una secuencia aceptada solo puede tener un trabajo."""
     class State(models.TextChoices):
@@ -107,6 +106,11 @@ class FragmentJob(models.Model):
         COMPLETED = "completado"
         FAILED = "fallido"
 
+    class Result(models.TextChoices):
+        RISK_DETECTED = "riesgo_detectado"
+        NO_RISK_DETECTED = "sin_riesgo_detectado"
+        INDETERMINATE = "indeterminado"
+
     job_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     sequence = models.OneToOneField(AcceptedSequence, on_delete=models.PROTECT, related_name="fragment_job")
     storage_key = models.CharField(max_length=37, unique=True)
@@ -114,12 +118,27 @@ class FragmentJob(models.Model):
     format = models.CharField(max_length=8, default="wav")
     size = models.PositiveBigIntegerField()
     state = models.CharField(max_length=16, choices=State.choices, default=State.PENDING)
+    result = models.CharField(max_length=24, choices=Result.choices, blank=True, default="")
+    attempts = models.PositiveSmallIntegerField(default=0)
+    processing_started_at = models.DateTimeField(null=True)
+    finished_at = models.DateTimeField(null=True)
+    last_error_code = models.CharField(max_length=40, blank=True)
+    processing_token = models.UUIDField(null=True, editable=False)
 
     class Meta:
-        indexes = [models.Index(fields=["state", "job_id"], name="capture_pending_jobs")]
+        indexes = [
+            models.Index(fields=["state", "job_id"], name="capture_pending_jobs"),
+            models.Index(fields=["state", "processing_started_at"], name="capture_job_recovery"),
+        ]
         constraints = [
-            models.CheckConstraint(condition=models.Q(state__in=["pendiente", "procesando", "completado", "fallido"]),
-                                   name="capture_valid_job_state"),
+            models.CheckConstraint(
+                condition=models.Q(state__in=["pendiente", "procesando", "completado", "fallido"]),
+                name="capture_valid_job_state",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(result__in=["", "riesgo_detectado", "sin_riesgo_detectado", "indeterminado"]),
+                name="capture_valid_job_result",
+            ),
             models.CheckConstraint(condition=models.Q(size__gt=0), name="capture_nonempty_fragment"),
             models.CheckConstraint(condition=models.Q(format="wav"), name="capture_fragment_format"),
         ]
