@@ -27,9 +27,8 @@ class CaptureRunner:
         self.store = FragmentStore(self.fragments_root)
         self.client = BackendClient(config)
         self.queue = UploadQueue(self.store, self.client)
-        self.worker = UploadWorker(self.queue)
-
         self.stop_event = threading.Event()
+        self.worker = UploadWorker(self.queue, on_failure=self.stop)
 
     def run(
         self,

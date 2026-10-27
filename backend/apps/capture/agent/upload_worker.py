@@ -13,6 +13,7 @@ class UploadWorker:
         self,
         queue: UploadQueue,
         interval_seconds: float = 1.0,
+        on_failure=None,
     ):
         if interval_seconds <= 0:
             raise ValueError(
@@ -21,6 +22,7 @@ class UploadWorker:
 
         self.queue = queue
         self.interval_seconds = interval_seconds
+        self.on_failure = on_failure
 
         self._stop_event = threading.Event()
         self._wake_event = threading.Event()
@@ -68,10 +70,13 @@ class UploadWorker:
 
             except (FragmentUploadError, FragmentStoreError) as exc:
                 self.failure = f"{type(exc).__name__}: {exc}"
-                return
 
             except Exception as exc:
                 self.failure = type(exc).__name__
+
+            if self.failure is not None:
+                if self.on_failure is not None:
+                    self.on_failure()
                 return
 
             if finishing_this_pass:

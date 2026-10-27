@@ -290,6 +290,11 @@ class CaptureRunnerTests(unittest.TestCase):
                 # Notificar al worker.
                 on_fragment_saved(metadata)
 
+                # Una captura continua debe cerrarse al fallar el envío,
+                # sin esperar una orden de detención posterior.
+                if not stop_event.wait(timeout=2):
+                    raise AssertionError("El fallo del worker no detuvo la captura")
+
                 return folder
 
             with (
@@ -323,6 +328,7 @@ class CaptureRunnerTests(unittest.TestCase):
 
             # El cliente intentó enviar el WAV.
             self.assertEqual(client.calls, 1)
+            self.assertTrue(runner.stop_event.is_set())
 
             # El WAV debe seguir pendiente en disco.
             pending = store.pending()
