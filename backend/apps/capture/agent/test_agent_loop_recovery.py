@@ -5,6 +5,7 @@ from unittest.mock import Mock
 import httpx
 
 from .agent_loop import AgentLoop
+from .session_coordinator import StopCaptureError
 
 
 class FakeStopEvent:
@@ -102,6 +103,19 @@ class AgentLoopRecoveryTests(unittest.TestCase):
             self.loop.run(stop_event=stop_event)
 
         self.control.commands.assert_called_once()
+
+    def test_reintenta_fallo_de_detencion_sin_abandonar_el_bucle(self):
+        self.control.commands.return_value = (object(),)
+        self.coordinator.handle_command.side_effect = [StopCaptureError("OBS ocupado"), None]
+        self.loop.run(stop_event=FakeStopEvent(stop_after=2))
+        self.assertEqual(self.coordinator.handle_command.call_count, 2)
+
+    def test_limita_reintentos_de_detencion(self):
+        self.control.commands.return_value = (object(),)
+        self.coordinator.handle_command.side_effect = StopCaptureError("OBS ocupado")
+        with self.assertRaises(StopCaptureError):
+            self.loop.run(stop_event=FakeStopEvent(stop_after=10))
+        self.assertEqual(self.coordinator.handle_command.call_count, 3)
 
 
 if __name__ == "__main__":

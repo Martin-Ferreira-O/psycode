@@ -10,6 +10,10 @@ from .capture_runner import CaptureRunner
 from .obs_controller import OBSController
 
 
+class StopCaptureError(RuntimeError):
+    """Una detención fallida puede reintentarse con la misma orden."""
+
+
 class SessionCoordinator:
     """
     Coordina OBS y CaptureRunner.
@@ -43,6 +47,8 @@ class SessionCoordinator:
 
         self._start_command_id = None
         self._stop_confirmation = None
+        self._stop_command_id = None
+        self._stop_failed_at = None
         self._completed_commands = {}
         self._pending_start = None
         self._pending_confirmation = None
@@ -314,7 +320,7 @@ class SessionCoordinator:
             if self.journal is not None:
                 existing = self.journal.get(command.command_id)
 
-                if existing is not None:
+                if existing is not None and self._stop_command_id != command.command_id:
                     raise RuntimeError(
                         "Detencion recuperada del disco: requiere "
                         "reconciliar el estado de OBS antes de continuar"
@@ -322,6 +328,7 @@ class SessionCoordinator:
 
                 self.journal.prepare(command)
 
+            self._stop_command_id = command.command_id
             try:
                 if self.thread is not None:
                     self.runner.stop()
@@ -341,15 +348,17 @@ class SessionCoordinator:
 
                 ended_at = self._now()
 
-            except Exception:
+            except Exception as exc:
+                if self._stop_failed_at is None:
+                    self._stop_failed_at = self._now()
                 self.control.acknowledge(
                     self.config.box_id,
                     command.command_id,
                     success=False,
                     error_code="AGENT_STOP_FAILED",
-                    occurred_at=self._now(),
+                    occurred_at=self._stop_failed_at,
                 )
-                raise
+                raise StopCaptureError("AGENT_STOP_FAILED") from exc
 
             # Persistir la detencion antes de confirmarla al backend.
             if self.journal is not None:
@@ -395,6 +404,8 @@ class SessionCoordinator:
         self.thread = None
         self._start_command_id = None
         self._stop_confirmation = None
+        self._stop_command_id = None
+        self._stop_failed_at = None
         self._pending_confirmation = None
 
         return last_sequence

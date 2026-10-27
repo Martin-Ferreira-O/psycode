@@ -5,7 +5,7 @@ import time
 
 import httpx
 
-from .session_coordinator import SessionCoordinator
+from .session_coordinator import SessionCoordinator, StopCaptureError
 from .command_journal import CommandJournal
 
 
@@ -163,6 +163,11 @@ class AgentLoop:
         while not stop_event.is_set():
             try:
                 self.tick()
+
+            except StopCaptureError:
+                consecutive_failures += 1
+                if consecutive_failures >= self.max_control_failures:
+                    raise
 
             except (
                 TimeoutError,

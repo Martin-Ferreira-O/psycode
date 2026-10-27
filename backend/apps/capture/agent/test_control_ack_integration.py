@@ -11,7 +11,7 @@ from backend.apps.capture.models import CaptureSession
 from backend.apps.capture.tests import CaptureFixtures, NOW
 from .agent_loop import AgentLoop
 from .command_journal import CommandJournal
-from .session_coordinator import SessionCoordinator
+from .session_coordinator import SessionCoordinator, StopCaptureError
 
 
 class ControlAcknowledgementTests(CaptureFixtures, TestCase):
@@ -84,3 +84,26 @@ class ControlAcknowledgementTests(CaptureFixtures, TestCase):
         self.controller.stop_capture.assert_called_once()
         calls = self.control.acknowledge.call_args_list
         self.assertEqual(calls[-2], calls[-1])
+
+    def test_reintenta_detencion_fallida_con_journal_y_backend_reales(self):
+        self.loop.tick()
+        self.coordinator.thread.join(timeout=1)
+        self.now = NOW + timedelta(seconds=30)
+        self.service.apply_authorization(
+            replace(self.authorization, authorized=False, inicio=None, termino=None),
+            now=self.now,
+        )
+        self.controller.stop_capture.side_effect = [RuntimeError("OBS ocupado"),
+                                                   RuntimeError("OBS ocupado"), None]
+
+        for _ in range(2):
+            with self.assertRaises(StopCaptureError):
+                self.loop.tick()
+            self.now += timedelta(seconds=1)
+        self.loop.tick()
+
+        self.assertIsNone(self.coordinator.session_id)
+        self.assertEqual(self.controller.stop_capture.call_count, 3)
+        stop, = [record for record in self.coordinator.journal.root.glob("*.json")
+                 if self.coordinator.journal.get(record.stem)["kind"] == "detencion"]
+        self.assertEqual(self.coordinator.journal.get(stop.stem)["state"], "acknowledged")
