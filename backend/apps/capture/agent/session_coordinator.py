@@ -45,6 +45,7 @@ class SessionCoordinator:
         self._stop_confirmation = None
         self._completed_commands = {}
         self._pending_start = None
+        self._pending_confirmation = None
         self._reported_recovered_starts = set()
 
     @staticmethod
@@ -139,6 +140,11 @@ class SessionCoordinator:
 
 
         raise ValueError("Tipo de orden desconocido")
+
+    def retry_pending_confirmation(self):
+        """Reintenta el ACK aunque el backend ya no reentregue la orden."""
+        if self._pending_confirmation is not None:
+            self.handle_command(self._pending_confirmation)
 
     def _start(self, command):
         """Inicia OBS una sola vez y recupera confirmaciones pendientes."""
@@ -236,6 +242,7 @@ class SessionCoordinator:
             )
 
         # Confirmar el inicio con SCRUM-71.
+        self._pending_confirmation = command
         self.control.acknowledge(
             self.config.box_id,
             command.command_id,
@@ -289,6 +296,7 @@ class SessionCoordinator:
         self._completed_commands[command.command_id] = (
             command.session_id
         )
+        self._pending_confirmation = None
 
         return command.session_id
 
@@ -365,6 +373,7 @@ class SessionCoordinator:
             raise RuntimeError("Existe otra detencion pendiente")
 
         # Confirmar la detencion conservando su secuencia final.
+        self._pending_confirmation = command
         self.control.acknowledge(
             self.config.box_id,
             command.command_id,
@@ -386,6 +395,7 @@ class SessionCoordinator:
         self.thread = None
         self._start_command_id = None
         self._stop_confirmation = None
+        self._pending_confirmation = None
 
         return last_sequence
 

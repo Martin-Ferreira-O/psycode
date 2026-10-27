@@ -120,6 +120,7 @@ class AgentLoop:
     def tick(self):
         """Consulta ordenes y comunica actividad de la sesion."""
 
+        self.coordinator.retry_pending_confirmation()
         orders = self.control.commands(self.config.box_id)
 
         for command in orders:
