@@ -38,7 +38,7 @@ backend/
     accounts/         autenticación y recuperación
     alerts/           persistencia, consulta y evaluación de alertas
     dashboard/        resumen y estadísticas sobre alertas
-    notifications/    correo principal y correo de respaldo
+    notifications/    correo principal según configuración operativa
     agenda/           carga manual Excel y consulta temporal de ocupación
     capture/          sesiones, órdenes, ingesta de archivos y cola persistente SQL
 ```
@@ -137,8 +137,9 @@ La actualización de `evaluacion`, `estado_evaluacion` y `trazabilidad.actualiza
 ```text
 Entrada interna validada
   → guardar alerta en MongoDB
-  → si nivel BAJO/MEDIO/ALTO: correo principal (SCRUM-67)
-      → si falla o expira: correo de respaldo de Sergio
+  → si nivel BAJO/MEDIO/ALTO: consultar destinatarios operativos actuales
+      → un intento individual por destinatario, continuando ante fallos
+      → éxito total, fallo parcial, fallo total o sin destinatarios
   → registrar resultado de cada intento
 ```
 
@@ -148,7 +149,7 @@ Los fallos de MongoDB impiden el registro y el envío. Los fallos de notificaci�
 
 El módulo interno de [análisis Speechmatics + JEV](docs/INTEGRACION-SPEECHMATICS-JEV.md) se compone para un trabajador secuencial, mediante puertos y salida tipada [1.0](docs/analysis/OUTPUT-1.0.md). No inicia procesos al importar Django ni añade rutas públicas de ingesta.
 
-El correo principal se configura con `NOTIFICATION_EMAIL_TO` (SCRUM-67); el de respaldo con `NOTIFICATION_EMAIL_BACKUP_TO`. Nunca se envía a ambos en paralelo. Solo el remitente/relay usa credenciales SMTP. El proceso SMTP se cancela al superar `EMAIL_TIMEOUT_SECONDS`, que limita cada intento completo; no queda un hilo enviando después del timeout. La aceptación SMTP no prueba entrega ni lectura, y un timeout puede dejar incierta la aceptación previa por el relay.
+El correo principal utiliza la configuración operativa: `primary_email` en lista de distribución o los correos registrados de todos los supervisores habilitados. Cada mensaje lleva un único destinatario. No se usan destinatarios antiguos del entorno ni se ejecuta respaldo. Solo el remitente/relay usa credenciales SMTP. El proceso SMTP se cancela al superar `EMAIL_TIMEOUT_SECONDS`, que limita cada intento completo; no queda un hilo enviando después del timeout. La aceptación SMTP no prueba entrega ni lectura, y un timeout puede dejar incierta la aceptación previa por el relay.
 
 Teams queda deshabilitado (`TEAMS_ENABLED=False`) y no participa del flujo, aunque exista una URL en el entorno. Se conserva su adaptador desacoplado hasta decidir webhook y responsables. `NOTIFICATIONS_ENABLED=false` mantiene todos los envíos desactivados por defecto.
 

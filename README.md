@@ -7,7 +7,7 @@
 > presentaban el transporte como pendiente quedan sustituidas por esos contratos.
 
 
-Servidor central del proyecto Psycode, desarrollado en Python y Django. Incluye la interfaz web, autenticación, recuperación de contraseña, alertas en MongoDB, consulta y evaluación HTTP, bitácora protegida y notificación por correo principal con respaldo (envíos desactivados por defecto). El programa instalable en los PCs de psicología se mantiene por separado en `psycode-agent`.
+Servidor central del proyecto Psycode, desarrollado en Python y Django. Incluye la interfaz web, autenticación, recuperación de contraseña, alertas en MongoDB, consulta y evaluación HTTP, bitácora protegida y notificación por correo a destinatarios de la configuración operativa (envíos desactivados por defecto). El programa instalable en los PCs de psicología se mantiene por separado en `psycode-agent`.
 
 Para el VPS, seguir [instalación y operación separada](docs/OPERACION-SEPARADA.md): se necesitan ASGI para HTTP/WebSocket, el coordinador de captura y el trabajador de fragmentos. Las instrucciones de `runserver` de este README son para desarrollo local.
 
@@ -150,7 +150,7 @@ Consulta [componentes adaptados, recuperación y pendientes de Jira](docs/INTEGR
 
 Consulta `GET /api/v1/audit-events` con JWT de administrador o supervisor activo. Admite período UTC (`fecha_desde`, `fecha_hasta`), `alerta_id`, `action`, `outcome`, `limit`, `offset` y `order`. [Contrato y ejemplos](API_CONTRACTS.md#consulta-de-bitácora-scrum-65).
 
-Para habilitar correo, incorpora a tu entorno `NOTIFICATIONS_ENABLED=true`, `NOTIFICATION_EMAIL_TO` con el destinatario principal acordado en SCRUM-67 y `NOTIFICATION_EMAIL_BACKUP_TO` con el respaldo de Sergio. Las direcciones no vienen fijadas en el repositorio. El respaldo solo se intenta tras fallo o timeout del principal. `EMAIL_BACKEND=file` permite probar sin SMTP; para SMTP configura únicamente las credenciales del remitente/relay. No se solicitan credenciales de destinatarios. Teams permanece deshabilitado.
+Para habilitar correo, configura `NOTIFICATIONS_ENABLED=true` y guarda la modalidad en la configuración operativa: `lista_distribucion` usa exclusivamente `primary_email`; `supervisores_activos` envía un mensaje individual a cada supervisor habilitado con correo válido. Los destinatarios se consultan en cada notificación. Los fallos individuales no detienen los demás intentos y el resultado distingue éxito total, fallo parcial y fallo total. Sin destinatarios válidos no hay envío. Las variables antiguas de destinatarios no sustituyen la configuración y este flujo no ejecuta respaldo. `EMAIL_BACKEND=file` permite probar sin SMTP; para SMTP configura únicamente las credenciales del remitente/relay. Teams permanece deshabilitado.
 
 Pruebas sin servicios externos:
 
