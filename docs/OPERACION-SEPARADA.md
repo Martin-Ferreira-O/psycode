@@ -154,6 +154,12 @@ no quedan trabajos pendientes/procesando. Las evidencias en memoria están acota
 
 ## Verificación
 
+Para una primera ejecución, seguir [Cómo probar el servidor junto con
+psycode-agent](PRUEBAS-SERVIDOR-AGENTE.md). Esa guía explica cómo construir el
+wheel actualizado en el otro repositorio, qué comandos van en cada carpeta,
+cómo reconocer el resultado y qué requiere una prueba con hardware real.
+El siguiente bloque es una referencia breve para un entorno ya preparado:
+
 ```sh
 uv run python scripts/check_boundaries.py
 uv run python manage.py test --settings=backend.config.test_settings --noinput
@@ -166,6 +172,8 @@ un agente instalado en otro proceso, simula OBS/proveedores y comprueba HTTP v1/
 ACK perdido después de commit, reconexión, agenda y coordinador entre procesos.
 Recibe un wheel explícito y registra su SHA-256; no depende de carpetas hermanas.
 No ejecutar dos suites sobre el mismo SQLite de pruebas: usar
-`PSYCODE_TEST_SQLITE_PATH` diferente si se paralelizan. Cada repositorio incluye CI
-propia. La matriz Linux/Windows está preparada; no se afirma que haya corrido en
-esos sistemas desde esta máquina macOS.
+`PSYCODE_TEST_SQLITE_PATH` diferente si se paralelizan. El CI actual del servidor
+ejecuta su suite propia en Linux con Python 3.12/3.13, pero no la integración
+cruzada. El agente actualmente no incluye workflows; la matriz Linux/Windows
+mencionada en los reportes de separación es histórica. Ejecutar explícitamente
+la suite cruzada y registrar el sistema donde corrió.

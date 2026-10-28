@@ -2,10 +2,15 @@
 
 Para instalar y probar el backend, sigue el [README principal](../README.md). Para desarrollar una tarea, consulta la [arquitectura](../ARCHITECTURE.md) y los [contratos API](../API_CONTRACTS.md).
 
+**Para probar consultoria-bn con psycode-agent**, comienza por
+[la guía paso a paso de ambos repositorios](PRUEBAS-SERVIDOR-AGENTE.md).
+Explica qué instalar, dónde ejecutar cada comando y cómo comprobar el resultado.
+
 | Documento | Cuándo consultarlo |
 |---|---|
 | [Configuración operativa: contrato API](../API_CONTRACTS.md#12-configuración-operativa) | Modalidad principal de notificación, respaldo independiente, validaciones, ejemplos y migración para frontend. |
-| [SCRUM-72-INTEGRACION.md](SCRUM-72-INTEGRACION.md) | Traspaso para el agente del box: envío a SCRUM-73, reintentos, órdenes SCRUM-71, cierre y acuerdos pendientes de transporte/duración/solapamiento. |
+| [PRUEBAS-SERVIDOR-AGENTE.md](PRUEBAS-SERVIDOR-AGENTE.md) | Primera prueba conjunta: paquete del agente, integración automática, fallos comunes y captura manual opcional. |
+| [SCRUM-72-INTEGRACION.md](SCRUM-72-INTEGRACION.md) | Traspaso histórico del agente del box; para operación y transporte actuales, usar la guía conjunta y OPERACION-SEPARADA.md. |
 | [MONGODB.md](MONGODB.md) | Colecciones, documentos, índices, relaciones, estados y datos que no se persisten. Artefactos en [mongodb/](mongodb/). |
 | [SCRUM-31.md](SCRUM-31.md) | Detalles de autenticación, correo y verificaciones de la entrega original. Las credenciales actuales están en el README principal. |
 | [SCRUM-32.md](SCRUM-32.md) | Conexión MongoDB, repositorio de alertas, comando de datos sintéticos y verificación. |

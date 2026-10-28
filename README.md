@@ -11,6 +11,12 @@ Servidor central del proyecto Psycode, desarrollado en Python y Django. Incluye 
 
 Para el VPS, seguir [instalación y operación separada](docs/OPERACION-SEPARADA.md): se necesitan ASGI para HTTP/WebSocket, el coordinador de captura y el trabajador de fragmentos. Las instrucciones de `runserver` de este README son para desarrollo local.
 
+Para probar este servidor con el otro repositorio, comienza por
+[Cómo probar el servidor junto con psycode-agent](docs/PRUEBAS-SERVIDOR-AGENTE.md).
+Incluye preparación de ambos entornos, construcción del paquete del agente,
+comandos para macOS/Linux y PowerShell, resultados esperados y una prueba manual
+opcional con OBS. La integración automática no necesita OBS ni credenciales reales.
+
 La [revisión funcional posterior a la separación](docs/REVISION-FUNCIONAMIENTO-SERVIDOR.md) registra las correcciones, pruebas ejecutadas y validaciones pendientes en el entorno institucional.
 
 La integración interna de Speechmatics Batch y JEV está documentada en [implementación y pruebas sin credenciales](docs/INTEGRACION-SPEECHMATICS-JEV.md). Incluye el contrato de salida 1.0, procedencia del código y conexión a alertas/bitácora; no añade una interfaz ni habilita envíos externos por defecto.
@@ -286,7 +292,7 @@ uv run python manage.py test --settings=backend.config.test_settings --noinput
 node --test backend/apps/web/tests/*.test.cjs
 ```
 
-Con pip, usa el mismo reemplazo de `uv run python` indicado arriba. Las pruebas crean una base separada y no modifican tu usuario local. Las pruebas JavaScript requieren Node.js 18 o superior. La [suite cruzada con un wheel explícito del agente](docs/OPERACION-SEPARADA.md#verificación) verifica HTTP y WebSocket entre procesos independientes. Si cambias modelos, genera y revisa la migración correspondiente antes de comprobar que no quedan migraciones pendientes.
+Con pip, usa el mismo reemplazo de `uv run python` indicado arriba. Las pruebas crean una base separada y no modifican tu usuario local. Las pruebas JavaScript requieren Node.js 18 o superior. Para verificar HTTP y WebSocket con el agente, sigue la [guía de pruebas entre repositorios](docs/PRUEBAS-SERVIDOR-AGENTE.md); esa suite requiere uv y un wheel actualizado del agente. Si cambias modelos, genera y revisa la migración correspondiente antes de comprobar que no quedan migraciones pendientes.
 
 ## Dependencias y documentación
 
