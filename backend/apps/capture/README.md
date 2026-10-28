@@ -1,5 +1,8 @@
 # Sesiones de captura e ingesta interna
 
+> Actualización de separación: [operación vigente](../../../docs/OPERACION-SEPARADA.md). Agente en el repositorio independiente `psycode-agent`; control WS autenticado, audio v1/v2 y agenda durable. Las instrucciones históricas incompatibles quedan sustituidas por ese runbook.
+
+
 Persistencia SQL de la autorización de SCRUM-70 hasta el cierre (SCRUM-71) e
 ingesta autenticada de fragmentos a almacenamiento privado y cola SQL. No lee
 Excel, controla OBS ni ejecuta análisis. En SQL guarda identificadores, box,
@@ -9,7 +12,7 @@ distintos de las sesiones JWT.
 
 Para implementar el agente del box, consultar el
 [traspaso de integración SCRUM-72](../../../docs/SCRUM-72-INTEGRACION.md),
-que distingue la API de archivos disponible de los acuerdos pendientes para
+que distingue la API de archivos disponible del control WebSocket implementado para
 transportar órdenes y definir duración/solapamiento.
 
 ## Integración con SCRUM-70
@@ -174,9 +177,12 @@ error; el agente debe reintentar la misma clave y contenido.
 
 La cola es SQL (`FragmentJob`) y sobrevive reinicios. La API crea únicamente
 estado `pendiente`; el modelo contempla `procesando`, `completado` y `fallido`
-para el consumidor futuro. No se arranca un trabajador ni se conecta esta ruta
-al análisis, alertas o notificaciones. La adquisición de trabajos y eliminación
-de archivos aceptados después de procesar son responsabilidad de esa integración.
+para el consumidor `manage.py process_fragment_jobs`. El consumidor se ejecuta
+separadamente, adquiere trabajos en orden y elimina el audio tras su finalización.
+Un fallo previo de la misma sesión termina las secuencias siguientes con
+`PREVIOUS_FRAGMENT_FAILED`, sin llamar proveedores, y aplica la misma limpieza.
+La vista HTTP no ejecuta análisis, alertas ni notificaciones. Para operación continua
+y recuperación de contexto, consultar el [runbook](../../../docs/OPERACION-SEPARADA.md).
 
 ## Configuración y limpieza
 

@@ -16,6 +16,10 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     let liberar;
     let cuerpo = { success: true, data: { items: [] } };
     try {
+        await page.route('**/api/v1/auth/me', route => route.fulfill({
+            status: 200, contentType: 'application/json',
+            body: JSON.stringify({ success: true, data: { usuario: 'supervisor-sintetico', rol: 'supervisor' } }),
+        }));
         await page.route('**/api/v1/auth/login', async route => {
             peticiones++;
             if (liberar === null) await new Promise(resolve => { liberar = resolve; });
@@ -89,11 +93,32 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         await page.waitForURL(`${base}/`);
         assert.equal(await page.evaluate(() => localStorage.getItem('access_token')), null);
 
+        const alerta = { ...cuerpo.data.items[0], estado_evaluacion: 'pendiente', evaluacion: null };
+        let evaluacion = null;
+        await page.route('**/api/v1/alerts**', async route => {
+            const url = new URL(route.request().url());
+            let data;
+            if (url.pathname.endsWith('/evaluacion')) {
+                assert.equal(route.request().method(), 'POST');
+                assert.equal(route.request().postDataJSON().evaluacion, 'correcta');
+                evaluacion = { alerta_id: alerta.alerta_id, evaluacion: 'correcta', estado_evaluacion: 'correcta',
+                    usuario: 'supervisor-sintetico', fecha_hora: '2026-10-27T15:00:00Z' };
+                data = evaluacion;
+            } else if (url.pathname.endsWith('/' + alerta.alerta_id)) {
+                data = { ...alerta, ...(evaluacion ? { evaluacion, estado_evaluacion: 'correcta' } : {}) };
+            } else {
+                const items = url.searchParams.has('q') ? [] : [alerta];
+                data = { items, total: items.length, limit: Number(url.searchParams.get('limit') || 10), offset: 0 };
+            }
+            await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, data }) });
+        });
         await page.evaluate(() => localStorage.setItem('access_token', 'token-sintetico'));
         await page.goto(`${base}/dashboard`);
+        await page.locator('[data-alerta]').first().waitFor();
         await page.locator('#buscar').fill('sin coincidencias');
         await page.locator('#estadoVacio[data-estado="vacio"]').waitFor();
         await page.locator('#botonActualizar').click();
+        await page.locator('#estadoVacio[data-estado="vacio"]').waitFor();
         assert.equal(await page.locator('#buscar').inputValue(), 'sin coincidencias');
         assert.match(await page.locator('#estadoVacio').innerText(), /filtros/);
         await page.locator('#limpiarFiltros').click();
@@ -104,6 +129,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         await page.evaluate(() => mostrarError(document.querySelector('#mensajeEvaluacion'), new ErrorSolicitud(503)));
         assert.equal(await page.locator('input[name="evaluacion"][value="correcta"]').isChecked(), true);
         await page.locator('#guardarEvaluacion').click();
+        await page.locator('#evaluacionRegistrada').waitFor();
         assert.equal(await page.locator('#evaluacionRegistrada').isVisible(), true);
         assert.deepEqual(errores, [], 'sin errores JavaScript en las pantallas');
         console.log('Integración verificada: login, carga, reintento, estados HTTP, sesión, filtros y selección.');

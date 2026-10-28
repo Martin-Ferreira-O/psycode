@@ -19,6 +19,10 @@ class FragmentRejected(ValueError):
     pass
 
 
+class AnalysisContextLost(FragmentRejected):
+    pass
+
+
 @dataclass(frozen=True)
 class Fragment:
     session_id: str
@@ -29,6 +33,8 @@ class Fragment:
     start: int = 0
     end: int = 16000
     context_start: int = 0
+    session_origin_sample: int = 0
+    new_audio_start_sample: int | None = None
 
     def __post_init__(self):
         if str(UUID(self.session_id)) != self.session_id:
@@ -38,6 +44,11 @@ class Fragment:
         if (not all(type(v) is int for v in (self.context_start, self.start, self.end))
                 or not 0 <= self.context_start <= self.start < self.end):
             raise FragmentRejected("Intervalo PCM inválido")
+        if type(self.session_origin_sample) is not int or self.session_origin_sample < 0:
+            raise FragmentRejected("Origen de sesión inválido")
+        if self.new_audio_start_sample is not None and (type(self.new_audio_start_sample) is not int
+                or not self.session_origin_sample <= self.new_audio_start_sample < self.session_origin_sample + self.end):
+            raise FragmentRejected("Audio nuevo inválido")
         if self.captured_at.tzinfo is None or not 1 <= len(self.box.strip()) <= 64:
             raise FragmentRejected("Fecha o box inválido")
 

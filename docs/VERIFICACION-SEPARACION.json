@@ -1,0 +1,76 @@
+{
+  "date": "2026-10-27",
+  "platform": "macOS arm64; Python 3.12.13",
+  "server": {
+    "repository": "/Users/martin/Desktop/consultoria-bn",
+    "branch": "codex/separacion-agente-servidor",
+    "base_revision": "59b250812459c0bafd775f1edd76e522215f85fa",
+    "tests_run": 301,
+    "skipped": 5,
+    "status": "passed; also passed in isolated lock-installed environment without agent/OBS"
+  },
+  "agent": {
+    "repository": "/Users/martin/Desktop/psycode-agent",
+    "branch": "codex/separacion-agente-servidor",
+    "package_version": "1.0.0",
+    "tests_passed": 120,
+    "wheel": "/Users/martin/Desktop/psycode-agent/dist/psycode_agent-1.0.0-py3-none-any.whl",
+    "wheel_sha256": "aea7e01900d4372a64cd0331c9e36387c9404b7f45a16b90393c9e3f1a1cf3ed"
+  },
+  "cross_integration": {
+    "result": "passed",
+    "agent_wheel_sha256": "aea7e01900d4372a64cd0331c9e36387c9404b7f45a16b90393c9e3f1a1cf3ed",
+    "coverage": [
+      "separate WS/HTTP processes",
+      "SQL agenda and coordinator restart",
+      "lost ACK after commit",
+      "reconnect",
+      "idempotent uploads",
+      "stop and final sequence",
+      "queue to simulated unknown-speaker analysis",
+      "historical v1 HTTP and ACK tests",
+      "autonomous runtime with simulated OBS/FFmpeg",
+      "lease replacement across two ASGI processes",
+      "isolated agent without Django/backend/MongoDB",
+      "native delivered Smile JSON through HTTP to authorization"
+    ]
+  },
+  "source_smile": {
+    "source": "/Users/martin/Downloads/smile_scraper",
+    "source_file": "smile_scraper.py",
+    "sha256": "80d94a2dcda0e2bf48e57ebdee2f3b97d81198e4a52230dfa2d193f6a4055fb5",
+    "integration": "vendored unchanged; subprocess CLI and native JSON transport",
+    "fields": [
+      "smile_cita_id",
+      "box",
+      "smile_box_id",
+      "fecha",
+      "hora_inicio",
+      "duracion_minutos",
+      "estado",
+      "codigo_estado"
+    ]
+  },
+  "baseline": {
+    "tests_run": 400,
+    "failures": 1,
+    "errors": 2,
+    "skipped": 5,
+    "cause": "FFmpeg unavailable for three hardware-dependent tests"
+  },
+  "checks": [
+    "independent installs and prohibited-import boundaries",
+    "contract checksums and synthetic schema fixtures",
+    "migrations without model drift",
+    "health and coordinator commands on disposable database",
+    "continuous worker exits cleanly on SIGTERM",
+    "git diff --check in both repositories"
+  ],
+  "not_exercised": [
+    "institutional Smile login/network and actual OBS/MediaMTX/FFmpeg",
+    "Windows/Linux CI jobs prepared but not executed here",
+    "five concurrent boxes/load test",
+    "human clinical/functional review"
+  ],
+  "publication": "none; local working changes, no commits or remote publication"
+}

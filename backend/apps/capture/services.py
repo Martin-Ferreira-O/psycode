@@ -54,8 +54,12 @@ def _event(session, action, now, *, command=None, sequence=None, error_code=""):
 
 
 class CaptureSessionService:
-    def __init__(self, authorization_service=None, *, start_timeout=timedelta(minutes=2),
-                 heartbeat_timeout=timedelta(minutes=2), finalization_timeout=timedelta(minutes=5)):
+    def __init__(self, authorization_service=None, *, start_timeout=None,
+                 heartbeat_timeout=None, finalization_timeout=None):
+        from django.conf import settings
+        start_timeout = start_timeout if start_timeout is not None else timedelta(seconds=settings.CAPTURE_START_TIMEOUT_SECONDS)
+        heartbeat_timeout = heartbeat_timeout if heartbeat_timeout is not None else timedelta(seconds=settings.CAPTURE_INACTIVITY_TIMEOUT_SECONDS)
+        finalization_timeout = finalization_timeout if finalization_timeout is not None else timedelta(seconds=settings.CAPTURE_FINALIZATION_TIMEOUT_SECONDS)
         if any(value <= timedelta(0) for value in (start_timeout, heartbeat_timeout, finalization_timeout)):
             raise ValueError("Los tiempos de espera deben ser positivos")
         self.authorization_service = authorization_service
@@ -219,7 +223,8 @@ class CaptureSessionService:
                 item.save(update_fields=["delivered_at", "delivery_count"])
                 _event(item.session, "command.delivered", now, command=item)
                 result.append(Command(item.command_id, item.session_id, box, item.kind,
-                                      item.session.scheduled_start, item.session.scheduled_end))
+                                      item.session.scheduled_start, min(item.session.scheduled_end, item.session.stop_requested_at)
+                                      if item.kind == CommandKind.STOP and item.session.stop_requested_at else item.session.scheduled_end))
             return tuple(result)
 
     def acknowledge(self, box, command_id, *, success=True, last_sequence=None, error_code="",

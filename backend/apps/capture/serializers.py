@@ -32,3 +32,12 @@ class FragmentSerializer(serializers.Serializer):
         if instant is None or timezone.is_naive(instant):
             raise serializers.ValidationError("Fecha inválida.")
         return instant
+
+
+class FragmentV2Serializer(FragmentSerializer):
+    session_start_sample = serializers.IntegerField(min_value=0, max_value=9223372036854775806)
+    session_end_sample = serializers.IntegerField(min_value=1, max_value=9223372036854775806)
+    new_audio_start_sample = serializers.IntegerField(min_value=0, max_value=9223372036854775806)
+    sample_rate = serializers.IntegerField(min_value=16000, max_value=16000)
+    chunk_samples = serializers.IntegerField(min_value=1, max_value=16000 * 600)
+    overlap_samples = serializers.IntegerField(min_value=0, max_value=16000 * 600 - 1)

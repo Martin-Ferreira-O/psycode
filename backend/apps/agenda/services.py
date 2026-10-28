@@ -270,7 +270,7 @@ class AgendaService:
 
     def load_excel(self, paths: str | Path | Iterable[str | Path]) -> LoadReport:
         """Actualiza los boxes de uno o varios archivos, conservando los demás."""
-        paths = (paths,) if isinstance(paths, (str, Path)) else tuple(paths)
+        paths = (paths,) if isinstance(paths, (str, Path)) or hasattr(paths, "read") else tuple(paths)
         if not paths:
             raise AgendaError("Debe indicar al menos un archivo Excel.")
         incoming, rejected, empty_rows = {}, [], 0
@@ -301,3 +301,47 @@ class AgendaService:
         return any(item.estatus not in NON_BLOCKING
                    and item.inicio.astimezone(UTC) <= instant < item.termino.astimezone(UTC)
                    for item in by_box[box])
+
+
+    def replace_boxes(self, by_box):
+        """Publicar una revisión durable sin sustituir la instancia inyectada."""
+        if set(by_box) - ALLOWED_BOXES:
+            raise AgendaError("box_fuera_de_alcance")
+        with self._lock:
+            self._by_box = {**self._by_box, **{box: tuple(items) for box, items in by_box.items()}}
+
+
+    def load_smile_json(self, raw, *, boxes, agenda_date):
+        """Representación nativa del extractor entregado, sin conversión a Excel."""
+        import json
+        try:
+            rows = json.loads(raw)
+            day = date.fromisoformat(agenda_date)
+            if not isinstance(rows, list) or len(rows) > 100000 or not boxes or set(boxes) - ALLOWED_BOXES:
+                raise ValueError()
+            grouped = {box: [] for box in boxes}
+            seen = set()
+            keys = {"smile_cita_id", "box", "smile_box_id", "fecha", "hora_inicio", "duracion_minutos", "estado", "codigo_estado"}
+            for row in rows:
+                if not isinstance(row, dict) or set(row) != keys or type(row["box"]) is not int:
+                    raise ValueError()
+                box = f"box-{row['box']}"
+                if box not in grouped or row["smile_box_id"] != str(row["box"] + 5):
+                    raise ValueError()
+                if any(not isinstance(row[k], str) or not row[k] or len(row[k]) > 256
+                       for k in ("smile_cita_id", "codigo_estado", "estado", "fecha", "hora_inicio")):
+                    raise ValueError()
+                if (box, row["smile_cita_id"]) in seen or date.fromisoformat(row["fecha"]) != day:
+                    raise ValueError()
+                seen.add((box, row["smile_cita_id"]))
+                minutes = row["duracion_minutos"]
+                status = _text(row["estado"])
+                if type(minutes) is not int or not 0 <= minutes <= 59999 or status not in STATUSES:
+                    raise ValueError()
+                start = _local_datetime(datetime.combine(day, _time(row["hora_inicio"])))
+                duration = timedelta(minutes=minutes)
+                grouped[box].append(Appointment(box, start, duration, (start.astimezone(UTC) + duration).astimezone(SANTIAGO), status))
+        except (ValueError, TypeError, KeyError, OverflowError):
+            raise AgendaError("Reporte Smile JSON inválido; se conserva la agenda anterior.") from None
+        self.replace_boxes(grouped)
+        return LoadReport(len(rows), (), 0, tuple(sorted(boxes)))

@@ -8,7 +8,7 @@ from uuid import NAMESPACE_URL, uuid5
 
 from backend.apps.alerts.exceptions import AlertAlreadyExists
 from backend.common.errors import PersistenceUnavailable
-from .domain import AnalysisResult, AnalysisState, Fragment, FragmentRejected, Signal
+from .domain import AnalysisContextLost, AnalysisResult, AnalysisState, Fragment, FragmentRejected, Signal
 from .errors import ProviderError, SubmissionUncertain
 from .ports import AnalizadorDeSenales, FragmentLedger, TechnicalAudit, Transcriptor
 from .privacy import redact
@@ -37,12 +37,14 @@ class AnalysisService:
         self.alerts, self.audit = alerts, audit
         self.redact_terms, self.secrets = redact_terms, secrets
         self.histories = {}
+        self.evidence = {}
         self.max_sessions = max_sessions
         self._lock = Lock()
 
     def close_session(self, session_id):
         with self._lock:
             self.histories.pop(session_id, None)
+            self.evidence.pop(session_id, None)
 
     def process(self, fragment: Fragment, *, roles: dict[str, str] | None = None) -> AnalysisResult:
         # No background process/stdout pipes to deadlock under Windows spawn.
@@ -58,7 +60,7 @@ class AnalysisService:
         if fragment.session_id not in self.histories and len(self.histories) >= self.max_sessions:
             raise FragmentRejected("Límite de contextos; cierre sesiones terminadas")
         if fragment.sequence > 0 and fragment.session_id not in self.histories:
-            raise FragmentRejected("Contexto de sesión no disponible; requiere revisión tras reinicio")
+            raise AnalysisContextLost("Contexto de sesión no disponible; requiere revisión tras reinicio")
         self.ledger.claim(fragment)
         history = self.histories.setdefault(fragment.session_id, [])
         decisions, signals, errors = [], [], []
@@ -71,12 +73,15 @@ class AnalysisService:
         if transcription.cleanup != "deleted":
             errors.append("SPEECHMATICS_DELETE_PENDING")
             self.audit.failure(errors[-1], sesion_id=fragment.session_id, sequence=fragment.sequence)
-        words = [asdict(w) for w in transcription.words]
-        utterances = align_words(words, [{"start": w.start, "end": w.end, "speaker": w.speaker}
-                                        for w in transcription.words])
+        origin = fragment.session_origin_sample / 16000
+        words = [{**asdict(w), "start": w.start + origin, "end": w.end + origin} for w in transcription.words]
+        utterances = align_words(words, [{"start": w["start"], "end": w["end"], "speaker": w["speaker"]} for w in words])
         if not utterances:
             errors.append("TEXT_NOT_EVALUABLE")
         for utterance in utterances:
+            if (fragment.new_audio_start_sample is not None
+                    and (utterance["start"] + utterance["end"]) / 2 < fragment.new_audio_start_sample / 16000):
+                continue
             text = redact_for_jev(utterance["text"].strip(), fragment, self.secrets, self.redact_terms)
             history[:] = [h for h in history if h["end"] >= utterance["start"] - 60]
             while history and sum(len(h["text"]) for h in history) + len(text) > 12000:
@@ -131,6 +136,12 @@ class AnalysisService:
         if result.state != AnalysisState.SIGNAL or result.error_codes:
             return
         for signal in result.signals:
+            evidence = self.evidence.setdefault(fragment.session_id, [])
+            excerpt = " ".join(signal.excerpt.casefold().split())
+            if fragment.new_audio_start_sample is not None and any(
+                    e[0] == signal.category_id and e[1] == excerpt and max(e[2], signal.start) < min(e[3], signal.end)
+                    for e in evidence):
+                continue
             ident = str(uuid5(NAMESPACE_URL, f"psycode:1.0:{fragment.session_id}:{fragment.sequence}:"
                              f"{signal.start}:{signal.end}:{signal.category_id}"))
             try:
@@ -139,6 +150,9 @@ class AnalysisService:
                     nivel_severidad=signal.severity, fecha_hora=fragment.captured_at,
                     sesion_id=fragment.session_id, origen="analysis.speechmatics-jev/1.0",
                     descripcion=" ".join(signal.excerpt.split())[:500])
+                if fragment.new_audio_start_sample is not None:
+                    evidence.append((signal.category_id, excerpt, signal.start, signal.end))
+                    evidence[:] = [e for e in evidence if e[3] >= signal.end - 60][-256:]
             except AlertAlreadyExists:
                 pass
             except PersistenceUnavailable:

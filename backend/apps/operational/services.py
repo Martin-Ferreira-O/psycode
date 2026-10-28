@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from datetime import datetime, time
 from zoneinfo import ZoneInfo
@@ -13,6 +13,7 @@ SANTIAGO_TZ = ZoneInfo("America/Santiago")
 
 class OperationalService:
     def __init__(self, agenda_service=None):
+        self._durable_agenda = agenda_service is None
         self._capture_auth = CaptureAuthorizationService(agenda_service=agenda_service)
         self._capture_sessions = CaptureSessionService(self._capture_auth)
 
@@ -108,6 +109,9 @@ class OperationalService:
 
     def authorize_box_capture(self, box: str | int, check_time: datetime | None = None) -> BoxCaptureAuthorization:
         """SCRUM-70: Evalúa autorización de captura para un box combinando agenda y horario clínico."""
+        if self._durable_agenda:
+            from backend.apps.agenda.persistence import refresh
+            refresh(self._capture_auth.agenda)
         check_time = self._capture_auth._normalize_when(check_time)
         authorization = self._capture_auth.evaluate_box(box, check_time)
         self._capture_sessions.apply_authorization(authorization, now=check_time)
@@ -115,6 +119,9 @@ class OperationalService:
 
     def authorize_box_transition(self, box: str | int, check_time: datetime | None = None) -> BoxCaptureAuthorization | None:
         """SCRUM-70: Devuelve la autorización solo cuando ocurre una transición de estado."""
+        if self._durable_agenda:
+            from backend.apps.agenda.persistence import refresh
+            refresh(self._capture_auth.agenda)
         check_time = self._capture_auth._normalize_when(check_time)
         transition = self._capture_auth.evaluate_transition(box, check_time)
         authorization = transition or self._capture_auth.evaluate_box(box, check_time)

@@ -1,6 +1,17 @@
 # Psycode API
 
-Backend del proyecto Psycode, desarrollado en Python y Django. Actualmente funcionan el inicio de sesión, la recuperación de contraseña y el manejo de sesión (SCRUM-31), y la persistencia de alertas en MongoDB (SCRUM-32). Las alertas incluyen consulta y evaluación HTTP, bitácora protegida y notificación por correo principal con respaldo (envíos desactivados por defecto).
+> Separación implementada: el agente instalable está en el repositorio independiente
+> `psycode-agent`. El control remoto y la operación vigente se describen en
+> [OPERACION-SEPARADA.md](docs/OPERACION-SEPARADA.md) y
+> [CONTROL-Y-AUDIO.md](docs/CONTROL-Y-AUDIO.md). Las secciones históricas que
+> presentaban el transporte como pendiente quedan sustituidas por esos contratos.
+
+
+Servidor central del proyecto Psycode, desarrollado en Python y Django. Incluye la interfaz web, autenticación, recuperación de contraseña, alertas en MongoDB, consulta y evaluación HTTP, bitácora protegida y notificación por correo principal con respaldo (envíos desactivados por defecto). El programa instalable en los PCs de psicología se mantiene por separado en `psycode-agent`.
+
+Para el VPS, seguir [instalación y operación separada](docs/OPERACION-SEPARADA.md): se necesitan ASGI para HTTP/WebSocket, el coordinador de captura y el trabajador de fragmentos. Las instrucciones de `runserver` de este README son para desarrollo local.
+
+La [revisión funcional posterior a la separación](docs/REVISION-FUNCIONAMIENTO-SERVIDOR.md) registra las correcciones, pruebas ejecutadas y validaciones pendientes en el entorno institucional.
 
 La integración interna de Speechmatics Batch y JEV está documentada en [implementación y pruebas sin credenciales](docs/INTEGRACION-SPEECHMATICS-JEV.md). Incluye el contrato de salida 1.0, procedencia del código y conexión a alertas/bitácora; no añade una interfaz ni habilita envíos externos por defecto.
 
@@ -71,7 +82,7 @@ En Windows PowerShell:
 .venv\Scripts\python.exe manage.py runserver
 ```
 
-Deja esa terminal abierta. El servidor escucha en http://127.0.0.1:8000. Para detenerlo, presiona `Ctrl+C`. La dirección raíz muestra 404 porque este repositorio contiene una API, sin pantalla de inicio ni frontend.
+Deja esa terminal abierta. El servidor escucha en http://127.0.0.1:8000 y la dirección raíz muestra el inicio de sesión web. Para detenerlo, presiona `Ctrl+C`. `runserver` no atiende el control WebSocket de los agentes; para probarlo, usar Uvicorn según el runbook del VPS.
 
 ## Volver a arrancar el proyecto
 
@@ -125,7 +136,7 @@ uv run python manage.py test backend.apps.analysis --settings=backend.config.tes
 
 Con pip y el entorno activado, usa `python` en lugar de `uv run python`; en Windows también puedes usar `.venv\Scripts\python.exe`. La configuración de pruebas omite la carga de `.env` y los casos de integración bloquean las conexiones de red.
 
-Esta entrega expone `backend.config.composition.analysis_worker()` y `worker.process(fragment, roles=...)` para el trabajador interno. `runserver` no inicia un consumidor de audio: falta conectar el productor/ejecutor que entregue fragmentos. El rol del paciente debe confirmarlo el llamador; la diarización por sí sola no lo identifica. Sin esa atribución, el resultado es indeterminado y no genera alertas.
+El consumidor central se ejecuta con `manage.py process_fragment_jobs --continuous --idle-seconds 1` en un proceso separado; recibe los trabajos creados por la ingesta HTTP del agente. `runserver` no lo inicia. También se conserva `backend.config.composition.analysis_worker()` y `worker.process(fragment, roles=...)` para integración interna. El rol del paciente debe confirmarlo un llamador confiable; la diarización por sí sola no lo identifica. El trabajador ordinario conserva los roles desconocidos y, sin esa atribución, no genera alertas clínicas.
 
 Consulta [componentes adaptados, recuperación y pendientes de Jira](docs/INTEGRACION-SPEECHMATICS-JEV.md) y el [contrato de salida 1.0](docs/analysis/OUTPUT-1.0.md).
 
@@ -186,7 +197,7 @@ uv run python manage.py seed_demo_alerts
 
 `.env.example` ya trae `MONGODB_URI=mongodb://127.0.0.1:27017` y `MONGODB_DATABASE=psycode`. El comando exige `DJANGO_DEBUG=true`, crea cinco alertas sintéticas (boxes, tipos, severidades y estados distintos) y las vuelve a leer para comprobarlas. No guarda audio ni datos de pacientes. Si las alertas ya existen, no las modifica. Para recrearlas: `seed_demo_alerts --reset`.
 
-`runserver` no se conecta a MongoDB al arrancar. Las rutas `/api/v1/alerts` todavía responden 404 (SCRUM-33). Detalle del seed: [comandos de alerts](backend/apps/alerts/management/commands/README.md).
+`runserver` no se conecta a MongoDB al arrancar. `GET /api/v1/alerts` está implementado, requiere autenticación y necesita MongoDB disponible. Detalle del seed: [comandos de alerts](backend/apps/alerts/management/commands/README.md).
 
 ## Probar el inicio de sesión
 
@@ -217,13 +228,14 @@ Para comprobar la sesión, envía `GET http://127.0.0.1:8000/api/v1/auth/me`. En
 
 El token vence en una hora y solo se puede usar una vez. Al cambiar la contraseña, vuelve a iniciar sesión: los tokens de sesión anteriores dejan de servir. La contraseña nueva debe cumplir los validadores de la aplicación; el comando de usuario local permite restaurar la contraseña sencilla de prueba.
 
-La pantalla web de recuperación está pendiente del frontend. Para configurar archivos locales o SMTP, consulta [SCRUM-31](docs/SCRUM-31.md#correo-y-configuración) y [la cuenta técnica de pruebas](docs/SMTP_TEST_ACCOUNT.md).
+La pantalla de acceso incluye la solicitud de recuperación y `/password-reset/confirm` permite confirmar el cambio desde el enlace recibido. En desarrollo con la interfaz Django, configurar `FRONTEND_BASE_URL=http://127.0.0.1:8000` para que ese enlace apunte al servidor local. Para configurar archivos locales o SMTP, consulta [SCRUM-31](docs/SCRUM-31.md#correo-y-configuración) y [la cuenta técnica de pruebas](docs/SMTP_TEST_ACCOUNT.md).
 
-## Agenda temporal desde Excel
+## Agenda compartida y carga desde Excel
 
-El servicio interno [agenda](backend/apps/agenda/README.md) carga manualmente
-`citas.xlsx`, informa filas rechazadas y permite consultar la ocupación de boxes
-en memoria.
+El servicio [agenda](backend/apps/agenda/README.md) conserva el lector manual de
+`citas.xlsx`. La operación separada recibe reportes Smile JSON o Excel del colector
+designado, persiste revisiones SQL y reconstruye la ocupación en cada proceso.
+Ver [alcance, reintentos y agenda vacía](docs/OPERACION-SEPARADA.md#smile-y-agenda-entre-procesos).
 
 ```sh
 uv run python manage.py test backend.apps.agenda --settings=backend.config.test_settings
@@ -238,10 +250,11 @@ recuperación de sesiones interrumpidas. La ingesta interna guarda fragmentos
 de audio en almacenamiento temporal privado y trabajos pendientes en SQL.
 [Contrato, integración y límites](backend/apps/capture/README.md).
 
-Después de actualizar, ejecuta `manage.py migrate`. El coordinador debe evaluar
-la autorización y recuperar sesiones periódicamente; la recuperación también
-puede ejecutarse con `manage.py recover_capture_sessions`. El comando no inicia
-capturas y `runserver` no arranca un coordinador automáticamente.
+Después de actualizar, ejecuta `manage.py migrate`. `manage.py coordinate_capture`
+evalúa autorizaciones y recupera vencimientos periódicamente; debe ejecutarse como
+proceso separado. La recuperación también puede ejecutarse con
+`manage.py recover_capture_sessions`, que no crea nuevos inicios. `runserver` no
+arranca un coordinador automáticamente.
 
 `POST /api/v1/internal/fragments` recibe WAV PCM mono, 16 kHz y 16 bits,
 checksum y metadatos de captura mediante multipart. Exige una credencial de
@@ -255,8 +268,11 @@ un checksum distinto para la misma sesión/secuencia genera conflicto. La API
 confirma solo tras guardar archivo y trabajo, y no ejecuta análisis ni envíos.
 Ejecuta `manage.py cleanup_capture_uploads` al arrancar y periódicamente para
 eliminar huérfanos antiguos; conserva cargas en curso y archivos de trabajos.
-El consumidor de la cola y la eliminación de archivos aceptados tras procesar
-pertenecen a una integración posterior.
+`manage.py process_fragment_jobs` consume la cola y elimina los archivos al terminar
+cada trabajo, conservando el estado técnico y el resultado en SQL. El modo
+`--continuous` espera nuevos trabajos; el modo por lote permite acotar la ejecución.
+El [contrato de audio v2](docs/CONTROL-Y-AUDIO.md#audio) añade tiempos de sesión y
+solapamiento; la ruta v1 se conserva para compatibilidad.
 
 ## Comprobar los cambios
 
@@ -265,11 +281,12 @@ Ejecuta desde la raíz:
 ```sh
 uv run python manage.py check
 uv run python manage.py makemigrations --check --dry-run
-uv run python manage.py test backend.apps.accounts backend.apps.alerts --settings=backend.config.test_settings
-uv run python manage.py test backend.apps.capture backend.apps.operational --settings=backend.config.test_settings --noinput
+uv run python scripts/check_boundaries.py
+uv run python manage.py test --settings=backend.config.test_settings --noinput
+node --test backend/apps/web/tests/*.test.cjs
 ```
 
-Con pip, usa el mismo reemplazo de `uv run python` indicado arriba. Las pruebas crean una base separada y no modifican tu usuario local. Si cambias modelos, genera y revisa la migración correspondiente antes de comprobar que no quedan migraciones pendientes.
+Con pip, usa el mismo reemplazo de `uv run python` indicado arriba. Las pruebas crean una base separada y no modifican tu usuario local. Las pruebas JavaScript requieren Node.js 18 o superior. La [suite cruzada con un wheel explícito del agente](docs/OPERACION-SEPARADA.md#verificación) verifica HTTP y WebSocket entre procesos independientes. Si cambias modelos, genera y revisa la migración correspondiente antes de comprobar que no quedan migraciones pendientes.
 
 ## Dependencias y documentación
 

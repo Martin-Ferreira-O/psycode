@@ -247,6 +247,23 @@ class FragmentJobProcessorTests(IngestionFixtures, TestCase):
         self.assertEqual(second.state, FragmentJob.State.PENDING)
         self.assertEqual(analysis.calls, [])
 
+    def test_previous_failure_finalizes_following_jobs_and_removes_their_audio(self):
+        self.receive()
+        self.receive(number=1, captured_at=NOW + timedelta(seconds=11),
+                     now=NOW + timedelta(seconds=21))
+        processor, analysis, audit = self.processor(error=RuntimeError('synthetic'))
+        self.assertEqual(processor.process_next(), FragmentJob.State.FAILED)
+        self.assertEqual(len(self.blobs()), 1)
+
+        self.assertEqual(processor.process_next(), FragmentJob.State.FAILED)
+
+        following = FragmentJob.objects.get(sequence__number=1)
+        self.assertEqual(following.last_error_code, 'PREVIOUS_FRAGMENT_FAILED')
+        self.assertIsNotNone(following.finished_at)
+        self.assertEqual(len(analysis.calls), 1)
+        self.assertIn(('PREVIOUS_FRAGMENT_FAILED', str(self.session.session_id), 1), audit.failures)
+        self.assertFalse(self.blobs())
+
     def test_completed_job_is_not_processed_twice(self):
         self.receive()
         processor, analysis, _ = self.processor()

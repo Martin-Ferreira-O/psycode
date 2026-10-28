@@ -1,5 +1,12 @@
 # Contratos de API — Psycode API
 
+> Separación implementada: el agente instalable está en el repositorio independiente
+> `psycode-agent`. El control remoto y la operación vigente se describen en
+> [OPERACION-SEPARADA.md](docs/OPERACION-SEPARADA.md) y
+> [CONTROL-Y-AUDIO.md](docs/CONTROL-Y-AUDIO.md). Las secciones históricas que
+> presentaban el transporte como pendiente quedan sustituidas por esos contratos.
+
+
 **Nombre técnico:** `psycode-api`. **API:** v1. **Revisión documental:** 1.5, compatibilidad de ingesta con Windows actualizada el 2026-10-25. **Implementación actual:** las operaciones descritas se implementan por sus tareas SCRUM correspondientes.
 
 **Base URL:** `/api/v1/`. **Autenticación:** JWT `Authorization: Bearer <access_token>`. **JSON:** `application/json`. La ingesta interna de la sección 5 utiliza credenciales `Agent` y `multipart/form-data`. [Arquitectura](ARCHITECTURE.md) · [Aceptación](docs/ACCEPTANCE.md).

@@ -1,5 +1,8 @@
 # Speechmatics y JEV: integración y pruebas en Psycode
 
+> Actualización de separación: [operación vigente](../docs/OPERACION-SEPARADA.md). Agente en el repositorio independiente `psycode-agent`; control WS autenticado, audio v1/v2 y agenda durable. Las instrucciones históricas incompatibles quedan sustituidas por ese runbook.
+
+
 ## Estado verificado
 
 Revisión del **16 de octubre de 2026**, sobre el commit de Psycode **`96299fb`**. Pasaron **28 pruebas de análisis** y **61 pruebas** al incluir la regresión relacionada de alertas. Se utilizaron respuestas HTTP simuladas, audio PCM sintético y persistencia simulada, sin claves reales, llamadas a los proveedores ni consumo de créditos.

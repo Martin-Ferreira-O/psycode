@@ -1,5 +1,12 @@
 # Arquitectura — Psycode API
 
+> Separación implementada: el agente instalable está en el repositorio independiente
+> `psycode-agent`. El control remoto y la operación vigente se describen en
+> [OPERACION-SEPARADA.md](docs/OPERACION-SEPARADA.md) y
+> [CONTROL-Y-AUDIO.md](docs/CONTROL-Y-AUDIO.md). Las secciones históricas que
+> presentaban el transporte como pendiente quedan sustituidas por esos contratos.
+
+
 **Estado:** arquitectura SCRUM-30 conservada. Accounts (SCRUM-31) y persistencia MongoDB de alertas (SCRUM-32) están implementados. Consultas HTTP, evaluación pública y notificaciones siguen pendientes. Nombre técnico `psycode-api`; API pública `/api/v1/`. Ver [SCRUM-31](docs/SCRUM-31.md), [SCRUM-32](docs/SCRUM-32.md) y [esquema MongoDB](docs/MONGODB.md).
 
 ## 1. Decisión y alcance

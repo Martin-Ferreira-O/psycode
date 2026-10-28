@@ -20,3 +20,10 @@ El Excel y su transcripción se conservan como referencias originales. Los docum
 - [SCRUM-46 — Estados y errores comunes del frontend](SCRUM-46.md): helpers, integración, alcance y verificación.
 
 La bitácora consultable y el correo principal con respaldo se describen en [SCRUM-65.md](SCRUM-65.md).
+
+- [Operación separada](OPERACION-SEPARADA.md): instalación, procesos y recuperación.
+- [Control y audio](CONTROL-Y-AUDIO.md): WS, v1/v2 y Smile nativo.
+- [Extracción](EXTRACCION-AGENTE.json) y [fuente Smile](SMILE-PROVENANCE.json).
+
+- [Resultado y límites de validación](RESULTADO-SEPARACION.md).
+- [Revisión funcional posterior de la rama](REVISION-FUNCIONAMIENTO-SERVIDOR.md): correcciones, pruebas propias y límites antes del VPS/Windows.

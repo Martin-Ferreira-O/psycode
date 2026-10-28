@@ -1,0 +1,44 @@
+{
+  "type": "object",
+  "properties": {
+    "session_start_sample": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9223372036854775806
+    },
+    "session_end_sample": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9223372036854775806
+    },
+    "new_audio_start_sample": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9223372036854775806
+    },
+    "sample_rate": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9223372036854775806
+    },
+    "chunk_samples": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9223372036854775806
+    },
+    "overlap_samples": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9223372036854775806
+    }
+  },
+  "required": [
+    "session_start_sample",
+    "session_end_sample",
+    "new_audio_start_sample",
+    "sample_rate",
+    "chunk_samples",
+    "overlap_samples"
+  ],
+  "additionalProperties": false
+}

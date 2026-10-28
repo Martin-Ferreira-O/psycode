@@ -1,5 +1,8 @@
 # Backend
 
+> Actualización de separación: [operación vigente](../docs/OPERACION-SEPARADA.md). Agente en el repositorio independiente `psycode-agent`; control WS autenticado, audio v1/v2 y agenda durable. Las instrucciones históricas incompatibles quedan sustituidas por ese runbook.
+
+
 El backend es un único proyecto Django. `accounts` tiene implementada la autenticación de SCRUM-31. `alerts` persiste en MongoDB (SCRUM-32) sin rutas HTTP todavía. `dashboard` y `notifications` tienen archivos base pendientes.
 
 Para instalar, crear el usuario local y arrancar, sigue el [README principal](../README.md#primera-instalación). Ejecuta los comandos desde la raíz, donde está `manage.py`.

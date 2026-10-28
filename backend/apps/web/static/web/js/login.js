@@ -46,6 +46,7 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
+    mostrarCarga(alertBox, "Iniciando sesión…");
     establecerCargaBoton(submitBtn, true, "Iniciando sesión");
 
     try {
@@ -125,6 +126,7 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
+    mostrarCarga(recoveryAlert, "Enviando instrucciones…");
     establecerCargaBoton(recoverySubmitBtn, true, "Enviando");
 
     try {

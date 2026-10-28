@@ -15,7 +15,7 @@ SECURE_SSL_REDIRECT = False
 MONGODB_URI = os.getenv("PSYCODE_TEST_MONGODB_URI", "").strip()
 MONGODB_DATABASE = "psycode_test"
 ALLOWED_HOSTS = ["testserver", "localhost", "127.0.0.1"]
-DATABASES["default"]["TEST"] = {"NAME": BASE_DIR / ".local/test-auth.sqlite3"}
+DATABASES["default"]["TEST"] = {"NAME": os.getenv("PSYCODE_TEST_SQLITE_PATH", str(BASE_DIR / ".local/test-auth.sqlite3"))}
 EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
 LOGGING = {"version": 1, "disable_existing_loggers": False,
            "handlers": {"null": {"class": "logging.NullHandler"}},

@@ -1,0 +1,63 @@
+{
+  "type": "object",
+  "properties": {
+    "collection_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "source": {
+      "type": "string",
+      "maxLength": 64
+    },
+    "agenda_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "obtained_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "boxes": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "box-3",
+          "box-4",
+          "box-5",
+          "box-6",
+          "box-7"
+        ]
+      }
+    },
+    "format_version": {
+      "enum": [
+        "smile.excel.v1",
+        "smile.json.v1"
+      ]
+    },
+    "checksum": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "outcome": {
+      "enum": [
+        "valid",
+        "partial",
+        "failed"
+      ]
+    }
+  },
+  "required": [
+    "collection_id",
+    "source",
+    "agenda_date",
+    "obtained_at",
+    "boxes",
+    "format_version",
+    "checksum",
+    "outcome"
+  ],
+  "additionalProperties": false
+}

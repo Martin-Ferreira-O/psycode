@@ -34,7 +34,7 @@ class FragmentIngestionService:
         self.storage = storage
         self.control = control if control is not None else CaptureSessionService()
 
-    def receive(self, *, box, session_id, number, format, checksum, captured_at, upload, now=None):
+    def receive(self, *, box, session_id, number, format, checksum, captured_at, upload, now=None, temporal=None):
         box, session_id = _box(box), _uuid(session_id)
         captured_at = _instant(captured_at) if captured_at is not None else None
         if captured_at is None:
@@ -60,13 +60,18 @@ class FragmentIngestionService:
                         if job is None:
                             raise FragmentError("SEQUENCE_ALREADY_REGISTERED", 409)
                         if (job.checksum != stored.checksum or job.format != format or job.size != stored.size
-                                or sequence.captured_at != captured_at):
+                                or sequence.captured_at != captured_at or job.temporal != (temporal or {})):
                             raise FragmentError("SEQUENCE_CONFLICT", 409)
                         return receipt(job, session, sequence), False
+                    if temporal is not None:
+                        from .temporal import validate
+                        validate(temporal, upload, session, number, captured_at, received_at)
+                    elif session.audio_profile:
+                        raise FragmentError("AUDIO_VERSION_CONFLICT", 409)
                     self.control._accept_sequence(session, number, captured_at, received_at)
                     sequence = AcceptedSequence.objects.get(session=session, number=number)
                     job = FragmentJob.objects.create(sequence=sequence, storage_key=stored.key,
-                                                     checksum=stored.checksum, format=format, size=stored.size)
+                                                     checksum=stored.checksum, format=format, size=stored.size, temporal=temporal or {})
                     _event(session, "fragment.queued", received_at, sequence=number)
                     result = receipt(job, session, sequence)
                     # Si el commit tiene un resultado incierto, conservar el archivo

@@ -32,6 +32,7 @@ class CaptureSession(models.Model):
     next_sequence = models.PositiveBigIntegerField(default=0)
     final_sequence = models.BigIntegerField(null=True)
     error_code = models.CharField(max_length=40, blank=True)
+    audio_profile = models.JSONField(default=dict)
 
     class Meta:
         constraints = [
@@ -113,6 +114,7 @@ class FragmentJob(models.Model):
 
     job_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     sequence = models.OneToOneField(AcceptedSequence, on_delete=models.PROTECT, related_name="fragment_job")
+    temporal = models.JSONField(default=dict)
     storage_key = models.CharField(max_length=37, unique=True)
     checksum = models.CharField(max_length=64)
     format = models.CharField(max_length=8, default="wav")
@@ -142,3 +144,16 @@ class FragmentJob(models.Model):
             models.CheckConstraint(condition=models.Q(size__gt=0), name="capture_nonempty_fragment"),
             models.CheckConstraint(condition=models.Q(format="wav"), name="capture_fragment_format"),
         ]
+
+
+class RuntimeLease(models.Model):
+    """Exclusión SQL entre procesos; un propietario por box o trabajador."""
+    name = models.CharField(max_length=100, primary_key=True)
+    owner = models.UUIDField()
+    expires_at = models.DateTimeField()
+
+
+class AgentStatus(models.Model):
+    box = models.CharField(max_length=16, primary_key=True)
+    seen_at = models.DateTimeField()
+    diagnostics = models.JSONField(default=dict)

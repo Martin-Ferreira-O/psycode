@@ -1,5 +1,8 @@
 # Agenda Excel
 
+> Actualización de separación: [operación vigente](../../../docs/OPERACION-SEPARADA.md). Agente en el repositorio independiente `psycode-agent`; control WS autenticado, audio v1/v2 y agenda durable. Las instrucciones históricas incompatibles quedan sustituidas por ese runbook.
+
+
 `AgendaService` mantiene en memoria la ocupación de los boxes de atención 3 a 7,
 sin guardar datos personales. Cada carga reemplaza los boxes incluidos y conserva
 los demás. Las inasistencias, cancelaciones y anulaciones no ocupan el box.

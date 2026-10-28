@@ -6,7 +6,7 @@ from uuid import UUID, uuid4
 from django.db import transaction
 from django.utils import timezone
 
-from backend.apps.analysis.domain import AnalysisState, Fragment
+from backend.apps.analysis.domain import AnalysisContextLost, AnalysisState, Fragment
 from .models import FragmentJob, SessionState
 from .storage import FragmentError
 
@@ -31,6 +31,8 @@ class ClaimedFragmentJob:
     box: str
     captured_at: object
     attempts: int
+    temporal: dict
+    error_code: str = ""
 
 
 class QueueFragmentLedger:
@@ -71,6 +73,9 @@ class FragmentJobProcessor:
         if claimed is None:
             return None
 
+        if claimed.error_code:
+            return self._finish_failed(claimed, claimed.error_code, now=timezone.now())
+
         analysis_started = False
 
         try:
@@ -86,6 +91,8 @@ class FragmentJobProcessor:
                     start=0,
                     end=frames,
                     context_start=0,
+                    session_origin_sample=claimed.temporal.get("session_start_sample", 0),
+                    new_audio_start_sample=claimed.temporal.get("new_audio_start_sample"),
                 )
 
                 roles = self.roles_provider(fragment)
@@ -95,6 +102,9 @@ class FragmentJobProcessor:
 
                 analysis_started = True
                 result = self.analysis.process(fragment, roles=roles)
+
+        except AnalysisContextLost:
+            return self._finish_failed(claimed, "ANALYSIS_CONTEXT_LOST", now=timezone.now())
 
         except BlockingIOError:
             if analysis_started:
@@ -265,6 +275,7 @@ class FragmentJobProcessor:
             )
 
             for job in jobs:
+                error_code = ""
                 blocked = (
                     FragmentJob.objects
                     .filter(
@@ -276,7 +287,13 @@ class FragmentJobProcessor:
                 )
 
                 if blocked:
-                    continue
+                    if FragmentJob.objects.filter(sequence__session_id=job.sequence.session_id,
+                            sequence__number__lt=job.sequence.number, state=FragmentJob.State.FAILED).exists():
+                        # Finalizar fuera de la transacción con la misma limpieza
+                        # de archivos y contextos que cualquier otro fallo.
+                        error_code = "PREVIOUS_FRAGMENT_FAILED"
+                    else:
+                        continue
 
                 token = uuid4()
 
@@ -307,6 +324,8 @@ class FragmentJobProcessor:
                     box=job.sequence.session.box,
                     captured_at=job.sequence.captured_at,
                     attempts=job.attempts,
+                    temporal=job.temporal,
+                    error_code=error_code,
                 )
 
         return None
@@ -465,6 +484,10 @@ class FragmentJobProcessor:
 
         if terminal_session:
             self.analysis.close_session(session_id)
+
+    def close_finished_contexts(self):
+        for session_id in list(getattr(self.analysis, "histories", {})):
+            self._close_session_if_finished(session_id)
 
     def _audit_failure(self, code, session_id, sequence):
         if self.audit is not None:

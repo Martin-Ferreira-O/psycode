@@ -7,7 +7,7 @@ from rest_framework.views import APIView
 from backend.common.responses import success_response
 from backend.config.composition import fragment_ingestion_service
 from .authentication import BoxAgentAuthentication
-from .serializers import FragmentSerializer
+from .serializers import FragmentSerializer, FragmentV2Serializer
 from .storage import FragmentError
 from .uploads import FragmentMultiPartParser
 
@@ -17,10 +17,11 @@ class FragmentUploadView(APIView):
     authentication_classes = [BoxAgentAuthentication]
     permission_classes = [IsAuthenticated]
     parser_classes = [FragmentMultiPartParser]
+    serializer_class = FragmentSerializer
 
     def post(self, request):
         try:
-            serializer = FragmentSerializer(data=request.data)
+            serializer = self.serializer_class(data=request.data)
             try:
                 serializer.is_valid(raise_exception=True)
             except exceptions.ValidationError:
@@ -32,6 +33,8 @@ class FragmentUploadView(APIView):
                 box=request.user.box, session_id=data["session_id"], number=data["secuencia"],
                 format=data["formato"], checksum=data["checksum"], captured_at=data["captured_at"],
                 upload=data["archivo"],
+                temporal={k: data[k] for k in ("session_start_sample", "session_end_sample", "new_audio_start_sample",
+                    "sample_rate", "chunk_samples", "overlap_samples")} if self.serializer_class is FragmentV2Serializer else None,
             )
             return success_response({
                 "job_id": str(result.job_id), "session_id": str(result.session_id), "box": result.box,
@@ -45,3 +48,7 @@ class FragmentUploadView(APIView):
             handler = getattr(request, "_fragment_upload_handler", None)
             if handler is not None:
                 handler.close()
+
+
+class FragmentV2UploadView(FragmentUploadView):
+    serializer_class = FragmentV2Serializer

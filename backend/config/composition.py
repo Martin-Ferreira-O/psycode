@@ -24,7 +24,7 @@ def alerts_service(store=None):
 def capture_authorization_service(agenda_service=None, config_loader=None):
     """SCRUM-70: Construye el servicio de autorización de captura por box para SCRUM-71."""
     return CaptureAuthorizationService(
-        agenda_service=agenda_service if agenda_service is not None else AgendaService(),
+        agenda_service=agenda_service if agenda_service is not None else durable_agenda(),
         config_loader=config_loader,
     )
 
@@ -116,3 +116,7 @@ def fragment_job_processor(
         worker,
         **options,
     )
+
+def durable_agenda():
+    from backend.apps.agenda.persistence import refresh
+    return refresh(AgendaService())

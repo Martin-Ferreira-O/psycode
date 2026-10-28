@@ -1,5 +1,8 @@
 # SCRUM-72 — Especificación de integración del agente del box
 
+> Actualización de separación: [operación vigente](../docs/OPERACION-SEPARADA.md). Agente en el repositorio independiente `psycode-agent`; control WS autenticado, audio v1/v2 y agenda durable. Las instrucciones históricas incompatibles quedan sustituidas por ese runbook.
+
+
 Fecha: 2026-10-24. Destinatario: responsable de **Capturar y enviar fragmentos
 desde el box**. Este documento entrega el contrato disponible de SCRUM-71 y
 SCRUM-73; **no implementa SCRUM-72**.
@@ -14,8 +17,8 @@ Control de sesiones: [README de captura](../backend/apps/capture/README.md) y
 |---|---|
 | Recepción de fragmentos SCRUM-73 | Implementada: `POST /api/v1/internal/fragments`. Incluye autenticación, validación, idempotencia y cola SQL. |
 | Ciclo de sesiones y órdenes SCRUM-71 | Implementado en el backend mediante `BoxAgentControl`, con órdenes persistentes y confirmaciones idempotentes. |
-| Transporte remoto de órdenes, confirmaciones, heartbeat y fallos | **Pendiente de acuerdo e implementación**. No existen endpoints HTTP para esas operaciones. El puerto Python no es accesible directamente desde otro equipo. |
-| Duración y solapamiento de fragmentos | **Pendientes de definición** en este repositorio. No asumir valores de la prueba OBS como contrato definitivo. |
+| Transporte remoto de órdenes, confirmaciones, heartbeat y fallos | Implementado mediante WSS `/ws/v1/agents`, identidad Agent, lease SQL y ACK durable. Véase [control vigente](CONTROL-Y-AUDIO.md). |
+| Duración y solapamiento de fragmentos | Perfil inicial configurable 10/1 s; metadatos temporales y validación de ventana en audio v2. |
 | Formato de archivo aceptado | Definido: WAV RIFF, PCM lineal, mono, 16 kHz, 16 bits little endian. |
 | URL del ambiente y credencial real por box | Se entregan por configuración y canal privado; el código no confirma que exista un despliegue operativo. |
 
@@ -230,11 +233,11 @@ rechazar pendientes nuevos; conservarlos no garantiza que puedan subirse luego.
 
 | Pendiente | Qué debe quedar especificado entre responsables |
 |---|---|
-| Transporte de control SCRUM-71 ↔ agente | Protocolo, rutas/topics o canal IPC, autenticación, payloads, respuestas, polling/push, heartbeat y errores. Asignar quién implementa el adaptador remoto; no está incluido en la ruta de archivos de SCRUM-73. |
+| Transporte de control SCRUM-71 ↔ agente | Implementado: [WS 1.0](CONTROL-Y-AUDIO.md), separado del transporte HTTPS de archivos. Validación institucional pendiente. |
 | Duración | Segundos por fragmento y tratamiento del primero y del último incompleto. El límite de 25 MiB es de tamaño, no una duración acordada. |
 | Solapamiento | Segundos/muestras, qué audio se repite y cómo se representa en el futuro consumidor. La API actual no admite campos `overlap`, `start`, `end` o `context_start`. Si son necesarios, versionar/ampliar el contrato antes de enviarlos. |
 | Tiempo de captura y corte | Instante representado por `captured_at` con solapamiento, precisión, reloj sincronizado y corte al detener/revocar. Debe respetar inicio real y límites del backend; no usar el instante tardío de upload. |
-| Configuración del agente | Box, URL backend, credencial, conexión/credencial OBS, directorio local privado, duración, solapamiento, timeout, intentos, backoff y heartbeat. Los nombres de sus variables todavía no están fijados. |
+| Configuración del agente | Box, URL backend, credencial, conexión/credencial OBS, directorio local privado, duración, solapamiento, timeout, intentos, backoff y heartbeat. Los nombres vigentes están en el `.env.example` y README del paquete `psycode-agent`. |
 | Operación ante fallos | Límites de disco, retención/recuperación de pendientes agotados, reinicio, mapeo de fallos OBS/backend y mecanismo para comunicarlos sin notificaciones clínicas. |
 | Ambiente compartido | URL, certificados, provisión de cada box, coordinador en ejecución y plazos efectivos. `runserver` no inicia el coordinador. |
 
@@ -267,4 +270,4 @@ uv run python manage.py test backend.apps.capture --settings=backend.config.test
 ```
 
 No necesitan OBS, MongoDB ni credenciales reales; no reemplazan las pruebas
-propias del agente ni el acuerdo del transporte pendiente.
+propias del agente ni la validación de hardware/red institucional pendiente.

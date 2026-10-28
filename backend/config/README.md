@@ -1,5 +1,8 @@
 # Configuración del backend
 
+> Actualización de separación: [operación vigente](../../docs/OPERACION-SEPARADA.md). Agente en el repositorio independiente `psycode-agent`; control WS autenticado, audio v1/v2 y agenda durable. Las instrucciones históricas incompatibles quedan sustituidas por ese runbook.
+
+
 Aquí se configuran Django, las rutas raíz y la composición de los servicios.
 
 La ingesta de captura está implementada en `/api/v1/internal/fragments`, con
@@ -29,6 +32,7 @@ Los contratos implementados y pendientes se describen en [API_CONTRACTS.md](../.
 | `DJANGO_ALLOWED_HOSTS` | Lista explícita por entorno |
 | `FRONTEND_BASE_URL`, `PASSWORD_RESET_PATH` | Origen del frontend para CORS y ruta del enlace de recuperación |
 | `SQLITE_PATH` | Ubicación local del archivo SQLite |
+| `STATIC_ROOT` | Destino de `collectstatic` para Nginx; por defecto `staticfiles/`, separado del estado privado `.local/`. |
 | `MONGODB_URI`, `MONGODB_DATABASE` | Conexión y base `psycode` de `alerts` y `audit_events`; obligatorias al activar MongoDB. Esquema en [MONGODB.md](../../docs/MONGODB.md) |
 | `TEAMS_WORKFLOW_URL` | URL secreta del workflow; no registrar en logs |
 | `NOTIFICATION_EMAIL_TO` | Destinatarios de contingencia autorizados por la clínica |
