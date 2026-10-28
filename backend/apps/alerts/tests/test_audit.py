@@ -101,12 +101,15 @@ class MongoAuditIntegrationTests(SimpleTestCase):
     def test_full_lifecycle_queries_pagination_and_schema(self):
         from backend.apps.notifications.services import NotificationService
         from backend.apps.notifications.domain import NotificationPayload, AttemptResult
+        from backend.apps.notifications.recipients import RecipientResult
         from unittest.mock import Mock
         primary, backup = Mock(), Mock()
         primary.send.return_value = AttemptResult('email', False, 3, 'NOTIFICATION_TIMEOUT')
         backup.send.return_value = AttemptResult('email', True, 2)
         notifier = NotificationService(email_client=primary, backup_email_client=backup,
-                                       store=self.repo, enabled=True)
+                                       store=self.repo, enabled=True, recipient_resolver=Mock(
+                                           resolve=Mock(return_value=RecipientResult(
+                                               'lista_distribucion', ('primary@example.test',)))))
         self.assertTrue(notifier.notify_alert(self.alert.alerta_id,
             NotificationPayload('MEDIO', 'riesgo_suicida', 'box-3', '10:00')).enviado)
         AlertsService(self.repo).record_evaluation(self.alert.alerta_id, 'correcta', EVALUADOR_ID, 'profesional')

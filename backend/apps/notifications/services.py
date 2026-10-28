@@ -9,12 +9,14 @@ from backend.common.errors import PersistenceUnavailable
 from .clients import EmailClient
 from .domain import AttemptResult, NotificationResult
 from .ports import AlertNotifier
+from .recipients import RecipientResolver
 
 
 class NotificationService(AlertNotifier):
     def __init__(self, teams_client=None, email_client=None, enabled=None, *,
-                 backup_email_client=None, store=None, audit=None):
+                 backup_email_client=None, store=None, audit=None, recipient_resolver=None):
         # Teams permanece fuera del flujo hasta que se decida su integración.
+        self.recipient_resolver = recipient_resolver if recipient_resolver is not None else RecipientResolver()
         self.email_client = email_client if email_client is not None else EmailClient()
         self.backup_email_client = (backup_email_client if backup_email_client is not None
                                     else EmailClient(backup=True))
@@ -37,6 +39,10 @@ class NotificationService(AlertNotifier):
         from .domain import NotificationPayload
         payload = NotificationPayload(str(alert.semaforo), 'riesgo_suicida', alert.box,
                                       alert.fecha_hora.isoformat())
+        recipients = self.recipient_resolver.resolve()
+        if recipients.reason:
+            return NotificationResult(ident, False, motivo_omision=recipients.reason)
+        self.email_client.destinatarios = list(recipients.emails)
         attempts = []
         for backup, client in ((False, self.email_client), (True, self.backup_email_client)):
             try:

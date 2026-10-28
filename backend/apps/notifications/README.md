@@ -1,6 +1,8 @@
 # Notificaciones por correo
 
-`NotificationService.notify_alert(alerta_id, payload)` consulta la alerta persistida y envía primero al correo principal configurado en `NOTIFICATION_EMAIL_TO` (SCRUM-67). Solo si falla o expira intenta `NOTIFICATION_EMAIL_BACKUP_TO` (Sergio). No se necesitan contraseñas de destinatarios: las credenciales corresponden al remitente o relay SMTP.
+`NotificationService.notify_alert(alerta_id, payload)` consulta la alerta persistida y resuelve los destinatarios al preparar cada notificación habilitada. `RecipientResolver.resolve()` lee la configuración operativa vigente sin modificarla. En modalidad `supervisores_activos` consulta cuentas con rol Supervisor, habilitadas y sin privilegio de superusuario; no consulta sesiones ni último inicio de sesión. Usa sus correos registrados válidos, sin duplicados (ignorando mayúsculas y espacios externos), y refleja cambios de rol, estado y correo en la próxima preparación.
+
+El resultado `RecipientResult` contiene `mode`, `emails` y `reason`. Si no hay destinatarios válidos, `reason` y `NotificationResult.motivo_omision` son `SIN_DESTINATARIOS_VALIDOS`, sin intentos de envío, cambio de modalidad ni respaldo. La lista de distribución usa `primary_email`; cuando aún no existe configuración operativa se conserva `NOTIFICATION_EMAIL_TO`. El mecanismo de envío y contingencia existente permanece separado de la consulta: solo si falla el envío principal intenta `NOTIFICATION_EMAIL_BACKUP_TO`. No se necesitan contraseñas de destinatarios.
 
 `NOTIFICATIONS_ENABLED=false` por defecto. Teams permanece fuera del flujo y deshabilitado hasta decidir el webhook; su cliente se mantiene desacoplado. NULO/sin riesgo, alerta ausente, persistencia inaccesible o envíos desactivados no generan mensajes. Un fallo doble conserva la alerta.
 

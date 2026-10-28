@@ -2,7 +2,7 @@ import subprocess
 from unittest.mock import Mock, patch
 
 from django.core import mail
-from django.test import SimpleTestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
 
 from backend.apps.alerts.audit import AlertAudit
 from backend.apps.alerts.exceptions import AlertAlreadyExists
@@ -15,7 +15,7 @@ from .domain import NotificationPayload, AttemptResult
 from .services import NotificationService
 
 
-class NotificationsTestCase(SimpleTestCase):
+class NotificationsTestCase(TestCase):
     def setUp(self):
         self.db = FakeDatabase()
         self.store = AlertsRepository(self.db)
@@ -160,7 +160,7 @@ class EmailClientTests(SimpleTestCase):
                 self.assertEqual(EmailClient().send(self.payload).error, expected)
 
 
-class LocalSMTPTests(SimpleTestCase):
+class LocalSMTPTests(TestCase):
     """Ejercita el proceso real SMTP contra un servidor local sin credenciales."""
     def test_primary_rejected_then_backup_accepted(self):
         import socketserver
@@ -221,3 +221,98 @@ class LocalSMTPTests(SimpleTestCase):
             finally:
                 server.shutdown()
                 thread.join(timeout=2)
+
+
+class RecipientResolutionTests(TestCase):
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+        from backend.apps.operational.models import OperationalConfiguration, NotificationMode
+        from .recipients import RecipientResolver
+
+        self.users = get_user_model().objects
+        self.config = OperationalConfiguration.load()
+        self.config.notification_mode = NotificationMode.ACTIVE_SUPERVISORS
+        self.config.primary_email = 'distribution@example.test'
+        self.config.save()
+        self.resolver = RecipientResolver()
+
+    def create_user(self, username, **kwargs):
+        return self.users.create_user(username=username, email=f'{username}@example.test', **kwargs)
+
+    def test_only_enabled_supervisors_without_requiring_a_login(self):
+        supervisor = self.create_user('supervisor')
+        self.create_user('disabled', is_active=False)
+        self.create_user('admin', role='admin')
+        self.create_user('superuser', is_superuser=True)
+        self.assertIsNone(supervisor.last_login)
+        self.assertFalse(supervisor.refresh_sessions.exists())
+        result = self.resolver.resolve()
+        self.assertEqual(result.emails, (supervisor.email,))
+        self.assertIsNone(result.reason)
+
+    def test_each_resolution_reflects_email_role_and_status_changes(self):
+        user = self.create_user('supervisor')
+        self.assertEqual(self.resolver.resolve().emails, (user.email,))
+        user.email = 'changed@example.test'
+        user.save()
+        self.assertEqual(self.resolver.resolve().emails, ('changed@example.test',))
+        user.role = 'admin'
+        user.save()
+        self.assertEqual(self.resolver.resolve().emails, ())
+        user.role = 'supervisor'
+        user.is_active = False
+        user.save()
+        self.assertEqual(self.resolver.resolve().emails, ())
+        user.is_active = True
+        user.save()
+        self.assertEqual(self.resolver.resolve().emails, ('changed@example.test',))
+
+    def test_invalid_registered_emails_are_excluded(self):
+        for index, email in enumerate(('', 'invalid', 'bad\r\n@example.test')):
+            user = self.create_user(f'invalid{index}')
+            # Simular datos heredados que no pasaron por la validación del modelo.
+            self.users.filter(pk=user.pk).update(email=email)
+        self.assertEqual(self.resolver.resolve().reason, 'SIN_DESTINATARIOS_VALIDOS')
+
+    def test_duplicate_addresses_are_compared_without_case_or_spaces(self):
+        from unittest.mock import patch
+        with patch.object(self.users.__class__, 'filter') as query:
+            query.return_value.order_by.return_value.values_list.return_value = [
+                'supervisor@example.test', ' SUPERVISOR@example.test ', 'supervisor@example.test',
+            ]
+            self.assertEqual(self.resolver.resolve().emails, ('supervisor@example.test',))
+
+    def test_preparation_resolves_again_and_empty_result_never_uses_backup(self):
+        db = FakeDatabase()
+        store = AlertsRepository(db)
+        alert = alta_pendiente()
+        store.insert_alert(alert)
+        primary, backup = Mock(), Mock()
+        primary.send.return_value = AttemptResult('email', True, 1)
+        service = NotificationService(store=store, email_client=primary,
+                                      backup_email_client=backup, enabled=True)
+        payload = NotificationPayload('ALTO', 'riesgo_suicida', 'box-3', '10:00')
+        user = self.create_user('supervisor')
+        self.assertTrue(service.notify_alert(alert.alerta_id, payload).enviado)
+        self.assertEqual(primary.destinatarios, [user.email])
+        user.email = 'new@example.test'
+        user.save()
+        self.assertTrue(service.notify_alert(alert.alerta_id, payload).enviado)
+        self.assertEqual(primary.destinatarios, [user.email])
+        user.is_active = False
+        user.save()
+        primary.reset_mock()
+        result = service.notify_alert(alert.alerta_id, payload)
+        self.assertFalse(result.enviado)
+        self.assertEqual(result.motivo_omision, 'SIN_DESTINATARIOS_VALIDOS')
+        self.assertEqual(result.intentos, [])
+        primary.send.assert_not_called()
+        backup.send.assert_not_called()
+        self.config.refresh_from_db()
+        self.assertEqual(self.config.notification_mode, 'supervisores_activos')
+
+    def test_mode_changes_are_used_on_the_next_resolution(self):
+        self.create_user('supervisor')
+        self.config.notification_mode = 'lista_distribucion'
+        self.config.save()
+        self.assertEqual(self.resolver.resolve().emails, ('distribution@example.test',))

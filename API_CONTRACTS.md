@@ -813,7 +813,7 @@ Prototipo: las alertas válidas de nivel 1–3 pueden notificar. NULO/sin riesgo
 
 UUID es contexto interno de auditoría. `NotificationPayload` contiene `nivel_riesgo` (BAJO, MEDIO o ALTO), `tipo_riesgo`, `box` y `fecha_hora`. Se omiten NULO/sin riesgo y niveles desconocidos. El notificador verifica primero que el UUID exista en MongoDB y reconstruye el mensaje desde esa alerta, con tipo constante `riesgo_suicida`; no utiliza texto libre del llamador. No se envían descripción, sesión, identificadores personales, audio ni transcripción.
 
-Primero se intenta correo a `NOTIFICATION_EMAIL_TO` (destinatario de SCRUM-67). Solo ante fallo, rechazo, configuración ausente o timeout se intenta `NOTIFICATION_EMAIL_BACKUP_TO` (Sergio). Teams no participa, incluso si existe un webhook configurado. Sin reintentos automáticos. Cada intento SMTP tiene un plazo completo `EMAIL_TIMEOUT_SECONDS` (10 segundos por defecto) mediante proceso cancelable; `EMAIL_TIMEOUT` limita además los sockets. La aceptación SMTP no garantiza entrega ni lectura.
+Antes de cada notificación habilitada se consulta la configuración y los destinatarios actuales. En `supervisores_activos` se incluyen únicamente cuentas habilitadas con rol Supervisor, excluyendo superusuarios, sin requerir sesión. Se validan los correos registrados y se deduplican ignorando mayúsculas y espacios externos. En `lista_distribucion` se usa `primary_email`; sin configuración operativa se conserva `NOTIFICATION_EMAIL_TO`. Sin destinatarios válidos se devuelve `SIN_DESTINATARIOS_VALIDOS`, sin intentos, cambio de modalidad ni respaldo. Solo ante fallo, rechazo o timeout del envío principal se intenta `NOTIFICATION_EMAIL_BACKUP_TO` (Sergio). Teams no participa, incluso si existe un webhook configurado. Sin reintentos automáticos. Cada intento SMTP tiene un plazo completo `EMAIL_TIMEOUT_SECONDS` (10 segundos por defecto) mediante proceso cancelable; `EMAIL_TIMEOUT` limita además los sockets. La aceptación SMTP no garantiza entrega ni lectura.
 
 `NotificationResult` contiene:
 
@@ -823,7 +823,7 @@ Primero se intenta correo a `NOTIFICATION_EMAIL_TO` (destinatario de SCRUM-67). 
 | `enviado` | bool: al menos un envío aceptado |
 | `canal_exitoso` | `email` o null |
 | `intentos` | Lista ordenada de `AttemptResult(canal, exitoso, duracion_ms, error)` |
-| `motivo_omision` | null, `NULO_O_SIN_RIESGO`, `ALERTA_NO_ALMACENADA`, `NOTIFICATIONS_DISABLED` o `FALLO_DOBLE_CANALES` |
+| `motivo_omision` | null, `NULO_O_SIN_RIESGO`, `ALERTA_NO_ALMACENADA`, `NOTIFICATIONS_DISABLED`, `SIN_DESTINATARIOS_VALIDOS` o `FALLO_DOBLE_CANALES` |
 
 Cada intento genera un evento `notifications.send` con UUID de alerta/sesión, timestamp UTC, actor Sistema, canal email, resultado, duración y código estable. `contingencia=false` identifica el principal y `true` el respaldo; nunca se guarda la dirección destinataria. El arreglo histórico `intentos` se conserva vacío en los eventos nuevos: cada intento ocupa su propio evento.
 
