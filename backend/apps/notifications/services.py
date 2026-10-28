@@ -1,4 +1,4 @@
-"""Correo principal y contingencia; solo notificar alertas persistidas."""
+"""Envío principal individual a destinatarios de la configuración operativa."""
 from django.conf import settings
 
 from backend.apps.alerts.audit import AlertAudit, ERROR_CODES
@@ -18,8 +18,6 @@ class NotificationService(AlertNotifier):
         # Teams permanece fuera del flujo hasta que se decida su integración.
         self.recipient_resolver = recipient_resolver if recipient_resolver is not None else RecipientResolver()
         self.email_client = email_client if email_client is not None else EmailClient()
-        self.backup_email_client = (backup_email_client if backup_email_client is not None
-                                    else EmailClient(backup=True))
         self.enabled = settings.NOTIFICATIONS_ENABLED if enabled is None else enabled
         self.store = store if store is not None else AlertsRepository()
         self.audit = audit if audit is not None else AlertAudit(self.store._events)
@@ -41,12 +39,12 @@ class NotificationService(AlertNotifier):
                                       alert.fecha_hora.isoformat())
         recipients = self.recipient_resolver.resolve()
         if recipients.reason:
-            return NotificationResult(ident, False, motivo_omision=recipients.reason)
-        self.email_client.destinatarios = list(recipients.emails)
+            return NotificationResult(ident, False, motivo_omision=recipients.reason,
+                                      estado='SIN_DESTINATARIOS_VALIDOS')
         attempts = []
-        for backup, client in ((False, self.email_client), (True, self.backup_email_client)):
+        for email in recipients.emails:
             try:
-                result = client.send(payload)
+                result = self.email_client.send(payload, destinatarios=[email])
             except TimeoutError:
                 result = AttemptResult('email', False, 0, 'NOTIFICATION_TIMEOUT')
             except Exception:
@@ -59,7 +57,10 @@ class NotificationService(AlertNotifier):
             attempts.append(result)
             self.audit.record('notifications.send', 'success' if result.exitoso else 'failure',
                               alerta_id=ident, sesion_id=alert.sesion_id, channel='email',
-                              backup=backup, duration_ms=result.duracion_ms, error_code=error)
-            if result.exitoso:
-                return NotificationResult(ident, True, canal_exitoso='email', intentos=attempts)
-        return NotificationResult(ident, False, intentos=attempts, motivo_omision='FALLO_DOBLE_CANALES')
+                              backup=False, duration_ms=result.duracion_ms, error_code=error)
+        successes = sum(attempt.exitoso for attempt in attempts)
+        status = ('EXITO_TOTAL' if successes == len(attempts)
+                  else 'FALLO_PARCIAL' if successes else 'FALLO_TOTAL')
+        return NotificationResult(ident, bool(successes),
+                                  canal_exitoso='email' if successes else None,
+                                  intentos=attempts, estado=status)

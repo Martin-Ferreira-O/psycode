@@ -88,4 +88,5 @@ class NotificationResult:
     canal_exitoso: Optional[str] = None
     intentos: List[AttemptResult] = field(default_factory=list)
     motivo_omision: Optional[str] = None
+    estado: str = "OMITIDA"
     

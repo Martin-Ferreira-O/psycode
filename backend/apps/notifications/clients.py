@@ -130,9 +130,9 @@ class TeamsClient(NotificationChannelClient):
 
 class EmailClient(NotificationChannelClient):
     def __init__(self, destinatarios=None, *, backup=False):
+        # Los destinatarios principales siempre provienen de la configuración operativa.
         if destinatarios is None:
-            configured = (settings.NOTIFICATION_EMAIL_BACKUP_TO if backup
-                          else settings.NOTIFICATION_EMAIL_TO)
+            configured = settings.NOTIFICATION_EMAIL_BACKUP_TO if backup else ""
             destinatarios = [e.strip() for e in configured.split(",") if e.strip()]
         self.destinatarios = destinatarios
 
@@ -140,20 +140,21 @@ class EmailClient(NotificationChannelClient):
     def nombre_canal(self):
         return "email"
 
-    def send(self, payload):
+    def send(self, payload, *, destinatarios=None):
         import subprocess
         import sys
 
+        recipients = self.destinatarios if destinatarios is None else destinatarios
         start = time.perf_counter()
         error = None
-        if not self.destinatarios:
+        if not recipients:
             error = "NOTIFICATION_NOT_CONFIGURED"
         else:
             mail = dict(subject=payload.formatear_asunto_correo(),
                         message=payload.formatear_cuerpo_correo(),
                         html_message=payload.formatear_html_correo(),
                         from_email=settings.DEFAULT_FROM_EMAIL,
-                        recipient_list=self.destinatarios, fail_silently=False)
+                        recipient_list=recipients, fail_silently=False)
             try:
                 if settings.EMAIL_BACKEND == "django.core.mail.backends.smtp.EmailBackend":
                     # Un proceso cancelable acota DNS, conexión y diálogo SMTP completos.

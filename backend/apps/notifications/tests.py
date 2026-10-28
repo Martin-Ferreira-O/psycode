@@ -13,10 +13,15 @@ from backend.common.errors import PersistenceUnavailable
 from .clients import EmailClient
 from .domain import NotificationPayload, AttemptResult
 from .services import NotificationService
+from backend.apps.operational.models import OperationalConfiguration
+from django.contrib.auth import get_user_model
 
 
 class NotificationsTestCase(TestCase):
     def setUp(self):
+        config = OperationalConfiguration.load()
+        config.primary_email = 'primary@example.test'
+        config.save()
         self.db = FakeDatabase()
         self.store = AlertsRepository(self.db)
         self.alert = alta_pendiente(descripcion='transcripción confidencial')
@@ -45,35 +50,22 @@ class NotificationsTestCase(TestCase):
         self.assertFalse(event['contingencia'])
         self.assertEqual(event['actor'], 'Sistema')
 
-    def test_primary_failure_timeout_and_exception_use_backup_in_order(self):
+    def test_primary_failure_timeout_and_exception_never_use_backup(self):
         for failure in [AttemptResult('email', False, 10, 'NOTIFICATION_REJECTED'),
                         TimeoutError('private@example.com'), RuntimeError('token=secret')]:
             with self.subTest(failure=type(failure).__name__):
                 self.primary.reset_mock()
-                self.backup.reset_mock()
-                calls = Mock()
-                calls.attach_mock(self.primary, 'primary')
-                calls.attach_mock(self.backup, 'backup')
                 self.primary.send.side_effect = failure if isinstance(failure, Exception) else None
                 self.primary.send.return_value = failure
                 result = self.notify()
-                self.assertTrue(result.enviado)
-                self.assertEqual([c[0] for c in calls.mock_calls], ['primary.send', 'backup.send'])
-                events = self.db['audit_events'].docs[-2:]
-                self.assertEqual([e['outcome'] for e in events], ['failure', 'success'])
-                self.assertTrue(events[-1]['contingencia'])
-                self.assertEqual(len(result.intentos), 2)
+                self.assertFalse(result.enviado)
+                self.assertEqual(result.estado, 'FALLO_TOTAL')
+                self.assertEqual(len(result.intentos), 1)
+                self.backup.send.assert_not_called()
+                events = self.db['audit_events'].docs
                 self.assertNotIn('secret', str(events))
                 self.assertNotIn('private@example.com', str(events))
-
-    def test_both_fail_preserves_alert(self):
-        self.primary.send.return_value = AttemptResult('email', False, 10, 'NOTIFICATION_TIMEOUT')
-        self.backup.send.return_value = AttemptResult('email', False, 10, 'NOTIFICATION_CONNECTION_FAILED')
-        result = self.notify()
-        self.assertFalse(result.enviado)
-        self.assertEqual(result.motivo_omision, 'FALLO_DOBLE_CANALES')
-        self.assertEqual(self.store.get_alert(self.alert.alerta_id), self.alert)
-        self.assertEqual(len(self.db['audit_events'].docs), 3)
+                self.assertEqual(self.store.get_alert(self.alert.alerta_id), self.alert)
 
     def test_omissions_and_unstored_alert_never_send(self):
         for risk in ('NULO', 'SIN RIESGO', 'NINGUNO', ''):
@@ -95,12 +87,13 @@ class NotificationsTestCase(TestCase):
         for forbidden in ('private@example.com', 'token=secret', 'confidencial', self.alert.sesion_id):
             self.assertNotIn(forbidden, message)
 
-    def test_audit_failure_does_not_prevent_backup(self):
+    def test_audit_failure_preserves_delivery_result(self):
         self.primary.send.return_value = AttemptResult('email', False, 0, 'NOTIFICATION_TIMEOUT')
         audit = AlertAudit(Mock(side_effect=PersistenceUnavailable()))
         self.service.audit = audit
         with self.assertLogs('psycode.audit', level='INFO') as logs:
-            self.assertTrue(self.notify().enviado)
+            self.assertEqual(self.notify().estado, "FALLO_TOTAL")
+        self.backup.send.assert_not_called()
         self.assertIn('AUDIT_UNAVAILABLE', str(logs.output))
 
     def test_unexpected_notifier_failure_does_not_reverse_registration(self):
@@ -132,13 +125,118 @@ class NotificationsTestCase(TestCase):
                 service.register_alert(**data)
         notifier.notify_alert.assert_not_called()
 
+    def enable_supervisors(self):
+        config = OperationalConfiguration.load()
+        config.notification_mode = 'supervisores_activos'
+        config.save()
+        for name in ('first', 'second', 'third'):
+            get_user_model().objects.create_user(username=name, email=f'{name}@example.test')
+        return ['first@example.test', 'second@example.test', 'third@example.test']
+
+    def test_all_supervisors_are_attempted_for_every_success_failure_combination(self):
+        from itertools import product
+        addresses = self.enable_supervisors()
+        for outcomes in product((False, True), repeat=3):
+            with self.subTest(outcomes=outcomes):
+                self.primary.send.reset_mock()
+                self.primary.send.side_effect = [
+                    AttemptResult('email', success, 1, None if success else 'NOTIFICATION_REJECTED')
+                    for success in outcomes
+                ]
+                result = self.notify()
+                expected = ('EXITO_TOTAL' if all(outcomes)
+                            else 'FALLO_PARCIAL' if any(outcomes) else 'FALLO_TOTAL')
+                self.assertEqual(result.estado, expected)
+                self.assertEqual(result.enviado, any(outcomes))
+                self.assertEqual(len(result.intentos), 3)
+                self.assertEqual([call.kwargs['destinatarios'] for call in
+                                  self.primary.send.call_args_list], [[email] for email in addresses])
+                self.backup.send.assert_not_called()
+                config = OperationalConfiguration.load()
+                self.assertEqual(config.notification_mode, 'supervisores_activos')
+
+    def test_exception_for_one_supervisor_does_not_stop_remaining_deliveries(self):
+        self.enable_supervisors()
+        for failure in (TimeoutError('secret@example.test'), RuntimeError('secret@example.test')):
+            with self.subTest(failure=type(failure).__name__):
+                self.primary.send.reset_mock()
+                self.primary.send.side_effect = [failure, AttemptResult('email', True, 1),
+                                               AttemptResult('email', True, 1)]
+                result = self.notify()
+                self.assertEqual(result.estado, 'FALLO_PARCIAL')
+                self.assertEqual(self.primary.send.call_count, 3)
+                self.assertNotIn('secret@example.test', str(result))
+                self.assertNotIn('secret@example.test', str(self.db['audit_events'].docs))
+
+    def test_supervisors_receive_separate_messages_without_other_addresses(self):
+        addresses = self.enable_supervisors()
+        self.service.email_client = EmailClient(['old@example.test'])
+        result = self.notify()
+        self.assertEqual(result.estado, 'EXITO_TOTAL')
+        self.assertEqual(len(mail.outbox), 3)
+        for message, address in zip(mail.outbox, addresses):
+            self.assertEqual(message.to, [address])
+            self.assertEqual(message.cc, [])
+            self.assertEqual(message.bcc, [])
+            serialized = message.message().as_string()
+            for other in set(addresses) - {address} | {'old@example.test'}:
+                self.assertNotIn(other, serialized)
+        self.assertNotIn('@example.test', str(self.db['audit_events'].docs))
+
+    @override_settings(NOTIFICATION_EMAIL_TO='obsolete@example.test',
+                       NOTIFICATION_EMAIL_BACKUP_TO='legacy-backup@example.test')
+    def test_distribution_uses_only_saved_address_and_reflects_updates(self):
+        get_user_model().objects.create_user(username='supervisor', email='supervisor@example.test')
+        self.service.email_client = EmailClient(['obsolete@example.test'])
+        for address in ('configured@example.test', 'updated@example.test'):
+            config = OperationalConfiguration.load()
+            config.primary_email = address
+            config.save()
+            self.assertEqual(self.notify().estado, 'EXITO_TOTAL')
+            self.assertEqual(mail.outbox[-1].to, [address])
+        self.assertEqual(len(mail.outbox), 2)
+        self.backup.send.assert_not_called()
+
+    @override_settings(NOTIFICATION_EMAIL_TO='obsolete@example.test')
+    def test_missing_or_empty_configuration_never_uses_environment(self):
+        for missing in (False, True):
+            with self.subTest(missing=missing):
+                if missing:
+                    OperationalConfiguration.objects.all().delete()
+                else:
+                    config = OperationalConfiguration.load()
+                    config.primary_email = ''
+                    config.save()
+                result = self.notify()
+                self.assertEqual(result.estado, 'SIN_DESTINATARIOS_VALIDOS')
+                self.assertEqual(result.motivo_omision, 'SIN_DESTINATARIOS_VALIDOS')
+                self.assertEqual(result.intentos, [])
+                self.primary.send.assert_not_called()
+                self.backup.send.assert_not_called()
+
+    def test_alert_levels_and_confirmed_content_are_preserved(self):
+        self.service.email_client = EmailClient()
+        for level, expected in ((1, 'BAJO'), (2, 'MEDIO'), (3, 'ALTO')):
+            with self.subTest(level=level):
+                from dataclasses import replace
+                from backend.apps.alerts.domain import semaforo_desde_severidad
+                self.alert = replace(self.alert, nivel_severidad=level,
+                                     semaforo=semaforo_desde_severidad(level))
+                # La fuente de verdad es la alerta confirmada en el repositorio.
+                with patch.object(self.store, 'get_alert', return_value=self.alert):
+                    self.assertTrue(self.notify().enviado)
+                body = mail.outbox[-1].body
+                self.assertIn(expected, body)
+                self.assertIn(self.alert.box, body)
+                self.assertNotIn('confidencial', body)
+
 
 class EmailClientTests(SimpleTestCase):
     def setUp(self):
         self.payload = NotificationPayload('ALTO', 'riesgo_suicida', 'box-3', '2026-10-17T14:00:00Z')
 
     def test_local_mail_uses_separate_configured_recipients(self):
-        self.assertTrue(EmailClient().send(self.payload).exitoso)
+        self.assertTrue(EmailClient(["primary@example.test"]).send(self.payload).exitoso)
         self.assertEqual(mail.outbox[-1].to, ['primary@example.test'])
         self.assertTrue(EmailClient(backup=True).send(self.payload).exitoso)
         self.assertEqual(mail.outbox[-1].to, ['backup@example.test'])
@@ -146,23 +244,28 @@ class EmailClientTests(SimpleTestCase):
     def test_not_configured_and_zero_messages_sent_are_failures(self):
         self.assertEqual(EmailClient([]).send(self.payload).error, 'NOTIFICATION_NOT_CONFIGURED')
         with patch('backend.apps.notifications.clients.send_mail', return_value=0):
-            self.assertEqual(EmailClient().send(self.payload).error, 'NOTIFICATION_REJECTED')
+            self.assertEqual(EmailClient(["primary@example.test"]).send(self.payload).error, 'NOTIFICATION_REJECTED')
 
     @override_settings(EMAIL_BACKEND='django.core.mail.backends.smtp.EmailBackend', EMAIL_DELIVERY_TIMEOUT=2)
     def test_smtp_process_is_bounded_and_errors_are_codes(self):
         with patch('subprocess.run', side_effect=subprocess.TimeoutExpired('smtp', 2)) as run:
-            self.assertEqual(EmailClient().send(self.payload).error, 'NOTIFICATION_TIMEOUT')
+            self.assertEqual(EmailClient(["primary@example.test"]).send(self.payload).error, 'NOTIFICATION_TIMEOUT')
             self.assertEqual(run.call_args.kwargs['timeout'], 2)
             self.assertEqual(run.call_args.kwargs['stderr'], subprocess.DEVNULL)
         for code, expected in [(0, None), (2, 'NOTIFICATION_TIMEOUT'), (3, 'NOTIFICATION_CONNECTION_FAILED'),
                                (4, 'NOTIFICATION_REJECTED'), (1, 'NOTIFICATION_INTERNAL_ERROR')]:
             with patch('subprocess.run', return_value=Mock(returncode=code)):
-                self.assertEqual(EmailClient().send(self.payload).error, expected)
+                self.assertEqual(EmailClient(["primary@example.test"]).send(self.payload).error, expected)
 
 
 class LocalSMTPTests(TestCase):
     """Ejercita el proceso real SMTP contra un servidor local sin credenciales."""
-    def test_primary_rejected_then_backup_accepted(self):
+    def test_rejected_supervisor_does_not_prevent_next_smtp_delivery(self):
+        config = OperationalConfiguration.load()
+        config.notification_mode = 'supervisores_activos'
+        config.save()
+        for name in ('primary', 'remaining'):
+            get_user_model().objects.create_user(username=name, email=f'{name}@example.test')
         import socketserver
         import threading
 
@@ -211,11 +314,12 @@ class LocalSMTPTests(TestCase):
                     result = NotificationService(store=store, enabled=True).notify_alert(alert.alerta_id,
                         NotificationPayload('MEDIO', 'riesgo_suicida', 'box-3', '10:00'))
                     self.assertTrue(result.enviado)
+                    self.assertEqual(result.estado, 'FALLO_PARCIAL')
                     self.assertEqual(result.intentos[0].error, 'NOTIFICATION_REJECTED')
                     self.assertEqual(len(result.intentos), 2)
                 self.assertEqual(len(messages), 1)
                 self.assertIn('primary@example.test', recipients[0])
-                self.assertIn('backup@example.test', recipients[1])
+                self.assertIn('remaining@example.test', recipients[1])
                 self.assertNotIn(b'sensitive transcript', messages[0])
                 self.assertEqual(len(db['audit_events'].docs), 3)
             finally:
@@ -294,11 +398,11 @@ class RecipientResolutionTests(TestCase):
         payload = NotificationPayload('ALTO', 'riesgo_suicida', 'box-3', '10:00')
         user = self.create_user('supervisor')
         self.assertTrue(service.notify_alert(alert.alerta_id, payload).enviado)
-        self.assertEqual(primary.destinatarios, [user.email])
+        self.assertEqual(primary.send.call_args.kwargs["destinatarios"], [user.email])
         user.email = 'new@example.test'
         user.save()
         self.assertTrue(service.notify_alert(alert.alerta_id, payload).enviado)
-        self.assertEqual(primary.destinatarios, [user.email])
+        self.assertEqual(primary.send.call_args.kwargs["destinatarios"], [user.email])
         user.is_active = False
         user.save()
         primary.reset_mock()

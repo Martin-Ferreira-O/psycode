@@ -105,11 +105,11 @@ class MongoAuditIntegrationTests(SimpleTestCase):
         from unittest.mock import Mock
         primary, backup = Mock(), Mock()
         primary.send.return_value = AttemptResult('email', False, 3, 'NOTIFICATION_TIMEOUT')
-        backup.send.return_value = AttemptResult('email', True, 2)
+        primary.send.side_effect = [primary.send.return_value, AttemptResult('email', True, 2)]
         notifier = NotificationService(email_client=primary, backup_email_client=backup,
                                        store=self.repo, enabled=True, recipient_resolver=Mock(
                                            resolve=Mock(return_value=RecipientResult(
-                                               'lista_distribucion', ('primary@example.test',)))))
+                                               'supervisores_activos', ('first@example.test', 'second@example.test')))))
         self.assertTrue(notifier.notify_alert(self.alert.alerta_id,
             NotificationPayload('MEDIO', 'riesgo_suicida', 'box-3', '10:00')).enviado)
         AlertsService(self.repo).record_evaluation(self.alert.alerta_id, 'correcta', EVALUADOR_ID, 'profesional')
