@@ -7,7 +7,7 @@
 > presentaban el transporte como pendiente quedan sustituidas por esos contratos.
 
 
-**Nombre técnico:** `psycode-api`. **API:** v1. **Revisión documental:** 1.5, compatibilidad de ingesta con Windows actualizada el 2026-10-25. **Implementación actual:** las operaciones descritas se implementan por sus tareas SCRUM correspondientes.
+**Nombre técnico:** `psycode-api`. **API:** v1. **Revisión documental:** 1.6, modalidades de notificación y respaldo de configuración operativa actualizadas el 2026-10-28. **Implementación actual:** las operaciones descritas se implementan por sus tareas SCRUM correspondientes.
 
 **Base URL:** `/api/v1/`. **Autenticación:** JWT `Authorization: Bearer <access_token>`. **JSON:** `application/json`. La ingesta interna de la sección 5 utiliza credenciales `Agent` y `multipart/form-data`. [Arquitectura](ARCHITECTURE.md) · [Aceptación](docs/ACCEPTANCE.md).
 
@@ -403,6 +403,152 @@ Respuesta 200:
 Errores específicos:
 - `400 VALIDATION_ERROR`: Si el usuario autenticado intenta modificar su propia cuenta (`"No puedes modificar el estado activo de tu propia cuenta."`) o UUID mal formado.
 - `404 RESOURCE_NOT_FOUND`: Si el usuario objetivo no existe.
+
+## 1.2 Configuración operativa
+
+`GET` y `PUT /api/v1/configuracion-operativa`, sin barra final, con JWT de un
+administrador activo. Supervisor → `403 AUTH_FORBIDDEN`; sin autenticación →
+`401 AUTH_REQUIRED`; JWT de usuario inactivo → `403 AUTH_USER_INACTIVE`.
+La restricción de modificación también se aplica en el servicio interno.
+
+Esta API guarda la modalidad principal y la activación independiente del correo
+de respaldo. No selecciona ni consulta supervisores, no envía notificaciones y no
+modifica la pantalla. El notificador actual sigue usando `NOTIFICATION_EMAIL_TO`
+y `NOTIFICATION_EMAIL_BACKUP_TO`; el consumo de estas preferencias por el flujo
+de envío corresponde a otra tarea.
+
+### Campos de configuración
+
+| Campo | Tipo / regla |
+|---|---|
+| `notification_mode` | String único: `lista_distribucion` o `supervisores_activos`. No acepta listas, ambas modalidades, null ni otros valores. |
+| `primary_email` | String, máximo 254 caracteres. Se conserva este nombre por compatibilidad; representa el correo de la lista de distribución. Obligatorio y con formato de correo válido cuando la modalidad resultante es `lista_distribucion`. |
+| `backup_enabled` | Booleano JSON estricto (`true`/`false`). Independiente de la modalidad principal; no admite strings, números ni null. |
+| `backup_email` | String, máximo 254 caracteres. Obligatorio y con formato de correo válido cuando el respaldo resultante está habilitado. |
+| `enabled_days` | Lista de enteros 0–6 (lunes–domingo); se guarda ordenada y sin duplicados. |
+| `open_time`, `close_time` | Strings de hora local `HH:MM`; apertura anterior al cierre. Si solo se envía uno de los extremos, se valida junto con el otro guardado. |
+| `timezone` | String de zona horaria guardada. Solo lectura, como en la API anterior. |
+| `updated_at` | Fecha/hora de última modificación en UTC, solo lectura. |
+
+Los correos se recortan y normalizan a minúsculas. Si el destino está inactivo,
+su correo puede ser `""` o conservar un valor para reutilizarlo; no se exige
+formato de correo en ese estado. Los límites de longitud y el tipo string siguen
+aplicando, y null siempre se rechaza. Al reactivar un destino se valida el correo
+resultante, incluso si no se incluye en la solicitud. Desactivar un destino no
+borra automáticamente su correo.
+
+### GET /api/v1/configuracion-operativa
+
+Devuelve todos los campos anteriores en el envelope común. Si no existe fila,
+crea la configuración inicial con modalidad `lista_distribucion`, respaldo
+deshabilitado, ambos correos vacíos, lunes a viernes, horario `08:00`–`18:00` y
+zona `America/Santiago`. Los correos iniciales vacíos no impiden consultar; el
+primer PUT debe satisfacer las condiciones de los destinos activos.
+
+Ejemplo de respuesta 200 para una configuración guardada:
+
+~~~json
+{
+  "success": true,
+  "data": {
+    "enabled_days": [0, 1, 2, 3, 4],
+    "open_time": "08:00",
+    "close_time": "18:00",
+    "notification_mode": "lista_distribucion",
+    "primary_email": "lista@example.test",
+    "backup_enabled": true,
+    "backup_email": "respaldo@example.test",
+    "timezone": "America/Santiago",
+    "updated_at": "2026-10-28T19:00:00Z"
+  },
+  "message": "Configuración operativa recuperada",
+  "timestamp": "2026-10-28T19:00:01Z"
+}
+~~~
+
+### PUT /api/v1/configuracion-operativa
+
+Recibe un objeto JSON con los campos editables. Mantiene el comportamiento
+existente de actualización parcial: los campos omitidos conservan su valor
+guardado, incluidos `notification_mode` y `backup_enabled`. No admite campos
+desconocidos ni los campos de solo lectura. No se agrega PATCH.
+
+Se combinan los valores recibidos y guardados antes de validar. Toda la operación
+es atómica: si hay errores, no cambian correos, preferencias, días, horario ni
+`updated_at`. Una primera actualización inválida tampoco crea la fila.
+Un cambio exclusivo de preferencias conserva días, horario y zona horaria.
+
+Lista de distribución con respaldo habilitado, conservando el horario:
+
+~~~json
+{
+  "notification_mode": "lista_distribucion",
+  "primary_email": "lista@example.test",
+  "backup_enabled": true,
+  "backup_email": "respaldo@example.test"
+}
+~~~
+
+Supervisores activos sin respaldo ni correos:
+
+~~~json
+{
+  "notification_mode": "supervisores_activos",
+  "primary_email": "",
+  "backup_enabled": false,
+  "backup_email": ""
+}
+~~~
+
+Ambas modalidades también permiten habilitar el respaldo. No se reciben IDs de
+supervisores ni se exige que existan supervisores activos para guardar la modalidad.
+
+Respuesta 200: mismo esquema `data` de GET, con
+`message="Configuración operativa actualizada"` y `updated_at` actualizado.
+Errores de entrada → `400 VALIDATION_ERROR`, con `error.details.fields` para
+los campos afectados. Por ejemplo, al habilitar el respaldo sin correo guardado
+ni recibido:
+
+~~~json
+{
+  "success": false,
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Datos de entrada inválidos",
+    "details": {
+      "fields": {
+        "backup_email": ["Este campo no puede estar en blanco."]
+      }
+    }
+  },
+  "timestamp": "2026-10-28T19:00:00Z"
+}
+~~~
+
+El texto de los mensajes puede variar con el idioma; frontend debe usar HTTP,
+`error.code` y las claves de `error.details.fields`. Para horarios invertidos o
+inválidos se conserva el error existente `400 VALIDATION_ERROR` sin campos.
+Aplican también los errores comunes de autenticación y persistencia.
+
+### Migración y compatibilidad para frontend
+
+La migración `operational.0002_notification_preferences` asigna
+`notification_mode="lista_distribucion"` y `backup_enabled=true` a las filas
+existentes. Conserva exactamente ambos correos, días, horas, zona y `updated_at`,
+sin copiar el correo principal a otro campo ni tomar destinatarios del entorno.
+También migra los registros antiguos con correos vacíos; su siguiente PUT debe
+completar los destinos activos o cambiar la modalidad/deshabilitar el respaldo.
+
+Las configuraciones nuevas tienen respaldo deshabilitado. La migración no crea
+una fila si no existía; su reversión conserva los campos anteriores y elimina
+los dos nuevos. Aplicar con `uv run python manage.py migrate` antes de iniciar
+la versión actualizada del servidor.
+
+Los clientes anteriores pueden continuar usando `primary_email` y `backup_email`
+y omitir los campos nuevos: no restablecen la modalidad ni la activación del
+respaldo. Deben tolerar los campos adicionales de respuesta. Esta entrega deja
+el contrato disponible para las tareas de frontend; el formulario actual sigue
+sin controles para las nuevas preferencias.
 
 ## 2. Alertas y evaluaciones
 

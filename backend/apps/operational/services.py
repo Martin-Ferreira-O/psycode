@@ -7,6 +7,7 @@ from backend.common.errors import ServiceError
 from backend.apps.capture.services import CaptureSessionService
 from .capture_authorization import BoxCaptureAuthorization, CaptureAuthorizationService
 from .models import OperationalConfiguration
+from .serializers import OperationalConfigSerializer
 
 SANTIAGO_TZ = ZoneInfo("America/Santiago")
 
@@ -18,12 +19,17 @@ class OperationalService:
         self._capture_sessions = CaptureSessionService(self._capture_auth)
 
     def get_config(self):
-        config = OperationalConfiguration.load()
+        return self._serialize_config(OperationalConfiguration.load())
+
+    @staticmethod
+    def _serialize_config(config):
         return {
             "enabled_days": config.enabled_days,
             "open_time": config.open_time,
             "close_time": config.close_time,
+            "notification_mode": config.notification_mode,
             "primary_email": config.primary_email,
+            "backup_enabled": config.backup_enabled,
             "backup_email": config.backup_email,
             "timezone": config.timezone,
             "updated_at": config.updated_at.isoformat().replace("+00:00", "Z") if config.updated_at else None,
@@ -34,41 +40,41 @@ class OperationalService:
         if not (actor.is_authenticated and actor.is_active and getattr(actor, "is_admin", False)):
             raise ServiceError("AUTH_FORBIDDEN", "No tienes permisos para modificar la configuración operativa.", 403)
 
-        enabled_days = data.get("enabled_days")
-        open_time = data.get("open_time")
-        close_time = data.get("close_time")
-        primary_email = data.get("primary_email")
-        backup_email = data.get("backup_email")
-
-        # Validaciones básicas
-        if enabled_days is not None:
-            if not isinstance(enabled_days, list) or any(not isinstance(d, int) or d < 0 or d > 6 for d in enabled_days):
-                raise ServiceError("VALIDATION_ERROR", "Días habilitados inválidos (deben ser enteros entre 0 y 6).", 400)
-
-        if open_time is not None or close_time is not None:
-            try:
-                t_open = time.fromisoformat(open_time or "00:00")
-                t_close = time.fromisoformat(close_time or "23:59")
-                if t_open >= t_close:
-                    raise ValueError()
-            except ValueError:
-                raise ServiceError("VALIDATION_ERROR", "Horario de apertura y cierre inválido o invertido.", 400)
-
         with transaction.atomic():
             config = OperationalConfiguration.load()
+            config = OperationalConfiguration.objects.select_for_update().get(pk=config.pk)
+            serializer = OperationalConfigSerializer(instance=config, data=data)
+            if not serializer.is_valid():
+                raise ServiceError(
+                    "VALIDATION_ERROR", "Datos de entrada inválidos", 400,
+                    details={"fields": serializer.errors},
+                )
+            data = serializer.validated_data
+            enabled_days = data.get("enabled_days")
+            open_time = data.get("open_time")
+            close_time = data.get("close_time")
+
+            if open_time is not None or close_time is not None:
+                try:
+                    t_open = time.fromisoformat(data.get("open_time", config.open_time))
+                    t_close = time.fromisoformat(data.get("close_time", config.close_time))
+                    if t_open >= t_close:
+                        raise ValueError()
+                except ValueError:
+                    raise ServiceError("VALIDATION_ERROR", "Horario de apertura y cierre inválido o invertido.", 400)
+
             if enabled_days is not None:
                 config.enabled_days = sorted(list(set(enabled_days)))
             if open_time is not None:
                 config.open_time = open_time
             if close_time is not None:
                 config.close_time = close_time
-            if primary_email is not None:
-                config.primary_email = primary_email.strip().lower()
-            if backup_email is not None:
-                config.backup_email = backup_email.strip().lower()
+            for field in ("notification_mode", "primary_email", "backup_enabled", "backup_email"):
+                if field in data:
+                    setattr(config, field, data[field])
             config.save()
 
-        return self.get_config()
+        return self._serialize_config(config)
 
     def validate_current_operation(self, check_time: datetime | None = None) -> dict:
         """Valida centralmente si el sistema está operando dentro del horario habilitado."""
