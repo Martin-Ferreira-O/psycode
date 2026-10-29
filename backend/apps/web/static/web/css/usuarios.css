@@ -962,3 +962,92 @@
     opacity: 1;
     visibility: visible;
 }
+.modal-usuario-contenido {
+    width: min(800px, calc(100vw - 32px));
+    max-height: calc(100dvh - 32px);
+    overflow-y: auto;
+}
+
+.formulario-usuario {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px 20px;
+}
+
+.campo-ancho-completo {
+    grid-column: 1 / -1;
+}
+
+.campo-formulario {
+    min-width: 0;
+}
+
+.grupo-password {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px;
+}
+
+.campo-password {
+    position: relative;
+    width: 100%;
+}
+
+.campo-password input {
+    width: 100%;
+    box-sizing: border-box;
+    padding-right: 46px;
+}
+
+.boton-ver-password {
+    position: absolute;
+    top: 50%;
+    right: 12px;
+    transform: translateY(-50%);
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: #52657a;
+}
+
+.boton-ver-password:hover {
+    color: #173f67;
+}
+
+.boton-ver-password svg {
+    width: 20px;
+    height: 20px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.acciones-formulario-usuario {
+    margin-top: 2px;
+}
+
+@media (max-width: 700px) {
+    .modal-usuario-contenido {
+        width: calc(100vw - 24px);
+    }
+
+    .formulario-usuario {
+        grid-template-columns: 1fr;
+    }
+
+    .grupo-password {
+        grid-template-columns: 1fr;
+    }
+
+    .campo-ancho-completo {
+        grid-column: auto;
+    }
+}

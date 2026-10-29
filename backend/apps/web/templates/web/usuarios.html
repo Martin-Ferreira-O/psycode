@@ -8,12 +8,13 @@
     <title>Gestión de usuarios</title>
 
     <link rel="stylesheet" href="{% static 'web/css/styles.css' %}">
-    <link rel="stylesheet" href="{% static 'web/css/dashboard.css' %}?v=2">
-    <link rel="stylesheet" href="{% static 'web/css/alertas.css' %}?v=6">
+    <link rel="stylesheet" href="{% static 'web/css/dashboard.css' %}?v=5">
+    <link rel="stylesheet" href="{% static 'web/css/alertas.css' %}?v=2">
     <link rel="stylesheet" href="{% static 'web/css/evaluaciones.css' %}">
     <link rel="stylesheet" href="{% static 'web/css/estados.css' %}">
-    <link rel="stylesheet" href="{% static 'web/css/usuarios.css' %}">
+    <link rel="stylesheet" href="{% static 'web/css/usuarios.css' %}?v=2">
 </head>
+
 <body>
     <div class="aplicacion">
 
@@ -24,6 +25,7 @@
             <header class="cabecera-dashboard">
                 <div>
                     <h1>Gestión de usuarios</h1>
+
                     <p class="descripcion-pagina">
                         Administra las cuentas y permisos de acceso al sistema.
                     </p>
@@ -55,6 +57,7 @@
                     </button>
 
                 </div>
+
                 <div
                     id="estadoCargaUsuarios"
                     class="estado-carga"
@@ -62,13 +65,16 @@
                 >
                     Cargando usuarios...
                 </div>
+
                 <div
                     id="estadoErrorUsuarios"
                     class="estado-error"
                     role="alert"
                     hidden
                 >
-                    <strong>No se pudieron cargar los usuarios</strong>
+                    <strong>
+                        No se pudieron cargar los usuarios
+                    </strong>
 
                     <p id="mensajeErrorUsuarios">
                         Intenta nuevamente.
@@ -82,17 +88,21 @@
                         Reintentar
                     </button>
                 </div>
+
                 <div
                     id="estadoVacioUsuarios"
                     class="estado-vacio"
                     hidden
                 >
-                    <strong>No hay usuarios registrados</strong>
+                    <strong>
+                        No hay usuarios registrados
+                    </strong>
 
                     <p>
                         Crea una cuenta para comenzar a gestionar los accesos.
                     </p>
                 </div>
+
                 <div
                     id="tablaUsuariosContenedor"
                     class="tabla-contenedor"
@@ -125,6 +135,7 @@
 
         </main>
     </div>
+
     <div
         id="modalUsuario"
         class="modal-usuario"
@@ -161,7 +172,6 @@
 
             </header>
 
-
             <form
                 id="formularioUsuario"
                 class="formulario-usuario"
@@ -170,10 +180,11 @@
 
                 <div
                     id="mensajeFormularioUsuario"
-                    class="mensaje-formulario-usuario"
+                    class="mensaje-formulario-usuario campo-ancho-completo"
                     role="alert"
                     hidden
                 ></div>
+
                 <div
                     class="campo-formulario"
                     id="grupoUsuario"
@@ -195,6 +206,7 @@
                         Este identificador no podrá modificarse posteriormente.
                     </small>
                 </div>
+
                 <div class="campo-formulario">
 
                     <label for="nombreUsuario">
@@ -211,7 +223,8 @@
                     >
 
                 </div>
-                <div class="campo-formulario">
+
+                <div class="campo-formulario campo-ancho-completo">
 
                     <label for="correoUsuario">
                         Correo
@@ -227,75 +240,135 @@
                     >
 
                 </div>
+
                 <div
-                    class="campo-formulario"
+                    class="grupo-password campo-ancho-completo"
                     id="grupoPassword"
                 >
-                    <label for="passwordUsuario">
-                        Contraseña
-                    </label>
 
-                    <input
-                        type="password"
-                        id="passwordUsuario"
-                        name="password"
-                        minlength="12"
-                        autocomplete="new-password"
-                    >
-
-                    <small>
-                        Debe cumplir los requisitos de seguridad del sistema.
-                    </small>
-                </div>
-                <div class="fila-formulario-usuario">
                     <div class="campo-formulario">
 
-                        <label for="rolUsuario">
-                            Rol
+                        <label for="passwordUsuario">
+                            Contraseña
                         </label>
 
-                        <select
-                            id="rolUsuario"
-                            name="rol"
-                            required
-                        >
-                            <option value="supervisor">
-                                Supervisor
-                            </option>
+                        <div class="campo-password">
 
-                            <option value="admin">
-                                Administrador
-                            </option>
-                        </select>
+                            <input
+                                type="password"
+                                id="passwordUsuario"
+                                name="password"
+                                minlength="12"
+                                autocomplete="new-password"
+                            >
+
+                            <button
+                                type="button"
+                                class="boton-ver-password"
+                                data-toggle-password="passwordUsuario"
+                                aria-label="Mostrar contraseña"
+                                aria-pressed="false"
+                            >
+                                <svg viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6z"></path>
+                                    <circle cx="12" cy="12" r="2.5"></circle>
+                                </svg>
+                            </button>
+
+                        </div>
+
+                        <small>
+                            Debe cumplir los requisitos de seguridad del sistema.
+                        </small>
 
                     </div>
-                    <div
-                        class="campo-formulario"
-                        id="grupoActivo"
-                    >
-                        <label for="activoUsuario">
-                            Estado
+
+                    <div class="campo-formulario">
+
+                        <label for="confirmarPasswordUsuario">
+                            Confirmar contraseña
                         </label>
 
-                        <select
-                            id="activoUsuario"
-                            name="activo"
-                        >
-                            <option value="true">
-                                Activo
-                            </option>
+                        <div class="campo-password">
 
-                            <option value="false">
-                                Inactivo
-                            </option>
-                        </select>
+                            <input
+                                type="password"
+                                id="confirmarPasswordUsuario"
+                                name="confirmar_password"
+                                minlength="12"
+                                autocomplete="new-password"
+                            >
+
+                            <button
+                                type="button"
+                                class="boton-ver-password"
+                                data-toggle-password="confirmarPasswordUsuario"
+                                aria-label="Mostrar confirmación de contraseña"
+                                aria-pressed="false"
+                            >
+                                <svg viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6z"></path>
+                                    <circle cx="12" cy="12" r="2.5"></circle>
+                                </svg>
+                            </button>
+
+                        </div>
+
+                        <small>
+                            Repite la contraseña para confirmar que fue escrita correctamente.
+                        </small>
 
                     </div>
 
                 </div>
 
+                <div class="campo-formulario">
 
-                <div class="acciones-formulario-usuario">
+                    <label for="rolUsuario">
+                        Rol
+                    </label>
+
+                    <select
+                        id="rolUsuario"
+                        name="rol"
+                        required
+                    >
+                        <option value="supervisor">
+                            Supervisor
+                        </option>
+
+                        <option value="admin">
+                            Administrador
+                        </option>
+                    </select>
+
+                </div>
+
+                <div
+                    class="campo-formulario"
+                    id="grupoActivo"
+                >
+
+                    <label for="activoUsuario">
+                        Estado
+                    </label>
+
+                    <select
+                        id="activoUsuario"
+                        name="activo"
+                    >
+                        <option value="true">
+                            Activo
+                        </option>
+
+                        <option value="false">
+                            Inactivo
+                        </option>
+                    </select>
+
+                </div>
+
+                <div class="acciones-formulario-usuario campo-ancho-completo">
 
                     <button
                         type="button"
@@ -319,6 +392,7 @@
 
         </section>
     </div>
+
     <div
         id="modalConfirmacionUsuario"
         class="modal-usuario"
@@ -370,11 +444,11 @@
 
         </section>
     </div>
-    
+
     <script src="{% static 'web/js/solicitudes.js' %}"></script>
     <script src="{% static 'web/js/estados.js' %}"></script>
     <script src="{% static 'web/js/api.js' %}"></script>
-    <script src="{% static 'web/js/components.js' %}?v=2"></script>    
-    <script src="{% static 'web/js/usuarios.js' %}"></script>
+    <script src="{% static 'web/js/components.js' %}?v=2"></script>
+    <script src="{% static 'web/js/usuarios.js' %}?v=2"></script>
 </body>
 </html>

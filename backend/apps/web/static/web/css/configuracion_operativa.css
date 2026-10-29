@@ -199,3 +199,8 @@
         width: 100%;
     }
 }
+
+.panel-configuracion {
+    margin-left: auto;
+    margin-right: auto;
+}

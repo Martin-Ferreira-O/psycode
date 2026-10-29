@@ -21,6 +21,7 @@ const elementosUsuarios = {
     nombre: document.querySelector("#nombreUsuario"),
     correo: document.querySelector("#correoUsuario"),
     password: document.querySelector("#passwordUsuario"),
+    confirmarPassword: document.querySelector("#confirmarPasswordUsuario"),
     rol: document.querySelector("#rolUsuario"),
     activo: document.querySelector("#activoUsuario"),
     botonGuardar: document.querySelector("#botonGuardarUsuario"),
@@ -364,6 +365,9 @@ function abrirModalCrear() {
     elementosUsuarios.usuario.disabled = false;
     elementosUsuarios.usuario.required = true;
     elementosUsuarios.password.required = true;
+    elementosUsuarios.confirmarPassword.required = true;
+    elementosUsuarios.password.type = "password";
+    elementosUsuarios.confirmarPassword.type = "password";
     elementosUsuarios.rol.value = "supervisor";
     elementosUsuarios.activo.value = "true";
 
@@ -385,6 +389,9 @@ function abrirModalEditar(usuario) {
 
     elementosUsuarios.usuario.required = false;
     elementosUsuarios.password.required = false;
+    elementosUsuarios.confirmarPassword.required = false;
+    elementosUsuarios.password.type = "password";
+    elementosUsuarios.confirmarPassword.type = "password";
 
     elementosUsuarios.nombre.value = usuario.nombre || "";
     elementosUsuarios.correo.value = usuario.correo || "";
@@ -444,6 +451,14 @@ async function guardarUsuario(evento) {
 
     if (!elementosUsuarios.formulario.checkValidity()) {
         elementosUsuarios.formulario.reportValidity();
+        return;
+    }
+
+    if (!usuarioEnEdicion &&
+        elementosUsuarios.password.value !== elementosUsuarios.confirmarPassword.value)
+        {
+        mostrarErrorFormulario("Las contraseñas no coinciden.");
+        elementosUsuarios.confirmarPassword.focus();
         return;
     }
 
@@ -547,6 +562,23 @@ document.querySelectorAll("[data-cerrar-confirmacion]").forEach((elemento) => {
 });
 
 document.addEventListener("keydown", manejarEscape);
+
+document.querySelectorAll("[data-toggle-password]").forEach((boton) => {
+    boton.addEventListener("click", () => {
+        const campo = document.querySelector(`#${boton.dataset.togglePassword}`);
+
+        if (!campo) return;
+
+        const mostrarPassword = campo.type === "password";
+
+        campo.type = mostrarPassword ? "text" : "password";
+        boton.setAttribute("aria-pressed", String(mostrarPassword));
+        boton.setAttribute(
+            "aria-label",
+            mostrarPassword ? "Ocultar contraseña" : "Mostrar contraseña"
+        );
+    });
+});
 
 async function iniciarGestionUsuarios() {
     await cargarUsuarioSesionActual();

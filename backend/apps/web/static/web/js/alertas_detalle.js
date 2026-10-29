@@ -38,18 +38,67 @@ function limpiarTranscripcion() {
 
 function completarContenidoDetalle(alerta) {
     const modal = document.querySelector("#modalDetalle");
-    modal.querySelectorAll(".detalle-grid").forEach(bloque => { bloque.hidden = false; });
-    document.querySelector("#tituloModal").textContent = codigoAlertaVisible(alerta.alerta_id);
-    document.querySelector("#detalleBox").textContent = formatearBox(alerta.box);
-    document.querySelector("#detalleTipo").textContent = formatearTipoRiesgo(alerta.tipo_riesgo);
-    mostrarNivel(document.querySelector("#detalleNivel"), alerta);
-    document.querySelector("#detalleFecha").textContent = `${formatearFecha(alerta.fecha_hora)} · ${formatearHora(alerta.fecha_hora)}`;
-    document.querySelector("#detalleEstado").textContent = alerta.estado_evaluacion === "pendiente"
-        ? "Pendiente" : obtenerEtiquetaEvaluacion(alerta.estado_evaluacion);
-    document.querySelector("#detalleSesion").textContent = alerta.sesion_id || "—";
+
+    modal
+        .querySelectorAll(".detalle-grid")
+        .forEach((bloque) => {
+            bloque.hidden = false;
+        });
+
+    document.querySelector("#tituloModal").textContent =
+        codigoAlertaVisible(alerta.alerta_id);
+
+    document.querySelector("#detalleBox").textContent =
+        formatearBox(alerta.box);
+
+    document.querySelector("#detalleTipo").textContent =
+        formatearTipoRiesgo(alerta.tipo_riesgo);
+
+    mostrarNivel(
+        document.querySelector("#detalleNivel"),
+        alerta
+    );
+
+    document.querySelector("#detalleFecha").textContent =
+        alerta.fecha_hora
+            ? `${formatearFecha(alerta.fecha_hora)} · ${formatearHora(alerta.fecha_hora)}`
+            : "No disponible";
+
+    document.querySelector("#detalleEstado").textContent =
+        alerta.estado_evaluacion === "pendiente"
+            ? "Pendiente"
+            : obtenerEtiquetaEvaluacion(
+                  alerta.estado_evaluacion
+              );
+
+    document.querySelector("#detalleSesion").textContent =
+        alerta.sesion_id || "—";
+
     mostrarTranscripcion(alerta);
+
     const evaluacion = alerta.evaluacion;
-    document.querySelector("#resultadoEvaluacion").textContent = obtenerEtiquetaEvaluacion(evaluacion?.evaluacion);
-    document.querySelector("#evaluadoPor").textContent = evaluacion?.usuario || "No disponible";
-    document.querySelector("#fechaEvaluacion").textContent = `${formatearFecha(evaluacion?.fecha_hora)} · ${formatearHora(evaluacion?.fecha_hora)}`;
+
+    const resultado =
+        evaluacion?.evaluacion ??
+        evaluacion?.resultado ??
+        alerta.estado_evaluacion;
+
+    document.querySelector(
+        "#resultadoEvaluacion"
+    ).textContent =
+        resultado
+            ? obtenerEtiquetaEvaluacion(resultado)
+            : "No disponible";
+
+    document.querySelector(
+        "#evaluadoPor"
+    ).textContent =
+        evaluacion?.usuario || "No disponible";
+
+    document.querySelector(
+        "#fechaEvaluacion"
+    ).textContent =
+        evaluacion?.fecha_hora
+            ? `${formatearFecha(evaluacion.fecha_hora)} · ${formatearHora(evaluacion.fecha_hora)}`
+            : "No disponible";
 }
