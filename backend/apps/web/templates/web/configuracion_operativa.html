@@ -132,21 +132,39 @@
                                     </p>
                                 </div>
                             </div>
+                        </fieldset>
 
+                        <fieldset class="grupo-configuracion" id="seccionCorreoRespaldo">
+                            <legend>Correo de respaldo</legend>
+                            <label class="control-respaldo" for="respaldoHabilitado">
+                                <input
+                                    id="respaldoHabilitado"
+                                    name="backup_enabled"
+                                    type="checkbox"
+                                    aria-describedby="ayudaCorreoRespaldo conservacionCorreoRespaldo"
+                                >
+                                <span>Activar correo de respaldo</span>
+                            </label>
+                            <p class="ayuda-configuracion" id="ayudaCorreoRespaldo">
+                                El correo de respaldo se utiliza solo ante fallos del envío a la lista de distribución o a cualquiera de los supervisores destinatarios.
+                                No recibe una copia cuando todos los envíos principales son exitosos.
+                            </p>
                             <div class="campos-correos">
                                 <label class="campo-configuracion" for="correoRespaldo">
-                                    <span>Correo de respaldo</span>
+                                    <span>Correo del encargado del sistema</span>
                                     <input
                                         id="correoRespaldo"
                                         name="backup_email"
                                         type="email"
                                         maxlength="254"
                                         autocomplete="email"
+                                        aria-describedby="ayudaCorreoRespaldo conservacionCorreoRespaldo"
+                                        disabled
                                     >
                                 </label>
                             </div>
-                            <p class="ayuda-configuracion">
-                                El correo de respaldo se utiliza solo si el envío al destinatario principal falla o agota el tiempo de espera.
+                            <p class="ayuda-configuracion" id="conservacionCorreoRespaldo">
+                                Al desactivarlo y guardar, la dirección se conserva para volver a utilizarla, pero deja de recibir avisos de respaldo.
                             </p>
                         </fieldset>
 

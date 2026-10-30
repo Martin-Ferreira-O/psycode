@@ -220,6 +220,30 @@
     cursor: not-allowed;
 }
 
+.control-respaldo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0 0 12px;
+    color: #173858;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.control-respaldo input {
+    flex-shrink: 0;
+    width: 18px;
+    height: 18px;
+    margin: 0;
+    accent-color: #173858;
+    cursor: pointer;
+}
+
+.control-respaldo input:focus-visible {
+    outline: 3px solid rgba(43, 82, 120, 0.25);
+    outline-offset: 3px;
+}
+
 .campo-configuracion input:focus {
     border-color: #2b5278;
     outline: 3px solid rgba(43, 82, 120, 0.15);

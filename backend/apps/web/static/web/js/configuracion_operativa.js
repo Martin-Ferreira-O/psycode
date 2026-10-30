@@ -19,6 +19,7 @@ const elementosConfiguracion = {
     insigniaSupervisores: document.querySelector("#insigniaSupervisoresActivos"),
     contenedorCorreoPrincipal: document.querySelector("#contenedorCorreoPrincipal"),
     correoPrincipal: document.querySelector("#correoPrincipal"),
+    respaldoHabilitado: document.querySelector("#respaldoHabilitado"),
     correoRespaldo: document.querySelector("#correoRespaldo"),
     zonaHoraria: document.querySelector("#zonaHoraria"),
     ultimaActualizacion: document.querySelector("#ultimaActualizacion"),
@@ -27,7 +28,14 @@ const elementosConfiguracion = {
     guardar: document.querySelector("#guardarConfiguracion")
 };
 
-let respaldoHabilitadoActual = false;
+function actualizarRespaldo(habilitado) {
+    elementosConfiguracion.respaldoHabilitado.checked = habilitado;
+    elementosConfiguracion.correoRespaldo.disabled = !habilitado;
+    elementosConfiguracion.correoRespaldo.required = habilitado;
+    if (!habilitado) {
+        elementosConfiguracion.correoRespaldo.setCustomValidity("");
+    }
+}
 
 function obtenerModoSeleccionado() {
     const seleccionado = Array.from(elementosConfiguracion.modosNotificacion).find((input) => input.checked);
@@ -126,10 +134,7 @@ function rellenarFormulario(configuracion) {
     elementosConfiguracion.cierre.value = configuracion.close_time || "";
     elementosConfiguracion.correoPrincipal.value = configuracion.primary_email ?? "";
     elementosConfiguracion.correoRespaldo.value = configuracion.backup_email ?? "";
-    respaldoHabilitadoActual = Boolean(configuracion.backup_enabled);
-    if (elementosConfiguracion.correoRespaldo) {
-        elementosConfiguracion.correoRespaldo.required = respaldoHabilitadoActual;
-    }
+    actualizarRespaldo(Boolean(configuracion.backup_enabled));
     actualizarModoNotificacion(configuracion.notification_mode || MODO_LISTA_DISTRIBUCION);
 
     elementosConfiguracion.zonaHoraria.textContent = configuracion.timezone || "America/Santiago";
@@ -181,6 +186,8 @@ async function cargarConfiguracion() {
 function validarFormulario() {
     const modoSeleccionado = obtenerModoSeleccionado();
     actualizarModoNotificacion(modoSeleccionado);
+    const respaldoHabilitado = elementosConfiguracion.respaldoHabilitado.checked;
+    actualizarRespaldo(respaldoHabilitado);
 
     if (modoSeleccionado === MODO_LISTA_DISTRIBUCION) {
         const valorCorreo = elementosConfiguracion.correoPrincipal.value.trim();
@@ -189,6 +196,18 @@ function validarFormulario() {
                 "Debes ingresar un correo válido para la lista de distribución.";
             elementosConfiguracion.mensajeFormulario.hidden = false;
             elementosConfiguracion.correoPrincipal.focus();
+            return false;
+        }
+    }
+
+    if (respaldoHabilitado) {
+        elementosConfiguracion.correoRespaldo.value = elementosConfiguracion.correoRespaldo.value.trim();
+        if (!elementosConfiguracion.correoRespaldo.checkValidity()) {
+            elementosConfiguracion.mensajeFormulario.textContent =
+                "Debes ingresar un correo válido para activar el respaldo.";
+            elementosConfiguracion.mensajeFormulario.hidden = false;
+            elementosConfiguracion.correoRespaldo.reportValidity();
+            elementosConfiguracion.correoRespaldo.focus();
             return false;
         }
     }
@@ -220,6 +239,7 @@ async function guardarConfiguracion(evento) {
         close_time: elementosConfiguracion.cierre.value,
         notification_mode: modoSeleccionado,
         primary_email: elementosConfiguracion.correoPrincipal.value.trim(),
+        backup_enabled: elementosConfiguracion.respaldoHabilitado.checked,
         backup_email: elementosConfiguracion.correoRespaldo.value.trim()
     };
 
@@ -257,4 +277,13 @@ elementosConfiguracion.modosNotificacion.forEach((radio) => {
 });
 
 elementosConfiguracion.formulario?.addEventListener("submit", guardarConfiguracion);
+elementosConfiguracion.respaldoHabilitado.addEventListener("change", () => {
+    limpiarMensajeFormulario();
+    elementosConfiguracion.confirmacion.hidden = true;
+    actualizarRespaldo(elementosConfiguracion.respaldoHabilitado.checked);
+});
+elementosConfiguracion.correoRespaldo.addEventListener("input", () => {
+    limpiarMensajeFormulario();
+    elementosConfiguracion.confirmacion.hidden = true;
+});
 cargarConfiguracion();
