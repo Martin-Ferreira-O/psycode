@@ -1,5 +1,7 @@
 ﻿from django.conf import settings
 
+from uuid import uuid4
+
 from backend.apps.alerts.audit import AlertAudit, ERROR_CODES
 from backend.apps.alerts.domain import DomainError, normalizar_uuid
 from backend.apps.alerts.exceptions import AlertNotFound
@@ -24,7 +26,8 @@ class NotificationService(AlertNotifier):
         self.store = store if store is not None else AlertsRepository()
         self.audit = audit if audit is not None else AlertAudit(self.store._events)
 
-    def _deliver(self, client, payload, email, ident, sesion_id, *, backup: bool) -> AttemptResult:
+    def _deliver(self, client, payload, email, ident, sesion_id, *, backup: bool,
+                 notification, attempt, reason=None) -> AttemptResult:
         recipients = [email] if email else []
         try:
             if not recipients:
@@ -50,8 +53,27 @@ class NotificationService(AlertNotifier):
             backup=backup,
             duration_ms=sanitized.duracion_ms,
             error_code=error,
+            notification=dict(notification, phase='respaldo' if backup else 'principal',
+                              attempt=attempt, reason=reason),
         )
         return sanitized
+
+    def _record_result(self, result, sesion_id, notification, primary, backup, reason=None):
+        counts = {
+            'primary_successes': sum(item.exitoso for item in primary),
+            'primary_failures': sum(not item.exitoso for item in primary),
+            'backup_successes': sum(item.exitoso for item in backup),
+            'backup_failures': sum(not item.exitoso for item in backup),
+        }
+        outcome = ('success' if result.estado == 'EXITO_TOTAL' else
+                   'skipped' if not result.intentos else 'failure')
+        self.audit.record(
+            'notifications.result', outcome, alerta_id=result.alerta_id,
+            sesion_id=sesion_id, channel='email', backup=bool(backup),
+            notification=dict(notification, phase='resumen', status=result.estado,
+                              reason=reason, **counts),
+        )
+        return result
 
     def notify_alert(self, alerta_id, payload):
         if not payload.debe_notificar():
@@ -68,6 +90,8 @@ class NotificationService(AlertNotifier):
             str(alert.semaforo), 'riesgo_suicida', alert.box, alert.fecha_hora.isoformat()
         )
         recipients = self.recipient_resolver.resolve()
+        notification = {'id': str(uuid4()), 'mode': (
+            recipients.mode if recipients.mode in NotificationMode.values else None)}
         backup_enabled = bool(getattr(recipients, 'backup_enabled', False))
         backup_email = getattr(recipients, 'backup_email', None)
 
@@ -80,21 +104,26 @@ class NotificationService(AlertNotifier):
                     ident,
                     alert.sesion_id,
                     backup=True,
+                    notification=notification, attempt=1, reason='SIN_DESTINATARIOS_VALIDOS',
                 )
                 status = 'FALLO_PARCIAL' if backup_attempt.exitoso else 'FALLO_TOTAL'
-                return NotificationResult(
+                result = NotificationResult(
                     ident,
                     backup_attempt.exitoso,
                     canal_exitoso='email' if backup_attempt.exitoso else None,
                     intentos=[backup_attempt],
                     estado=status,
                 )
-            return NotificationResult(
+                return self._record_result(result, alert.sesion_id, notification, [], [backup_attempt],
+                                           reason='SIN_DESTINATARIOS_VALIDOS')
+            result = NotificationResult(
                 ident,
                 False,
                 motivo_omision=recipients.reason,
                 estado='SIN_DESTINATARIOS_VALIDOS',
             )
+            return self._record_result(result, alert.sesion_id, notification, [], [],
+                                       reason='SIN_DESTINATARIOS_VALIDOS')
 
         attempts = []
         for email in recipients.emails:
@@ -105,11 +134,15 @@ class NotificationService(AlertNotifier):
                 ident,
                 alert.sesion_id,
                 backup=False,
+                notification=notification, attempt=len(attempts) + 1,
             )
             attempts.append(attempt)
 
         primary_successes = sum(attempt.exitoso for attempt in attempts)
         primary_failures = len(attempts) - primary_successes
+        primary_attempts = attempts.copy()
+        backup_attempts = []
+        failure_reason = ('FALLO_PARCIAL' if primary_successes else 'FALLO_TOTAL') if primary_failures else None
 
         if primary_failures > 0 and backup_enabled:
             backup_attempt = self._deliver(
@@ -119,8 +152,10 @@ class NotificationService(AlertNotifier):
                 ident,
                 alert.sesion_id,
                 backup=True,
+                notification=notification, attempt=len(attempts) + 1, reason=failure_reason,
             )
             attempts.append(backup_attempt)
+            backup_attempts.append(backup_attempt)
 
         total_successes = sum(attempt.exitoso for attempt in attempts)
         if primary_failures == 0:
@@ -130,10 +165,12 @@ class NotificationService(AlertNotifier):
         else:
             status = 'FALLO_TOTAL'
 
-        return NotificationResult(
+        result = NotificationResult(
             ident,
             bool(total_successes),
             canal_exitoso='email' if total_successes else None,
             intentos=attempts,
             estado=status,
         )
+        return self._record_result(result, alert.sesion_id, notification, primary_attempts,
+                                   backup_attempts, reason=failure_reason)

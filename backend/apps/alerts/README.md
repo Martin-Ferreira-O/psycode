@@ -37,3 +37,9 @@ Dashboard consume `AlertQueryPort`. El registro frontend de evaluaciones usa lis
 Pruebas actuales en [tests](tests/README.md): mapeo, duplicados, evaluación atómica, variedad del seed y conexión fallida. La integración contra MongoDB real se activa con `PSYCODE_TEST_MONGODB_URI`. Filtros HTTP y página quedan para SCRUM-33.
 
 `audit.py` comparte event_id y timestamp entre logger y MongoDB para registro, evaluación, intentos y fallos de integración/flujo. `audit_api.py` ofrece consulta con filtros, paginación y orden cronológico; solo administradores y supervisores activos. No incluye interfaz visual. [Contrato](../../../API_CONTRACTS.md#consulta-de-bitácora-scrum-65).
+
+La consulta incluye los resúmenes `notifications.result` y el objeto técnico
+`notification`: modalidad, UUID de ejecución, fase, motivo y conteos de éxitos y
+fallos principales y de respaldo. Los eventos anteriores que no registraron
+ese objeto devuelven null. La identificación del usuario evaluador se conserva.
+[Formato de la bitácora](../../../docs/MONGODB.md#6-colección-audit_events-bitácora).

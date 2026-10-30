@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="{% static 'web/css/styles.css' %}">
     <link rel="stylesheet" href="{% static 'web/css/dashboard.css' %}?v=5">
     <link rel="stylesheet" href="{% static 'web/css/estados.css' %}">
-    <link rel="stylesheet" href="{% static 'web/css/bitacora.css' %}?v=3">
+    <link rel="stylesheet" href="{% static 'web/css/bitacora.css' %}?v=5">
 </head>
 
 <body>
@@ -182,6 +182,9 @@
                             </option>
                             <option value="notifications.send">
                                 Notificación
+                            </option>
+                            <option value="notifications.result">
+                                Resumen de notificación
                             </option>
                             <option value="analysis.speechmatics">
                                 Speechmatics
@@ -416,7 +419,12 @@
                     <span>Duración</span>
                     <strong id="detalleDuracion">—</strong>
                 </div>
+                <div class="dato-detalle">
+                    <span>Uso del respaldo</span>
+                    <strong id="detalleContingencia">—</strong>
+                </div>
             </div>
+            <div class="contenido-detalle-evento" id="detalleNotificacion" hidden></div>
 
             <button
                 type="button"
@@ -433,6 +441,6 @@
     <script src="{% static 'web/js/estados.js' %}"></script>
     <script src="{% static 'web/js/api.js' %}"></script>
     <script src="{% static 'web/js/components.js' %}"></script>
-    <script src="{% static 'web/js/bitacora.js' %}"></script>
+    <script src="{% static 'web/js/bitacora.js' %}?v=2"></script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-import subprocess
+﻿import subprocess
 from unittest.mock import Mock, patch
 
 from django.core import mail
@@ -321,7 +321,7 @@ class LocalSMTPTests(TestCase):
                 self.assertIn('primary@example.test', recipients[0])
                 self.assertIn('remaining@example.test', recipients[1])
                 self.assertNotIn(b'sensitive transcript', messages[0])
-                self.assertEqual(len(db['audit_events'].docs), 3)
+                self.assertEqual(len(db['audit_events'].docs), 4)
             finally:
                 server.shutdown()
                 thread.join(timeout=2)
@@ -488,7 +488,8 @@ class BackupContingencyTests(TestCase):
                     self.backup.send.call_args.kwargs['destinatarios'],
                     ['sergio.respaldo@example.test'],
                 )
-                last_event = self.db['audit_events'].docs[-1]
+                last_event = next(event for event in reversed(self.db['audit_events'].docs)
+                                  if event['action'] == 'notifications.send')
                 self.assertTrue(last_event['contingencia'])
                 self.assertEqual(last_event['outcome'], 'success')
 
@@ -561,7 +562,8 @@ class BackupContingencyTests(TestCase):
             self.backup.send.call_args.kwargs['destinatarios'],
             ['sergio.respaldo@example.test'],
         )
-        last_event = self.db['audit_events'].docs[-1]
+        last_event = next(event for event in reversed(self.db['audit_events'].docs)
+                                  if event['action'] == 'notifications.send')
         self.assertTrue(last_event['contingencia'])
         self.assertEqual(last_event['outcome'], 'success')
 
@@ -592,6 +594,7 @@ class BackupContingencyTests(TestCase):
                 self.assertEqual(result.estado, 'FALLO_TOTAL')
                 self.assertEqual(len(result.intentos), 2)
                 self.assertEqual(self.store.get_alert(self.alert.alerta_id), self.alert)
-                last_event = self.db['audit_events'].docs[-1]
+                last_event = next(event for event in reversed(self.db['audit_events'].docs)
+                                  if event['action'] == 'notifications.send')
                 self.assertTrue(last_event['contingencia'])
                 self.assertEqual(last_event['outcome'], 'failure')

@@ -114,14 +114,15 @@ class MongoAuditIntegrationTests(SimpleTestCase):
             NotificationPayload('MEDIO', 'riesgo_suicida', 'box-3', '10:00')).enviado)
         AlertsService(self.repo).record_evaluation(self.alert.alerta_id, 'correcta', EVALUADOR_ID, 'profesional')
         events, total = self.repo.list_events(self.filters())
-        self.assertEqual(total, 4)
+        self.assertEqual(total, 5)
         self.assertEqual([e['action'] for e in events],
-                         ['alerts.register', 'notifications.send', 'notifications.send', 'alerts.evaluate'])
+                         ['alerts.register', 'notifications.send', 'notifications.send',
+                          'notifications.result', 'alerts.evaluate'])
         failed, total = self.repo.list_events(self.filters(action='notifications.send', outcome='failure'))
         self.assertEqual(total, 1)
         self.assertEqual(failed[0]['error_code'], 'NOTIFICATION_TIMEOUT')
         reverse, _ = self.repo.list_events(self.filters(order='desc', offset=1, limit=2))
-        self.assertEqual([e['event_id'] for e in reverse], [events[2]['event_id'], events[1]['event_id']])
+        self.assertEqual([e['event_id'] for e in reverse], [events[3]['event_id'], events[2]['event_id']])
         within, _ = self.repo.list_events(self.filters(fecha_desde=events[1]['timestamp'],
                                                      fecha_hasta=events[2]['timestamp']))
         self.assertEqual(len(within), 2)

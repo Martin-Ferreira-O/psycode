@@ -7,7 +7,7 @@ from rest_framework.views import APIView
 
 from backend.apps.accounts.models import Role
 from backend.common.responses import success_response
-from .audit import ACTIONS, OUTCOMES
+from .audit import ACTIONS, OUTCOMES, NOTIFICATION_MODES, NOTIFICATION_REASONS, NOTIFICATION_STATUSES
 from .repositories import AlertsRepository
 
 
@@ -40,6 +40,19 @@ class AuditQuerySerializer(serializers.Serializer):
         return attrs
 
 
+class NotificationAuditSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    mode = serializers.ChoiceField(choices=NOTIFICATION_MODES, allow_null=True)
+    phase = serializers.ChoiceField(choices=('principal', 'respaldo', 'resumen'))
+    reason = serializers.ChoiceField(choices=NOTIFICATION_REASONS, allow_null=True)
+    attempt = serializers.IntegerField(required=False)
+    status = serializers.ChoiceField(choices=NOTIFICATION_STATUSES, required=False)
+    primary_successes = serializers.IntegerField(required=False)
+    primary_failures = serializers.IntegerField(required=False)
+    backup_successes = serializers.IntegerField(required=False)
+    backup_failures = serializers.IntegerField(required=False)
+
+
 class AuditEventSerializer(serializers.Serializer):
     # Lista explícita: nunca devolver campos inesperados de un documento histórico.
     event_id = serializers.UUIDField()
@@ -55,6 +68,7 @@ class AuditEventSerializer(serializers.Serializer):
     contingencia = serializers.BooleanField(allow_null=True)
     error_code = serializers.CharField(allow_null=True)
     duration_ms = serializers.IntegerField(allow_null=True)
+    notification = NotificationAuditSerializer(allow_null=True, default=None)
 
     def get_actor(self, event):
         return 'Sistema' if event.get('actor_id') is None else 'Usuario'

@@ -43,7 +43,8 @@
             "notifications.send",
             "analysis.speechmatics",
             "analysis.jev",
-            "alerts.flow"
+            "alerts.flow",
+            "notifications.result"
           ],
           "description": "Eventos internos de alertas, notificación y fallos técnicos de análisis. Autenticación solo en log."
         },
@@ -191,6 +192,153 @@
             "null"
           ],
           "minimum": 0
+        },
+        "notification": {
+          "bsonType": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "mode",
+            "phase",
+            "reason"
+          ],
+          "description": "Metadatos de notificación; ausentes en eventos históricos. Sin direcciones ni texto libre.",
+          "properties": {
+            "id": {
+              "bsonType": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+            },
+            "mode": {
+              "enum": [
+                "lista_distribucion",
+                "supervisores_activos",
+                null
+              ]
+            },
+            "phase": {
+              "enum": [
+                "principal",
+                "respaldo",
+                "resumen"
+              ]
+            },
+            "reason": {
+              "enum": [
+                "FALLO_PARCIAL",
+                "FALLO_TOTAL",
+                "SIN_DESTINATARIOS_VALIDOS",
+                null
+              ]
+            },
+            "attempt": {
+              "bsonType": [
+                "int",
+                "long"
+              ],
+              "minimum": 1
+            },
+            "status": {
+              "enum": [
+                "EXITO_TOTAL",
+                "FALLO_PARCIAL",
+                "FALLO_TOTAL",
+                "SIN_DESTINATARIOS_VALIDOS"
+              ]
+            },
+            "primary_successes": {
+              "bsonType": [
+                "int",
+                "long"
+              ],
+              "minimum": 0
+            },
+            "primary_failures": {
+              "bsonType": [
+                "int",
+                "long"
+              ],
+              "minimum": 0
+            },
+            "backup_successes": {
+              "bsonType": [
+                "int",
+                "long"
+              ],
+              "minimum": 0
+            },
+            "backup_failures": {
+              "bsonType": [
+                "int",
+                "long"
+              ],
+              "minimum": 0
+            }
+          },
+          "oneOf": [
+            {
+              "properties": {
+                "phase": {
+                  "enum": [
+                    "principal",
+                    "respaldo"
+                  ]
+                }
+              },
+              "required": [
+                "attempt"
+              ],
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "status"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "primary_successes"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "primary_failures"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "backup_successes"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "backup_failures"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "properties": {
+                "phase": {
+                  "enum": [
+                    "resumen"
+                  ]
+                }
+              },
+              "required": [
+                "status",
+                "primary_successes",
+                "primary_failures",
+                "backup_successes",
+                "backup_failures"
+              ],
+              "not": {
+                "required": [
+                  "attempt"
+                ]
+              }
+            }
+          ]
         }
       },
       "allOf": [
@@ -230,7 +378,8 @@
                   "enum": [
                     "alerts.register",
                     "alerts.evaluate",
-                    "notifications.send"
+                    "notifications.send",
+                    "notifications.result"
                   ]
                 },
                 "alerta_id": {
@@ -247,6 +396,68 @@
                     "alerts.flow"
                   ]
                 }
+              }
+            }
+          ]
+        },
+        {
+          "oneOf": [
+            {
+              "properties": {
+                "action": {
+                  "enum": [
+                    "notifications.result"
+                  ]
+                },
+                "notification": {
+                  "properties": {
+                    "phase": {
+                      "enum": [
+                        "resumen"
+                      ]
+                    }
+                  }
+                }
+              },
+              "required": [
+                "notification"
+              ]
+            },
+            {
+              "properties": {
+                "action": {
+                  "enum": [
+                    "notifications.send"
+                  ]
+                },
+                "notification": {
+                  "properties": {
+                    "phase": {
+                      "enum": [
+                        "principal",
+                        "respaldo"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "properties": {
+                "action": {
+                  "enum": [
+                    "alerts.register",
+                    "alerts.evaluate",
+                    "analysis.speechmatics",
+                    "analysis.jev",
+                    "alerts.flow"
+                  ]
+                }
+              },
+              "not": {
+                "required": [
+                  "notification"
+                ]
               }
             }
           ]

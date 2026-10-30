@@ -203,11 +203,16 @@ La conversión conserva el semáforo anterior: 1–2 → 1/BAJO, 3–4 → 2/MED
 
 ## 6. Colección `audit_events` (bitácora)
 
+Las notificaciones registran `notifications.result` y el objeto `notification`
+para modalidad, correlación, fase, motivo y conteos por ejecución. El escritor lo
+restringe a metadatos técnicos; los eventos históricos siguen consultables sin
+reescritura. [Comportamiento del servicio](../backend/apps/notifications/README.md#trazabilidad-de-notificaciones).
+
 Eventos relevantes del **dominio persistido en MongoDB**: alta de alerta, registro de evaluación, intento de notificación y fallos técnicos de análisis. Es complementaria al logger `psycode.audit`.
 
 | Qué | Dónde |
 |---|---|
-| `alerts.register`, `alerts.evaluate`, `notifications.send` | MongoDB `audit_events` **y** logger |
+| `alerts.register`, `alerts.evaluate`, `notifications.send`, `notifications.result` | MongoDB `audit_events` **y** logger |
 | `analysis.speechmatics`, `analysis.jev`, `alerts.flow` | MongoDB `audit_events` **y** logger; solo códigos permitidos, sin conversaciones ni cuerpos de proveedor |
 | `auth.login`, `auth.refresh`, `auth.logout`, `auth.password_reset`, `api.error` | Solo logger Django (identidad en SQLite) |
 
@@ -219,7 +224,7 @@ Un fallo al insertar en `audit_events` no revierte la alerta ni se presenta como
 |---|---|---|---|---|
 | `event_id` | UUID | Sí | No | Mismo UUID en logger y MongoDB |
 | `timestamp` | date UTC | Sí | No | Hora de registro |
-| `action` | enum de las seis acciones anteriores | Sí | No | Tipo de evento |
+| `action` | enum de las siete acciones anteriores | Sí | No | Tipo de evento |
 | `outcome` | `success` \| `failure` \| `skipped` | Sí | No | Resultado |
 | `actor` | `Sistema` \| `Usuario` | Sí | No | Actor automático o humano |
 | `sesion_id` | UUID | Sí como campo | Sí | Correlación con sesión cuando corresponde |
@@ -232,8 +237,44 @@ Un fallo al insertar en `audit_events` no revierte la alerta ni se presenta como
 | `error_code` | string `A-Z0-9_` | Sí como campo | Sí | Código estable, no mensaje de proveedor |
 | `duration_ms` | int ≥ 0 | Sí como campo | Sí | Duración de este intento |
 | `intentos` | arreglo | Sí | No (vacío) | Campo histórico; vacío en eventos nuevos, un evento por intento |
+| `notification` | objeto | En resúmenes nuevos; opcional en históricos | Ausente en documentos previos | UUID de ejecución, modalidad, fase y motivo; ordinal en intentos, estado y conteos en resúmenes |
 
 Validador e índices: [audit_events.validator.json](mongodb/audit_events.validator.json), [audit_events.indexes.json](mongodb/audit_events.indexes.json). Ejemplos de alta, evaluación y intentos de correo principal y de respaldo en [mongodb/examples/](mongodb/examples/).
+
+### Metadatos de notificación
+
+`notification` comparte estos campos entre los intentos y su resumen:
+
+| Campo | Valores o regla |
+|---|---|
+| `id` | UUID de una ejecución; común a sus intentos y resumen, distinto si se vuelve a notificar la misma alerta |
+| `mode` | `lista_distribucion`, `supervisores_activos` o null sin configuración válida |
+| `phase` | `principal`, `respaldo` o `resumen` |
+| `reason` | `FALLO_PARCIAL`, `FALLO_TOTAL`, `SIN_DESTINATARIOS_VALIDOS` o null; describe el problema principal |
+
+En `notifications.send` se exige además `attempt`, entero desde 1. Su `outcome`
+registra la aceptación o el fallo de ese intento; `contingencia=true` identifica
+el respaldo. No se guardan direcciones ni identificadores de destinatarios.
+
+En `notifications.result` se exige `phase=resumen`, `status` (`EXITO_TOTAL`,
+`FALLO_PARCIAL`, `FALLO_TOTAL` o `SIN_DESTINATARIOS_VALIDOS`) y los enteros no
+negativos `primary_successes`, `primary_failures`, `backup_successes` y
+`backup_failures`. No incluye `attempt`. El resumen usa `outcome=success` para
+éxito total, `failure` si hubo un problema principal y algún intento, o `skipped`
+si no había destinatarios válidos ni se intentó el respaldo.
+
+Un fallo parcial con respaldo aceptado conserva el motivo y separa los conteos
+principales de los de respaldo. Sin principales válidos, sus conteos son cero
+aunque se intente el respaldo; `reason=SIN_DESTINATARIOS_VALIDOS` conserva esa
+ausencia. La aceptación SMTP no prueba entrega ni lectura.
+
+El validador exige este objeto para `notifications.result` y lo admite como
+opcional en eventos anteriores de envío; cuando existe rechaza propiedades
+ajenas, tipos incorrectos, enums desconocidos y conteos negativos. Se actualiza
+mediante el `collMod` existente de `ensure_schema()` junto con el servidor, sin
+migración de documentos. La API devuelve `notification=null` para eventos que
+no lo registraron, sin inventar conteos. Un proceso interrumpido puede dejar
+intentos sin resumen; esa ausencia no se interpreta como éxito global.
 
 `AlertAudit` emite primero el evento estructurado en el logger y después intenta persistirlo con el mismo `event_id` y timestamp. Si falla la bitácora, registra `AUDIT_UNAVAILABLE` y el UUID del evento original, sin detalle de excepción. Los eventos no contienen nombres, direcciones destinatarias, transcripciones ni cuerpos de proveedores. Los fallos técnicos del trabajador incluyen `sesion_id` y `sequence`; `alerts.flow` registra excepciones inesperadas e indisponibilidad al persistir alertas. Un corte abrupto del proceso requiere supervisión externa y no tiene recuperación automática.
 

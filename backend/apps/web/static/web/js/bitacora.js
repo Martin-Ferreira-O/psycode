@@ -58,6 +58,8 @@ const elementosBitacora = {
     detalleCanal: document.querySelector("#detalleCanal"),
     detalleError: document.querySelector("#detalleError"),
     detalleDuracion: document.querySelector("#detalleDuracion"),
+    detalleContingencia: document.querySelector("#detalleContingencia"),
+    detalleNotificacion: document.querySelector("#detalleNotificacion"),
 
     verEventosAlerta: document.querySelector("#verEventosAlerta")
 };
@@ -180,6 +182,7 @@ function textoAccion(accion) {
         "alerts.register": "Registro de alerta",
         "alerts.evaluate": "Evaluación",
         "notifications.send": "Notificación",
+        "notifications.result": "Resumen de notificación",
         "analysis.speechmatics": "Speechmatics",
         "analysis.jev": "JEV",
         "alerts.flow": "Flujo de alerta"
@@ -498,9 +501,19 @@ function crearCeldaAccion(evento) {
     const etiqueta = document.createElement("span");
 
     etiqueta.className = "etiqueta-evento";
-    etiqueta.textContent = textoAccion(evento.action);
+    etiqueta.title = textoAccion(evento.action);
+    etiqueta.textContent = evento.action === "notifications.result" ? "Resumen" : etiqueta.title;
+    celda.setAttribute("aria-label", etiqueta.title);
     celda.appendChild(etiqueta);
     return celda;
+}
+
+function textoResultadoEvento(evento) {
+    const estados = {
+        EXITO_TOTAL: "Éxito total", FALLO_PARCIAL: "Fallo parcial",
+        FALLO_TOTAL: "Fallo total", SIN_DESTINATARIOS_VALIDOS: "Sin destinatarios válidos"
+    };
+    return estados[evento.notification?.status] || textoResultado(evento.outcome);
 }
 
 function crearCeldaResultado(evento) {
@@ -510,7 +523,10 @@ function crearCeldaResultado(evento) {
     etiqueta.className =
         `etiqueta-resultado ${claseResultado(evento.outcome)}`;
 
-    etiqueta.textContent = textoResultado(evento.outcome);
+    etiqueta.title = textoResultadoEvento(evento);
+    etiqueta.textContent = evento.notification?.status === "SIN_DESTINATARIOS_VALIDOS"
+        ? "Sin destinatarios" : etiqueta.title;
+    celda.setAttribute("aria-label", etiqueta.title);
 
     celda.appendChild(etiqueta);
     return celda;
@@ -782,7 +798,7 @@ function abrirDetalle(evento, elementoOrigen) {
         textoAccion(evento.action);
 
     elementosBitacora.detalleResultado.textContent =
-        textoResultado(evento.outcome);
+        textoResultadoEvento(evento);
 
     elementosBitacora.detalleActor.textContent =
         evento.actor_id
@@ -810,6 +826,10 @@ function abrirDetalle(evento, elementoOrigen) {
             ? "—"
             : `${evento.duration_ms} ms`;
 
+    elementosBitacora.detalleContingencia.textContent = evento.contingencia === true
+        ? "Sí" : evento.contingencia === false ? "No" : "No registrado";
+    mostrarDetalleNotificacion(evento.notification);
+
     elementosBitacora.verEventosAlerta.hidden =
         !evento.alerta_id;
 
@@ -818,6 +838,42 @@ function abrirDetalle(evento, elementoOrigen) {
     document.body.style.overflow = "hidden";
 
     setTimeout(() => {elementosBitacora.cerrarDetalle.focus();}, 0);
+}
+
+function mostrarDetalleNotificacion(notificacion) {
+    const contenedor = elementosBitacora.detalleNotificacion;
+    limpiarElemento(contenedor);
+    contenedor.hidden = !notificacion;
+    if (!notificacion) return;
+    const modos = { lista_distribucion: "Lista de distribución", supervisores_activos: "Supervisores activos" };
+    const fases = { principal: "Envío principal", respaldo: "Envío de respaldo", resumen: "Resumen" };
+    const motivos = {
+        FALLO_PARCIAL: "Fallo parcial del envío principal",
+        FALLO_TOTAL: "Fallo total del envío principal",
+        SIN_DESTINATARIOS_VALIDOS: "Sin destinatarios principales válidos"
+    };
+    const datos = [
+        ["ID de notificación", notificacion.id],
+        ["Modalidad principal", modos[notificacion.mode] || "Sin configuración válida"],
+        ["Etapa", fases[notificacion.phase] || "—"],
+        ["Motivo", motivos[notificacion.reason] || (notificacion.phase === "resumen" ? "Sin fallos principales" : "No aplica")]
+    ];
+    if (notificacion.attempt !== undefined) datos.push(["Número de intento", notificacion.attempt]);
+    if (notificacion.phase === "resumen") {
+        const conteos = (exitos, fallos) => `${exitos} ${exitos === 1 ? "éxito" : "éxitos"} · ${fallos} ${fallos === 1 ? "fallo" : "fallos"}`;
+        datos.push(["Envíos principales", conteos(notificacion.primary_successes, notificacion.primary_failures)]);
+        datos.push(["Envíos de respaldo", conteos(notificacion.backup_successes, notificacion.backup_failures)]);
+    }
+    for (const [etiqueta, valor] of datos) {
+        const dato = document.createElement("div");
+        dato.className = "dato-detalle";
+        const nombre = document.createElement("span");
+        nombre.textContent = etiqueta;
+        const contenido = document.createElement("strong");
+        contenido.textContent = valor;
+        dato.append(nombre, contenido);
+        contenedor.appendChild(dato);
+    }
 }
 
 function cerrarDetalle() {

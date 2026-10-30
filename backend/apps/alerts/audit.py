@@ -6,7 +6,7 @@ from django.utils import timezone
 
 from backend.common.audit import AuditWriter
 
-ACTIONS = ("alerts.register", "alerts.evaluate", "notifications.send",
+ACTIONS = ("alerts.register", "alerts.evaluate", "notifications.send", "notifications.result",
            "analysis.speechmatics", "analysis.jev", "alerts.flow")
 OUTCOMES = ("success", "failure", "skipped")
 ERROR_CODES = frozenset({
@@ -17,15 +17,50 @@ ERROR_CODES = frozenset({
 })
 
 
+NOTIFICATION_MODES = ("lista_distribucion", "supervisores_activos")
+NOTIFICATION_STATUSES = ("EXITO_TOTAL", "FALLO_PARCIAL", "FALLO_TOTAL", "SIN_DESTINATARIOS_VALIDOS")
+NOTIFICATION_REASONS = ("FALLO_PARCIAL", "FALLO_TOTAL", "SIN_DESTINATARIOS_VALIDOS")
+NOTIFICATION_COUNTS = ("primary_successes", "primary_failures", "backup_successes", "backup_failures")
+
+
+def notification_metadata(value, action):
+    """Rechaza campos libres antes de emitirlos tanto al logger como a MongoDB."""
+    if not isinstance(value, dict):
+        raise ValueError("Metadatos de notificación inválidos")
+    common = {"id", "mode", "phase", "reason"}
+    phase = value.get("phase")
+    if action == "notifications.send" and phase in ("principal", "respaldo"):
+        expected = common | {"attempt"}
+        if type(value.get("attempt")) is not int or value["attempt"] < 1:
+            raise ValueError("Número de intento inválido")
+    elif action == "notifications.result" and phase == "resumen":
+        expected = common | {"status", *NOTIFICATION_COUNTS}
+        if value.get("status") not in NOTIFICATION_STATUSES:
+            raise ValueError("Resultado de notificación inválido")
+        for name in NOTIFICATION_COUNTS:
+            if type(value.get(name)) is not int or value[name] < 0:
+                raise ValueError("Conteo de notificación inválido")
+    else:
+        raise ValueError("Fase de notificación inválida")
+    if set(value) != expected:
+        raise ValueError("Campos de notificación no permitidos")
+    if value["mode"] is not None and value["mode"] not in NOTIFICATION_MODES:
+        raise ValueError("Modalidad de notificación inválida")
+    if value["reason"] is not None and value["reason"] not in NOTIFICATION_REASONS:
+        raise ValueError("Motivo de notificación inválido")
+    return dict(value, id=str(UUID(str(value["id"]))))
+
+
 class AlertAudit:
     def __init__(self, events):
         self.events = events
 
     def record(self, action, outcome, *, alerta_id=None, actor_id=None, sesion_id=None,
-               sequence=None, channel=None, backup=None, error_code=None, duration_ms=None):
+               sequence=None, channel=None, backup=None, error_code=None, duration_ms=None,
+               notification=None):
         if action not in ACTIONS or outcome not in OUTCOMES:
             raise ValueError("Evento de bitácora inválido")
-        if action in ("alerts.register", "alerts.evaluate", "notifications.send") and alerta_id is None:
+        if action in ("alerts.register", "alerts.evaluate", "notifications.send", "notifications.result") and alerta_id is None:
             raise ValueError("El evento requiere alerta_id")
         if action == "alerts.evaluate" and actor_id is None:
             raise ValueError("La evaluación requiere usuario responsable")
@@ -47,6 +82,10 @@ class AlertAudit:
             "duration_ms": None if duration_ms is None else max(0, round(duration_ms)),
             "intentos": [],
         }
+        if notification is not None:
+            event["notification"] = notification_metadata(notification, action)
+        elif action == "notifications.result":
+            raise ValueError("El resumen requiere metadatos de notificación")
         AuditWriter.emit(event)
         try:
             self.events().insert_one(event.copy())

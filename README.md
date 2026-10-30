@@ -150,7 +150,7 @@ Consulta [componentes adaptados, recuperación y pendientes de Jira](docs/INTEGR
 
 Consulta `GET /api/v1/audit-events` con JWT de administrador o supervisor activo. Admite período UTC (`fecha_desde`, `fecha_hasta`), `alerta_id`, `action`, `outcome`, `limit`, `offset` y `order`. [Contrato y ejemplos](API_CONTRACTS.md#consulta-de-bitácora-scrum-65).
 
-Para habilitar correo, configura `NOTIFICATIONS_ENABLED=true` y guarda la modalidad en la configuración operativa: `lista_distribucion` usa exclusivamente `primary_email`; `supervisores_activos` envía un mensaje individual a cada supervisor habilitado con correo válido. Los destinatarios se consultan en cada notificación. Los fallos individuales no detienen los demás intentos y el resultado distingue éxito total, fallo parcial y fallo total. Sin destinatarios válidos no hay envío. Las variables antiguas de destinatarios no sustituyen la configuración y este flujo no ejecuta respaldo. `EMAIL_BACKEND=file` permite probar sin SMTP; para SMTP configura únicamente las credenciales del remitente/relay. Teams permanece deshabilitado.
+Para habilitar correo, configura `NOTIFICATIONS_ENABLED=true` y guarda la modalidad en la configuración operativa: `lista_distribucion` usa exclusivamente `primary_email`; `supervisores_activos` envía un mensaje individual a cada supervisor habilitado con correo válido. Los destinatarios se consultan en cada notificación. Los fallos individuales no detienen los demás intentos y el resultado distingue éxito total, fallo parcial y fallo total. Sin destinatarios principales válidos se registra esa condición; en modalidad de supervisores puede intentarse el respaldo habilitado. Las variables antiguas de destinatarios no sustituyen la configuración y el respaldo solo se intenta si está habilitado y hay un fallo principal o no hay supervisores destinatarios válidos. `EMAIL_BACKEND=file` permite probar sin SMTP; para SMTP configura únicamente las credenciales del remitente/relay. Teams permanece deshabilitado.
 
 Pruebas sin servicios externos:
 
@@ -165,6 +165,15 @@ PSYCODE_TEST_MONGODB_URI=mongodb://127.0.0.1:27017 uv run python manage.py test 
 ```
 
 La bitácora no almacena correos, contenido de mensajes, transcripciones ni secretos. El logger conserva el event_id original si MongoDB falla; no hay recuperación automática de eventos ni entrega garantizada tras una caída del proceso. [Detalles de notificaciones](backend/apps/notifications/README.md).
+
+### Trazabilidad de notificaciones
+
+Cada ejecución registra su modalidad y relaciona los intentos y el resumen por
+`notification.id`, junto con la alerta y la sesión. El resumen distingue éxitos
+y fallos principales y de respaldo, y conserva la ausencia de destinatarios
+válidos. La bitácora muestra el motivo de uso del respaldo, incluido un fallo
+parcial, sin correos ni contenido clínico. Los eventos anteriores siguen
+consultables. [Campos y validación](docs/MONGODB.md#6-colección-audit_events-bitácora).
 
 ## Usuario de prueba
 

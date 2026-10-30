@@ -573,6 +573,14 @@
     gap: 12px;
 }
 
+#detalleNotificacion[hidden] {
+    display: none !important;
+}
+
+#detalleNotificacion:not([hidden]) {
+    margin-top: 12px;
+}
+
 .dato-detalle {
     display: flex;
     flex-direction: column;

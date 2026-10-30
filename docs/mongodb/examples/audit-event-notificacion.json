@@ -15,5 +15,12 @@
   "intentos": [],
   "actor": "Sistema",
   "sesion_id": "33333333-3333-4333-8333-333333333333",
-  "sequence": null
+  "sequence": null,
+  "notification": {
+    "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    "mode": "supervisores_activos",
+    "phase": "respaldo",
+    "attempt": 4,
+    "reason": "FALLO_PARCIAL"
+  }
 }

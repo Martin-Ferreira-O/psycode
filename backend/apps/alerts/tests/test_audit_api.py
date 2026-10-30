@@ -57,6 +57,23 @@ class AuditApiTests(SimpleTestCase):
             self.assertEqual(response.status_code, 400, query)
         self.repo.list_events.assert_not_called()
 
+    def test_notification_summary_filter_and_historical_compatibility(self):
+        metadata = dict(id=str(uuid4()), mode='supervisores_activos', phase='resumen',
+                        reason='FALLO_PARCIAL', status='FALLO_PARCIAL', primary_successes=2,
+                        primary_failures=1, backup_successes=1, backup_failures=0,
+                        email='private@example.test')
+        old = dict(self.event, action='notifications.send')
+        new = dict(self.event, action='notifications.result', outcome='failure', notification=metadata)
+        self.repo.list_events.return_value = ([old, new], 2)
+        self.client.force_authenticate(self.user)
+        response = self.client.get('/api/v1/audit-events', {'action': 'notifications.result'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.repo.list_events.call_args.args[0]['action'], 'notifications.result')
+        items = response.data['data']['items']
+        self.assertIsNone(items[0]['notification'])
+        self.assertEqual(items[1]['notification']['primary_failures'], 1)
+        self.assertNotIn('email', items[1]['notification'])
+
     def test_unavailable_and_read_only(self):
         self.client.force_authenticate(self.user)
         self.repo.list_events.side_effect = PersistenceUnavailable()

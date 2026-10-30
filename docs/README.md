@@ -33,3 +33,8 @@ La bitácora consultable y el correo principal con respaldo se describen en [SCR
 
 - [Resultado y límites de validación](RESULTADO-SEPARACION.md).
 - [Revisión funcional posterior de la rama](REVISION-FUNCIONAMIENTO-SERVIDOR.md): correcciones, pruebas propias y límites antes del VPS/Windows.
+
+El [README de notificaciones](../backend/apps/notifications/README.md#trazabilidad-de-notificaciones)
+describe modalidad, intentos principales y de respaldo, resúmenes y conteos.
+El [formato de eventos](MONGODB.md#6-colección-audit_events-bitácora) detalla los
+campos y la validación, incluida la compatibilidad con eventos anteriores.

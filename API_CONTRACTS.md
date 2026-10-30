@@ -414,7 +414,7 @@ La restricción de modificación también se aplica en el servicio interno.
 Esta API guarda la modalidad principal y la activación independiente del correo
 de respaldo. No selecciona ni consulta supervisores, no envía notificaciones y no
 modifica la pantalla. El servicio de notificaciones consume la selección guardada
-al preparar cada alerta habilitada; el flujo principal no ejecuta respaldo.
+al preparar cada alerta habilitada y aplica el respaldo opcional de SCRUM-80.
 
 ### Campos de configuración
 
@@ -812,7 +812,7 @@ Prototipo: las alertas válidas de nivel 1–3 pueden notificar. NULO/sin riesgo
 
 UUID es contexto interno de auditoría. `NotificationPayload` contiene `nivel_riesgo` (BAJO, MEDIO o ALTO), `tipo_riesgo`, `box` y `fecha_hora`. Se omiten NULO/sin riesgo y niveles desconocidos. El notificador verifica primero que el UUID exista en MongoDB y reconstruye el mensaje desde esa alerta, con tipo constante `riesgo_suicida`; no utiliza texto libre del llamador. No se envían descripción, sesión, identificadores personales, audio ni transcripción.
 
-Antes de cada notificación habilitada se consulta la configuración y los destinatarios actuales. En `supervisores_activos` se incluyen únicamente cuentas habilitadas con rol Supervisor, excluyendo superusuarios, sin requerir sesión. Se validan los correos registrados y se deduplican ignorando mayúsculas y espacios externos. En `lista_distribucion` se usa `primary_email`; si falta configuración operativa no hay destinatarios. `NOTIFICATION_EMAIL_TO` nunca sustituye la selección guardada. Sin destinatarios válidos se devuelve `SIN_DESTINATARIOS_VALIDOS`, sin intentos, cambio de modalidad ni respaldo. Cada dirección recibe un mensaje independiente sin direcciones ajenas; rechazos, timeouts y excepciones individuales no detienen los siguientes intentos. No se cambia de modalidad ni se ejecuta respaldo ante errores. Teams no participa, incluso si existe un webhook configurado. Sin reintentos automáticos. Cada intento SMTP tiene un plazo completo `EMAIL_TIMEOUT_SECONDS` (10 segundos por defecto) mediante proceso cancelable; `EMAIL_TIMEOUT` limita además los sockets. La aceptación SMTP no garantiza entrega ni lectura.
+Antes de cada notificación habilitada se consulta la configuración y los destinatarios actuales. En `supervisores_activos` se incluyen únicamente cuentas habilitadas con rol Supervisor, excluyendo superusuarios, sin requerir sesión. Se validan los correos registrados y se deduplican ignorando mayúsculas y espacios externos. En `lista_distribucion` se usa `primary_email`; si falta configuración operativa no hay destinatarios. `NOTIFICATION_EMAIL_TO` nunca sustituye la selección guardada. Sin destinatarios principales válidos no se hacen intentos principales: en modalidad de supervisores con respaldo habilitado se intenta el respaldo; en los demás casos se devuelve `SIN_DESTINATARIOS_VALIDOS` sin envíos. Cada dirección recibe un mensaje independiente sin direcciones ajenas; rechazos, timeouts y excepciones individuales no detienen los siguientes intentos. No se cambia de modalidad ante errores. Un fallo principal total o parcial activa un único intento de respaldo si está habilitado; no recibe copia cuando todos los envíos principales son exitosos. Teams no participa, incluso si existe un webhook configurado. Sin reintentos automáticos. Cada intento SMTP tiene un plazo completo `EMAIL_TIMEOUT_SECONDS` (10 segundos por defecto) mediante proceso cancelable; `EMAIL_TIMEOUT` limita además los sockets. La aceptación SMTP no garantiza entrega ni lectura.
 
 `NotificationResult` contiene:
 
@@ -827,7 +827,7 @@ Antes de cada notificación habilitada se consulta la configuración y los desti
 
 `EXITO_TOTAL` significa que todos los destinatarios fueron aceptados; `FALLO_PARCIAL`, que al menos uno fue aceptado y otro falló; `FALLO_TOTAL`, que todos fallaron. `OMITIDA` cubre las condiciones previas sin intentos. `enviado=true` también en fallo parcial.
 
-Cada intento genera un evento `notifications.send` con UUID de alerta/sesión, timestamp UTC, actor Sistema, canal email, resultado, duración y código estable. `contingencia=false` identifica todos los intentos del flujo principal; nunca se guarda la dirección destinataria. El arreglo histórico `intentos` se conserva vacío en los eventos nuevos: cada intento ocupa su propio evento.
+Cada intento genera un evento `notifications.send` con UUID de alerta/sesión, timestamp UTC, actor Sistema, canal email, resultado, duración y código estable. `contingencia=false` identifica los intentos principales y `true` los de respaldo; nunca se guarda la dirección destinataria. El arreglo histórico `intentos` se conserva vacío: cada intento ocupa su propio evento. El objeto `notification={id,mode,phase,reason,attempt}` sirve para correlacionar los intentos de una ejecución y registrar su modalidad. Al terminar se emite `notifications.result` con el mismo `id`, `phase=resumen`, `status` y los conteos `primary_successes`, `primary_failures`, `backup_successes`, `backup_failures`, sin `attempt`. La ausencia de principales válidos se conserva como `reason=SIN_DESTINATARIOS_VALIDOS`, incluso cuando el respaldo recupera el envío. [Formato y semántica completos](backend/apps/notifications/README.md#trazabilidad-de-notificaciones).
 
 Errores: `NOTIFICATION_TIMEOUT`, `NOTIFICATION_CONNECTION_FAILED`, `NOTIFICATION_REJECTED`, `NOTIFICATION_NOT_CONFIGURED`, `NOTIFICATION_INTERNAL_ERROR`. No se almacenan errores libres ni respuestas de proveedor. Los fallos de envío no eliminan la alerta. No hay cola duradera ni garantía de entrega tras una caída entre persistencia y envío.
 
@@ -839,7 +839,7 @@ Errores: `NOTIFICATION_TIMEOUT`, `NOTIFICATION_CONNECTION_FAILED`, `NOTIFICATION
 |---|---|
 | `fecha_desde`, `fecha_hasta` | ISO 8601 fecha/hora; extremos inclusivos, convertidos a UTC. Sin zona se interpreta UTC. Desde no puede superar hasta. |
 | `alerta_id` | UUID válido |
-| `action` | `alerts.register`, `alerts.evaluate`, `notifications.send`, `analysis.speechmatics`, `analysis.jev`, `alerts.flow` |
+| `action` | `alerts.register`, `alerts.evaluate`, `notifications.send`, `notifications.result`, `analysis.speechmatics`, `analysis.jev`, `alerts.flow` |
 | `outcome` | `success`, `failure`, `skipped` |
 | `order` | `asc` por defecto, o `desc`; timestamp y event_id como desempate |
 | `limit` | 1–100, por defecto 50 |
@@ -847,7 +847,7 @@ Errores: `NOTIFICATION_TIMEOUT`, `NOTIFICATION_CONNECTION_FAILED`, `NOTIFICATION
 
 Parámetros desconocidos, repetidos o inválidos → 400. Los filtros se combinan con AND. Devuelve el envelope habitual con `data={total, limit, offset, items}`. Una consulta sin coincidencias devuelve 200 y lista vacía. Paginación por offset: nuevas inserciones entre consultas pueden desplazar páginas.
 
-Cada item incluye `event_id`, `timestamp`, `action`, `outcome`, `actor` (`Sistema` o `Usuario`), `actor_id` (UUID o null), `alerta_id` (UUID o null), `sesion_id` (UUID o null), `sequence` (entero no negativo o null), `channel`, `contingencia`, `error_code`, `duration_ms`. Fechas UTC; la evaluación usa el usuario autenticado. No incluye nombres, correos, cuerpos de mensajes ni campos ajenos a la lista permitida. Eventos históricos sin actor explícito se presentan como Sistema/Usuario según actor_id; sesión/secuencia ausentes se presentan null.
+Cada item incluye `event_id`, `timestamp`, `action`, `outcome`, `actor` (`Sistema` o `Usuario`), `actor_id` (UUID o null), `alerta_id` (UUID o null), `sesion_id` (UUID o null), `sequence` (entero no negativo o null), `channel`, `contingencia`, `error_code`, `duration_ms` y `notification` (objeto técnico de notificación o null si el evento no lo registró). Fechas UTC; la evaluación usa el usuario autenticado. No incluye nombres, correos, cuerpos de mensajes ni campos ajenos a la lista permitida. Eventos históricos sin actor explícito se presentan como Sistema/Usuario según actor_id; sesión/secuencia ausentes se presentan null.
 
 Ejemplo: `/api/v1/audit-events?alerta_id=11111111-1111-4111-8111-111111111111&action=notifications.send&outcome=failure&order=asc&limit=20&offset=0`.
 
