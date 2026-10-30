@@ -420,3 +420,178 @@ class RecipientResolutionTests(TestCase):
         self.config.notification_mode = 'lista_distribucion'
         self.config.save()
         self.assertEqual(self.resolver.resolve().emails, ('distribution@example.test',))
+
+
+class BackupContingencyTests(TestCase):
+    def setUp(self):
+        self.config = OperationalConfiguration.load()
+        self.config.notification_mode = 'lista_distribucion'
+        self.config.primary_email = 'lista@example.test'
+        self.config.backup_enabled = True
+        self.config.backup_email = 'sergio.respaldo@example.test'
+        self.config.save()
+
+        self.db = FakeDatabase()
+        self.store = AlertsRepository(self.db)
+        self.alert = alta_pendiente(descripcion='contexto privado del paciente')
+        self.store.insert_alert(self.alert)
+
+        self.primary = Mock()
+        self.backup = Mock()
+        self.primary.send.return_value = AttemptResult('email', True, 10)
+        self.backup.send.return_value = AttemptResult('email', True, 8)
+
+        self.service = NotificationService(
+            email_client=self.primary,
+            backup_email_client=self.backup,
+            enabled=True,
+            store=self.store,
+        )
+        self.payload = NotificationPayload('ALTO', 'riesgo_suicida', 'box-3', '14:00')
+
+    def notify(self):
+        return self.service.notify_alert(self.alert.alerta_id, self.payload)
+
+    def test_no_intenta_respaldo_cuando_esta_deshabilitado(self):
+        self.config.backup_enabled = False
+        self.config.save()
+        self.primary.send.return_value = AttemptResult('email', False, 10, 'NOTIFICATION_REJECTED')
+
+        result = self.notify()
+        self.assertFalse(result.enviado)
+        self.assertEqual(result.estado, 'FALLO_TOTAL')
+        self.assertEqual(len(result.intentos), 1)
+        self.backup.send.assert_not_called()
+
+    def test_lista_usa_respaldo_ante_fallo_o_timeout_y_no_en_exito(self):
+        ok_result = self.notify()
+        self.assertEqual(ok_result.estado, 'EXITO_TOTAL')
+        self.backup.send.assert_not_called()
+
+        for failure in (
+            AttemptResult('email', False, 15, 'NOTIFICATION_TIMEOUT'),
+            TimeoutError('smtp timeout'),
+            RuntimeError('connection error'),
+        ):
+            with self.subTest(failure=type(failure).__name__):
+                self.primary.reset_mock()
+                self.backup.reset_mock()
+                self.primary.send.side_effect = failure if isinstance(failure, Exception) else None
+                self.primary.send.return_value = failure
+
+                result = self.notify()
+                self.assertTrue(result.enviado)
+                self.assertEqual(result.estado, 'FALLO_PARCIAL')
+                self.assertEqual(len(result.intentos), 2)
+                self.backup.send.assert_called_once()
+                self.assertEqual(
+                    self.backup.send.call_args.kwargs['destinatarios'],
+                    ['sergio.respaldo@example.test'],
+                )
+                last_event = self.db['audit_events'].docs[-1]
+                self.assertTrue(last_event['contingencia'])
+                self.assertEqual(last_event['outcome'], 'success')
+
+    def test_supervisores_usa_un_solo_respaldo_ante_fallo_parcial_o_total(self):
+        self.config.notification_mode = 'supervisores_activos'
+        self.config.save()
+        user_model = get_user_model()
+        u1 = user_model.objects.create_user(username='sup1', email='sup1@example.test')
+        u2 = user_model.objects.create_user(username='sup2', email='sup2@example.test')
+        u3 = user_model.objects.create_user(username='sup3', email='sup3@example.test')
+
+        res_ok = self.notify()
+        self.assertEqual(res_ok.estado, 'EXITO_TOTAL')
+        self.assertEqual(len(res_ok.intentos), 3)
+        self.backup.send.assert_not_called()
+
+        self.primary.reset_mock()
+        self.backup.reset_mock()
+        self.primary.send.side_effect = [
+            AttemptResult('email', False, 5, 'NOTIFICATION_REJECTED'),
+            AttemptResult('email', True, 5),
+            AttemptResult('email', False, 5, 'NOTIFICATION_TIMEOUT'),
+        ]
+        res_partial = self.notify()
+        self.assertTrue(res_partial.enviado)
+        self.assertEqual(res_partial.estado, 'FALLO_PARCIAL')
+        self.assertEqual(len(res_partial.intentos), 4)
+        self.backup.send.assert_called_once()
+        self.assertEqual(
+            self.backup.send.call_args.kwargs['destinatarios'],
+            ['sergio.respaldo@example.test'],
+        )
+
+        self.primary.reset_mock()
+        self.backup.reset_mock()
+        self.primary.send.side_effect = [
+            AttemptResult('email', False, 5, 'NOTIFICATION_REJECTED'),
+            AttemptResult('email', False, 5, 'NOTIFICATION_REJECTED'),
+            AttemptResult('email', False, 5, 'NOTIFICATION_REJECTED'),
+        ]
+        res_all_failed = self.notify()
+        self.assertTrue(res_all_failed.enviado)
+        self.assertEqual(res_all_failed.estado, 'FALLO_PARCIAL')
+        self.assertEqual(len(res_all_failed.intentos), 4)
+        self.backup.send.assert_called_once()
+
+        self.config.refresh_from_db()
+        self.assertEqual(self.config.notification_mode, 'supervisores_activos')
+        for u in (u1, u2, u3):
+            u.refresh_from_db()
+            self.assertTrue(u.is_active)
+            self.assertEqual(u.role, 'supervisor')
+
+    def test_supervisores_sin_destinatarios_validos_utiliza_respaldo_si_habilitado(self):
+        self.config.notification_mode = 'supervisores_activos'
+        self.config.save()
+        user_model = get_user_model()
+        user_model.objects.create_user(username='inactivo', email='inactivo@example.test', is_active=False)
+        bad = user_model.objects.create_user(username='invalido', email='valido@example.test', is_active=True)
+        user_model.objects.filter(pk=bad.pk).update(email='correo-invalido')
+
+        result = self.notify()
+        self.assertTrue(result.enviado)
+        self.assertEqual(result.estado, 'FALLO_PARCIAL')
+        self.assertIsNone(result.motivo_omision)
+        self.assertEqual(len(result.intentos), 1)
+        self.primary.send.assert_not_called()
+        self.backup.send.assert_called_once()
+        self.assertEqual(
+            self.backup.send.call_args.kwargs['destinatarios'],
+            ['sergio.respaldo@example.test'],
+        )
+        last_event = self.db['audit_events'].docs[-1]
+        self.assertTrue(last_event['contingencia'])
+        self.assertEqual(last_event['outcome'], 'success')
+
+    @override_settings(NOTIFICATION_EMAIL_BACKUP_TO='entorno-ignorado@example.test')
+    def test_utiliza_correo_de_respaldo_de_configuracion_operativa_y_no_entorno(self):
+        self.service.backup_email_client = EmailClient()
+        self.primary.send.return_value = AttemptResult('email', False, 5, 'NOTIFICATION_REJECTED')
+
+        result = self.notify()
+        self.assertTrue(result.enviado)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[-1].to, ['sergio.respaldo@example.test'])
+
+    def test_fallo_del_respaldo_no_elimina_ni_revierte_la_alerta(self):
+        self.primary.send.return_value = AttemptResult('email', False, 5, 'NOTIFICATION_REJECTED')
+        for backup_failure in (
+            AttemptResult('email', False, 6, 'NOTIFICATION_CONNECTION_FAILED'),
+            TimeoutError('backup timeout'),
+            RuntimeError('backup crash'),
+        ):
+            with self.subTest(backup_failure=type(backup_failure).__name__):
+                self.backup.reset_mock()
+                self.backup.send.side_effect = backup_failure if isinstance(backup_failure, Exception) else None
+                self.backup.send.return_value = backup_failure
+
+                result = self.notify()
+                self.assertFalse(result.enviado)
+                self.assertEqual(result.estado, 'FALLO_TOTAL')
+                self.assertEqual(len(result.intentos), 2)
+                self.assertEqual(self.store.get_alert(self.alert.alerta_id), self.alert)
+                last_event = self.db['audit_events'].docs[-1]
+                self.assertTrue(last_event['contingencia'])
+                self.assertEqual(last_event['outcome'], 'failure')
