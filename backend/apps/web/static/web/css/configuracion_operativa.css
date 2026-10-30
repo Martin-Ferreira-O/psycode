@@ -1,4 +1,4 @@
-.descripcion-pagina {
+﻿.descripcion-pagina {
     margin: 7px 0 0;
     color: #64748b;
     font-size: 15px;
@@ -6,6 +6,8 @@
 
 .panel-configuracion {
     max-width: 1000px;
+    margin-left: auto;
+    margin-right: auto;
     padding: 28px;
     border: 1px solid var(--borde);
     border-radius: 16px;
@@ -118,6 +120,75 @@
     outline-offset: 2px;
 }
 
+.opciones-destinatarios {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    margin-top: 14px;
+    margin-bottom: 18px;
+}
+
+.opcion-destinatario {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 16px;
+    border: 2px solid #cbd5e1;
+    border-radius: 12px;
+    background: #ffffff;
+    transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.opcion-destinatario--activa {
+    border-color: #173858;
+    background: #f4f8fc;
+    box-shadow: 0 4px 12px rgba(23, 56, 88, 0.08);
+}
+
+.opcion-destinatario-cabecera {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    color: #173858;
+    font-weight: 700;
+}
+
+.opcion-destinatario-cabecera input[type="radio"] {
+    width: 18px;
+    height: 18px;
+    margin: 0;
+    accent-color: #173858;
+    cursor: pointer;
+}
+
+.opcion-destinatario-titulo {
+    flex: 1;
+    font-size: 16px;
+}
+
+.insignia-opcion-activa {
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: #173858;
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.orientacion-destinatario {
+    margin: 0;
+    color: #475569;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.contenedor-correo-distribucion {
+    margin-top: 4px;
+    padding-top: 10px;
+    border-top: 1px solid #dbe5f0;
+}
+
 .campos-horario,
 .campos-correos {
     display: grid;
@@ -141,6 +212,12 @@
     border-radius: 8px;
     background: #fff;
     color: var(--texto);
+}
+
+.campo-configuracion input:disabled {
+    background: #f1f5f9;
+    color: #64748b;
+    cursor: not-allowed;
 }
 
 .campo-configuracion input:focus {
@@ -190,6 +267,7 @@
         flex-direction: column;
     }
 
+    .opciones-destinatarios,
     .campos-horario,
     .campos-correos {
         grid-template-columns: 1fr;
@@ -198,9 +276,4 @@
     .boton-guardar-configuracion {
         width: 100%;
     }
-}
-
-.panel-configuracion {
-    margin-left: auto;
-    margin-right: auto;
 }

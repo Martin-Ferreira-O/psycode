@@ -1,4 +1,4 @@
-{% load static %}
+﻿{% load static %}
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -83,16 +83,66 @@
 
                         <fieldset class="grupo-configuracion">
                             <legend>Destinatarios de alertas</legend>
+                            <p class="ayuda-configuracion">Selecciona quién recibirá las notificaciones principales de alertas.</p>
+
+                            <div class="opciones-destinatarios" role="radiogroup" aria-label="Modalidad de destinatarios principales">
+                                <div class="opcion-destinatario opcion-destinatario--activa" id="tarjetaListaDistribucion" data-mode-card="lista_distribucion">
+                                    <label class="opcion-destinatario-cabecera" for="modoListaDistribucion">
+                                        <input
+                                            id="modoListaDistribucion"
+                                            type="radio"
+                                            name="notification_mode"
+                                            value="lista_distribucion"
+                                            checked
+                                        >
+                                        <span class="opcion-destinatario-titulo">Lista de distribución</span>
+                                        <span class="insignia-opcion-activa" id="insigniaListaDistribucion">Opción activa</span>
+                                    </label>
+                                    <p class="orientacion-destinatario" id="orientacionListaDistribucion">
+                                        Las alertas se enviarán a la dirección configurada. Sus integrantes se administran fuera de Psycode
+                                    </p>
+                                    <div class="contenedor-correo-distribucion" id="contenedorCorreoPrincipal">
+                                        <label class="campo-configuracion" for="correoPrincipal">
+                                            <span>Correo de lista de distribución</span>
+                                            <input
+                                                id="correoPrincipal"
+                                                name="primary_email"
+                                                type="email"
+                                                maxlength="254"
+                                                autocomplete="email"
+                                                required
+                                            >
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div class="opcion-destinatario" id="tarjetaSupervisoresActivos" data-mode-card="supervisores_activos">
+                                    <label class="opcion-destinatario-cabecera" for="modoSupervisoresActivos">
+                                        <input
+                                            id="modoSupervisoresActivos"
+                                            type="radio"
+                                            name="notification_mode"
+                                            value="supervisores_activos"
+                                        >
+                                        <span class="opcion-destinatario-titulo">Supervisores activos</span>
+                                        <span class="insignia-opcion-activa" id="insigniaSupervisoresActivos" hidden>Opción activa</span>
+                                    </label>
+                                    <p class="orientacion-destinatario" id="orientacionSupervisoresActivos">
+                                        Las alertas se enviarán al correo registrado de todos los supervisores habilitados, aunque no tengan una sesión iniciada
+                                    </p>
+                                </div>
+                            </div>
+
                             <div class="campos-correos">
-                                <label class="campo-configuracion" for="correoPrincipal">
-                                    <span>Correo principal</span>
-                                    <input id="correoPrincipal" name="primary_email" type="email"
-                                           maxlength="254" autocomplete="email" required>
-                                </label>
                                 <label class="campo-configuracion" for="correoRespaldo">
                                     <span>Correo de respaldo</span>
-                                    <input id="correoRespaldo" name="backup_email" type="email"
-                                           maxlength="254" autocomplete="email" required>
+                                    <input
+                                        id="correoRespaldo"
+                                        name="backup_email"
+                                        type="email"
+                                        maxlength="254"
+                                        autocomplete="email"
+                                    >
                                 </label>
                             </div>
                             <p class="ayuda-configuracion">

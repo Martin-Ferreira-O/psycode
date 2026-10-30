@@ -1,4 +1,6 @@
-const URL_CONFIGURACION_OPERATIVA = "/api/v1/configuracion-operativa";
+﻿const URL_CONFIGURACION_OPERATIVA = "/api/v1/configuracion-operativa";
+const MODO_LISTA_DISTRIBUCION = "lista_distribucion";
+const MODO_SUPERVISORES_ACTIVOS = "supervisores_activos";
 
 const elementosConfiguracion = {
     estado: document.querySelector("#estadoConfiguracion"),
@@ -8,6 +10,14 @@ const elementosConfiguracion = {
     dias: document.querySelectorAll('input[name="enabled_days"]'),
     apertura: document.querySelector("#horaApertura"),
     cierre: document.querySelector("#horaCierre"),
+    modosNotificacion: document.querySelectorAll('input[name="notification_mode"]'),
+    modoLista: document.querySelector("#modoListaDistribucion"),
+    modoSupervisores: document.querySelector("#modoSupervisoresActivos"),
+    tarjetaLista: document.querySelector("#tarjetaListaDistribucion"),
+    tarjetaSupervisores: document.querySelector("#tarjetaSupervisoresActivos"),
+    insigniaLista: document.querySelector("#insigniaListaDistribucion"),
+    insigniaSupervisores: document.querySelector("#insigniaSupervisoresActivos"),
+    contenedorCorreoPrincipal: document.querySelector("#contenedorCorreoPrincipal"),
     correoPrincipal: document.querySelector("#correoPrincipal"),
     correoRespaldo: document.querySelector("#correoRespaldo"),
     zonaHoraria: document.querySelector("#zonaHoraria"),
@@ -16,6 +26,52 @@ const elementosConfiguracion = {
     confirmacion: document.querySelector("#confirmacionConfiguracion"),
     guardar: document.querySelector("#guardarConfiguracion")
 };
+
+let respaldoHabilitadoActual = false;
+
+function obtenerModoSeleccionado() {
+    const seleccionado = Array.from(elementosConfiguracion.modosNotificacion).find((input) => input.checked);
+    return seleccionado ? seleccionado.value : MODO_LISTA_DISTRIBUCION;
+}
+
+function actualizarModoNotificacion(modo) {
+    const modoActivo = modo === MODO_SUPERVISORES_ACTIVOS ? MODO_SUPERVISORES_ACTIVOS : MODO_LISTA_DISTRIBUCION;
+    const esLista = modoActivo === MODO_LISTA_DISTRIBUCION;
+
+    if (elementosConfiguracion.modoLista) {
+        elementosConfiguracion.modoLista.checked = esLista;
+    }
+    if (elementosConfiguracion.modoSupervisores) {
+        elementosConfiguracion.modoSupervisores.checked = !esLista;
+    }
+
+    if (elementosConfiguracion.tarjetaLista) {
+        elementosConfiguracion.tarjetaLista.classList.toggle("opcion-destinatario--activa", esLista);
+        elementosConfiguracion.tarjetaLista.setAttribute("data-activa", String(esLista));
+    }
+    if (elementosConfiguracion.tarjetaSupervisores) {
+        elementosConfiguracion.tarjetaSupervisores.classList.toggle("opcion-destinatario--activa", !esLista);
+        elementosConfiguracion.tarjetaSupervisores.setAttribute("data-activa", String(!esLista));
+    }
+
+    if (elementosConfiguracion.insigniaLista) {
+        elementosConfiguracion.insigniaLista.hidden = !esLista;
+    }
+    if (elementosConfiguracion.insigniaSupervisores) {
+        elementosConfiguracion.insigniaSupervisores.hidden = esLista;
+    }
+
+    if (elementosConfiguracion.contenedorCorreoPrincipal) {
+        elementosConfiguracion.contenedorCorreoPrincipal.hidden = !esLista;
+    }
+    if (elementosConfiguracion.correoPrincipal) {
+        elementosConfiguracion.correoPrincipal.disabled = !esLista;
+        elementosConfiguracion.correoPrincipal.required = esLista;
+        if (!esLista) {
+            elementosConfiguracion.correoPrincipal.setCustomValidity("");
+        }
+    }
+}
 
 function mostrarAccesoDenegado() {
     elementosConfiguracion.estado.hidden = true;
@@ -33,12 +89,27 @@ function mostrarErrorCarga(error) {
     });
 }
 
+function extraerMensajeErrorGuardado(error) {
+    if (error instanceof ErrorSolicitud) {
+        if (error.estado === 403) {
+            return "No tienes permiso para modificar la configuración operativa.";
+        }
+        const campos = error.detalles?.fields;
+        if (campos && typeof campos === "object") {
+            const mensajesCampos = Object.values(campos)
+                .flat()
+                .filter((item) => typeof item === "string" && item.trim());
+            if (mensajesCampos.length > 0) {
+                return mensajesCampos.join(" ");
+            }
+        }
+    }
+    return describirError(error).mensaje;
+}
+
 function mostrarErrorGuardado(error) {
     elementosConfiguracion.mensajeFormulario.hidden = false;
-    elementosConfiguracion.mensajeFormulario.textContent =
-        error instanceof ErrorSolicitud && error.estado === 403
-            ? "No tienes permiso para modificar la configuración operativa."
-            : describirError(error).mensaje;
+    elementosConfiguracion.mensajeFormulario.textContent = extraerMensajeErrorGuardado(error);
 }
 
 function limpiarMensajeFormulario() {
@@ -47,20 +118,26 @@ function limpiarMensajeFormulario() {
 }
 
 function rellenarFormulario(configuracion) {
-    const diasHabilitados = new Set(configuracion.enabled_days.map(String));
+    const diasHabilitados = new Set((configuracion.enabled_days || []).map(String));
     elementosConfiguracion.dias.forEach((dia) => {
         dia.checked = diasHabilitados.has(dia.value);
     });
-    elementosConfiguracion.apertura.value = configuracion.open_time;
-    elementosConfiguracion.cierre.value = configuracion.close_time;
-    elementosConfiguracion.correoPrincipal.value = configuracion.primary_email;
-    elementosConfiguracion.correoRespaldo.value = configuracion.backup_email;
-    elementosConfiguracion.zonaHoraria.textContent = configuracion.timezone;
+    elementosConfiguracion.apertura.value = configuracion.open_time || "";
+    elementosConfiguracion.cierre.value = configuracion.close_time || "";
+    elementosConfiguracion.correoPrincipal.value = configuracion.primary_email ?? "";
+    elementosConfiguracion.correoRespaldo.value = configuracion.backup_email ?? "";
+    respaldoHabilitadoActual = Boolean(configuracion.backup_enabled);
+    if (elementosConfiguracion.correoRespaldo) {
+        elementosConfiguracion.correoRespaldo.required = respaldoHabilitadoActual;
+    }
+    actualizarModoNotificacion(configuracion.notification_mode || MODO_LISTA_DISTRIBUCION);
+
+    elementosConfiguracion.zonaHoraria.textContent = configuracion.timezone || "America/Santiago";
     elementosConfiguracion.ultimaActualizacion.textContent = configuracion.updated_at
         ? `Última actualización: ${new Intl.DateTimeFormat("es-CL", {
             dateStyle: "medium",
             timeStyle: "short",
-            timeZone: configuracion.timezone
+            timeZone: configuracion.timezone || "America/Santiago"
         }).format(new Date(configuracion.updated_at))}`
         : "Configuración vigente";
 }
@@ -102,6 +179,20 @@ async function cargarConfiguracion() {
 }
 
 function validarFormulario() {
+    const modoSeleccionado = obtenerModoSeleccionado();
+    actualizarModoNotificacion(modoSeleccionado);
+
+    if (modoSeleccionado === MODO_LISTA_DISTRIBUCION) {
+        const valorCorreo = elementosConfiguracion.correoPrincipal.value.trim();
+        if (!valorCorreo) {
+            elementosConfiguracion.mensajeFormulario.textContent =
+                "Debes ingresar un correo válido para la lista de distribución.";
+            elementosConfiguracion.mensajeFormulario.hidden = false;
+            elementosConfiguracion.correoPrincipal.focus();
+            return false;
+        }
+    }
+
     if (!elementosConfiguracion.formulario.reportValidity()) return false;
 
     if (elementosConfiguracion.apertura.value >= elementosConfiguracion.cierre.value) {
@@ -120,12 +211,14 @@ async function guardarConfiguracion(evento) {
     elementosConfiguracion.confirmacion.hidden = true;
     if (!validarFormulario()) return;
 
+    const modoSeleccionado = obtenerModoSeleccionado();
     const payload = {
         enabled_days: Array.from(elementosConfiguracion.dias)
             .filter((dia) => dia.checked)
             .map((dia) => Number(dia.value)),
         open_time: elementosConfiguracion.apertura.value,
         close_time: elementosConfiguracion.cierre.value,
+        notification_mode: modoSeleccionado,
         primary_email: elementosConfiguracion.correoPrincipal.value.trim(),
         backup_email: elementosConfiguracion.correoRespaldo.value.trim()
     };
@@ -155,6 +248,13 @@ async function guardarConfiguracion(evento) {
         establecerCargaBoton(elementosConfiguracion.guardar, false);
     }
 }
+
+elementosConfiguracion.modosNotificacion.forEach((radio) => {
+    radio.addEventListener("change", () => {
+        limpiarMensajeFormulario();
+        actualizarModoNotificacion(obtenerModoSeleccionado());
+    });
+});
 
 elementosConfiguracion.formulario?.addEventListener("submit", guardarConfiguracion);
 cargarConfiguracion();
