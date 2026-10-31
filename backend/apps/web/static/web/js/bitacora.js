@@ -207,7 +207,19 @@ function textoCanal(canal) {
     return "—";
 }
 
-function textoActor(evento) {if (!evento?.actor_id) return "Sistema";return "Usuario";}
+function textoActor(evento) {
+    if (!evento?.actor_id) {
+        return "Sistema";
+    }
+
+    const actor = evento.actor;
+
+    if (typeof actor === "string" && actor.trim() && actor !== "Usuario") {
+        return actor;
+    }
+
+    return `Usuario (${evento.actor_id})`;
+}
 
 function mensajeSegunEstado(estado) {
     if (estado === 400) {return "Revisa los filtros ingresados e intenta nuevamente.";}
@@ -707,10 +719,13 @@ function abrirDetalle(evento, elementoOrigen) {
     elementosBitacora.detalleResultado.textContent =
         textoResultadoEvento(evento);
 
+    const actor = textoActor(evento);
+    const actorNoDisponible = actor === `Usuario (${evento.actor_id})`;
+
     elementosBitacora.detalleActor.textContent =
-        evento.actor_id
-            ? `Usuario · ${evento.actor_id}`
-            : "Sistema";
+        evento.actor_id && !actorNoDisponible
+            ? `${actor} · ${evento.actor_id}`
+            : actor;
 
     elementosBitacora.detalleAlerta.textContent =
         evento.alerta_id || "—";

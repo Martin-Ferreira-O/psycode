@@ -110,7 +110,54 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         });
         const bounds = await page.locator('#panelDetalle').boundingBox();
         assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 391, JSON.stringify(bounds));
+
+        // SCRUM-86: presentación del nombre del actor.
+        const usuarioId = randomUUID(), eliminadoId = randomUUID();
+        const historicoId = randomUUID(), sinActorId = randomUUID();
+        const maliciosoId = randomUUID();
+        const nombreUsuario = 'Ana & José';
+        const textoMalicioso = '<img src=x onerror=alert(1)>';
+        const eventosActores = [
+            { ...historic, event_id: randomUUID(), actor_id: usuarioId,
+                actor: nombreUsuario },
+            { ...historic, event_id: randomUUID(), actor_id: null,
+                actor: 'Sistema' },
+            { ...historic, event_id: randomUUID(), actor_id: eliminadoId,
+                actor: `Usuario (${eliminadoId})` },
+            { ...historic, event_id: randomUUID(), actor_id: historicoId,
+                actor: 'Usuario' },
+            { ...historic, event_id: randomUUID(), actor_id: sinActorId },
+            { ...historic, event_id: randomUUID(), actor_id: maliciosoId,
+                actor: textoMalicioso }
+        ];
+        events.splice(0, events.length, ...eventosActores);
+        await page.setViewportSize({ width: 1366, height: 950 });
+        await page.goto(`${base}/bitacora`);
+        await page.waitForFunction(() => document.querySelectorAll('#tablaEventos tr').length === 6);
+        assert.equal(await page.locator('#tablaEventos tr').count(), 6);
+        const casos = [
+            [nombreUsuario, `${nombreUsuario} · ${usuarioId}`],
+            ['Sistema', 'Sistema'],
+            [`Usuario (${eliminadoId})`, `Usuario (${eliminadoId})`],
+            [`Usuario (${historicoId})`, `Usuario (${historicoId})`],
+            [`Usuario (${sinActorId})`, `Usuario (${sinActorId})`],
+            [textoMalicioso, `${textoMalicioso} · ${maliciosoId}`]
+        ];
+        for (const [indice, [textoTabla, textoDetalle]] of casos.entries()) {
+            const fila = page.locator('#tablaEventos tr').nth(indice);
+            const celdaActor = fila.locator('td').nth(3);
+            assert.equal(await celdaActor.textContent(), textoTabla,
+                `Actor incorrecto en la tabla, fila ${indice}`);
+            await fila.getByRole('button').click();
+            assert.equal(await page.locator('#detalleActor').textContent(), textoDetalle,
+                `Actor incorrecto en el detalle, fila ${indice}`);
+            await page.keyboard.press('Escape');
+        }
+        assert.equal(await page.locator('#tablaEventos img, #detalleActor img').count(), 0);
+        assert.equal(await page.locator('#tablaEventos tr').first()
+            .locator('td').nth(3).textContent(), 'Ana & José');
         assert.deepEqual(errors, []);
         console.log('OK: resumen parcial, modalidad, conteos, respaldo, ausencia de destinatarios, filtro, históricos y móvil.');
+        console.log('OK SCRUM-86: nombres de usuario, Sistema, UUID de respaldo y texto seguro.');
     } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });
