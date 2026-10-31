@@ -847,7 +847,13 @@ Errores: `NOTIFICATION_TIMEOUT`, `NOTIFICATION_CONNECTION_FAILED`, `NOTIFICATION
 
 Parámetros desconocidos, repetidos o inválidos → 400. Los filtros se combinan con AND. Devuelve el envelope habitual con `data={total, limit, offset, items}`. Una consulta sin coincidencias devuelve 200 y lista vacía. Paginación por offset: nuevas inserciones entre consultas pueden desplazar páginas.
 
-Cada item incluye `event_id`, `timestamp`, `action`, `outcome`, `actor` (`Sistema` o `Usuario`), `actor_id` (UUID o null), `alerta_id` (UUID o null), `sesion_id` (UUID o null), `sequence` (entero no negativo o null), `channel`, `contingencia`, `error_code`, `duration_ms` y `notification` (objeto técnico de notificación o null si el evento no lo registró). Fechas UTC; la evaluación usa el usuario autenticado. No incluye nombres, correos, cuerpos de mensajes ni campos ajenos a la lista permitida. Eventos históricos sin actor explícito se presentan como Sistema/Usuario según actor_id; sesión/secuencia ausentes se presentan null.
+Cada item incluye `event_id`, `timestamp`, `action`, `outcome`, `actor` (nombre de usuario, `Sistema` o identificación alternativa `Usuario (UUID)`), `actor_id` (UUID original o null), `alerta_id` (UUID o null), `sesion_id` (UUID o null), `sequence` (entero no negativo o null), `channel`, `contingencia`, `error_code`, `duration_ms` y `notification` (objeto técnico de notificación o null si el evento no lo registró).
+
+El campo `actor` se resuelve al consultar la bitácora utilizando el UUID del actor y las cuentas existentes. Si la cuenta está disponible, devuelve su `username`. Si la cuenta original ya no existe o su UUID no corresponde a una cuenta disponible, devuelve `Usuario (UUID original)` como identificación alternativa, sin atribuir el evento a otra persona.
+
+La resolución también se aplica a eventos históricos que solo almacenan `actor_id`, sin modificar los documentos originales. Las cuentas se consultan en un único lote por página para evitar consultas individuales por evento.
+
+Las fechas se expresan en UTC. La evaluación utiliza el usuario autenticado. No se incluyen nombres completos, correos, cuerpos de mensajes ni campos ajenos a la lista permitida. Los campos históricos de sesión o secuencia ausentes se presentan como null.
 
 Ejemplo: `/api/v1/audit-events?alerta_id=11111111-1111-4111-8111-111111111111&action=notifications.send&outcome=failure&order=asc&limit=20&offset=0`.
 

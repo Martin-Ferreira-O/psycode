@@ -5,7 +5,7 @@ from rest_framework import serializers
 from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.views import APIView
 
-from backend.apps.accounts.models import Role
+from backend.apps.accounts.models import Role, User
 from backend.common.responses import success_response
 from .audit import ACTIONS, OUTCOMES, NOTIFICATION_MODES, NOTIFICATION_REASONS, NOTIFICATION_STATUSES
 from .repositories import AlertsRepository
@@ -71,7 +71,15 @@ class AuditEventSerializer(serializers.Serializer):
     notification = NotificationAuditSerializer(allow_null=True, default=None)
 
     def get_actor(self, event):
-        return 'Sistema' if event.get('actor_id') is None else 'Usuario'
+        actor_id = event.get('actor_id')
+
+        if actor_id is None:
+            return 'Sistema'
+
+        actor_id = str(actor_id)
+        actor_names = self.context.get('actor_names', {})
+
+        return actor_names.get(actor_id) or f'Usuario ({actor_id})'
 
 
 class AuditListView(APIView):
@@ -81,8 +89,34 @@ class AuditListView(APIView):
         serializer = AuditQuerySerializer(data=request.query_params)
         serializer.is_valid(raise_exception=True)
         filters = serializer.validated_data
+
         items, total = AlertsRepository().list_events(filters)
+
+        actor_ids = {
+            str(event['actor_id'])
+            for event in items
+            if event.get('actor_id') is not None
+        }
+
+        actor_names = {}
+
+        if actor_ids:
+            users = User.objects.filter(
+                id__in=actor_ids
+            ).values_list('id', 'username')
+
+            actor_names = {
+                str(user_id): username
+                for user_id, username in users
+            }
+
         return success_response({
-            'items': AuditEventSerializer(items, many=True).data,
-            'total': total, 'limit': filters['limit'], 'offset': filters['offset'],
+            'items': AuditEventSerializer(
+                items,
+                many=True,
+                context={'actor_names': actor_names},
+            ).data,
+            'total': total,
+            'limit': filters['limit'],
+            'offset': filters['offset'],
         }, 'Bitácora de alertas')

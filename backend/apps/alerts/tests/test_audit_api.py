@@ -2,10 +2,11 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, TestCase
 from pymongo.errors import AutoReconnect
 from rest_framework.test import APIClient
 
+from backend.apps.accounts.models import User
 from backend.apps.alerts.audit import AlertAudit
 from backend.apps.alerts.repositories import AlertsRepository
 from backend.apps.alerts.tests.test_persistence import FakeDatabase
@@ -102,3 +103,138 @@ class AuditQueryTests(SimpleTestCase):
         with patch.object(repo, '_events', side_effect=AutoReconnect('secret')):
             with self.assertRaises(PersistenceUnavailable):
                 repo.list_events(filters)
+
+class AuditActorResolutionTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.admin = SimpleNamespace(
+            is_authenticated=True,
+            is_active=True,
+            is_superuser=False,
+            role='admin',
+        )
+        self.client.force_authenticate(self.admin)
+
+        repo_patch = patch('backend.apps.alerts.audit_api.AlertsRepository')
+        self.repo = repo_patch.start().return_value
+        self.addCleanup(repo_patch.stop)
+
+        db = FakeDatabase()
+        self.event = AlertAudit(
+            lambda: db['audit_events']
+        ).record(
+            'alerts.register',
+            'success',
+            alerta_id=str(uuid4()),
+        )
+
+    def make_event(self, actor_id):
+        event = dict(
+            self.event,
+            event_id=str(uuid4()),
+            actor_id=None if actor_id is None else str(actor_id),
+        )
+        event.pop('actor', None)
+        return event
+
+    def test_existing_user_returns_username_and_uuid(self):
+        user = User.objects.create_user(
+            username='profesional',
+            email='profesional@example.test',
+            password='TestPassword123!',
+        )
+
+        self.repo.list_events.return_value = (
+            [self.make_event(user.id)],
+            1,
+        )
+
+        response = self.client.get('/api/v1/audit-events')
+
+        self.assertEqual(response.status_code, 200)
+        actor = response.data['data']['items'][0]
+
+        self.assertEqual(actor['actor'], 'profesional')
+        self.assertEqual(str(actor['actor_id']), str(user.id))
+
+    def test_deleted_user_preserves_original_identity(self):
+        user = User.objects.create_user(
+            username='profesional',
+            email='profesional@example.test',
+            password='TestPassword123!',
+        )
+        original_id = user.id
+        user.delete()
+
+        User.objects.create_user(
+            username='profesional',
+            email='nuevo@example.test',
+            password='TestPassword123!',
+        )
+
+        self.repo.list_events.return_value = (
+            [self.make_event(original_id)],
+            1,
+        )
+
+        response = self.client.get('/api/v1/audit-events')
+
+        self.assertEqual(response.status_code, 200)
+        actor = response.data['data']['items'][0]
+
+        self.assertEqual(
+            actor['actor'],
+            f'Usuario ({original_id})',
+        )
+        self.assertEqual(str(actor['actor_id']), str(original_id))
+
+    def test_system_event_requires_no_user_query(self):
+        self.repo.list_events.return_value = (
+            [self.make_event(None)],
+            1,
+        )
+
+        with self.assertNumQueries(0):
+            response = self.client.get('/api/v1/audit-events')
+
+        self.assertEqual(response.status_code, 200)
+        actor = response.data['data']['items'][0]
+
+        self.assertEqual(actor['actor'], 'Sistema')
+        self.assertIsNone(actor['actor_id'])
+
+    def test_multiple_events_use_single_user_query(self):
+        first = User.objects.create_user(
+            username='usuario_uno',
+            email='uno@example.test',
+            password='TestPassword123!',
+        )
+        second = User.objects.create_user(
+            username='usuario_dos',
+            email='dos@example.test',
+            password='TestPassword123!',
+        )
+
+        events = [
+            self.make_event(first.id),
+            self.make_event(second.id),
+            self.make_event(first.id),
+            self.make_event(None),
+        ]
+
+        self.repo.list_events.return_value = (events, len(events))
+
+        with self.assertNumQueries(1):
+            response = self.client.get('/api/v1/audit-events')
+
+        self.assertEqual(response.status_code, 200)
+
+        actors = [
+            item['actor']
+            for item in response.data['data']['items']
+        ]
+
+        self.assertEqual(
+            actors,
+            ['usuario_uno', 'usuario_dos', 'usuario_uno', 'Sistema'],
+        )
