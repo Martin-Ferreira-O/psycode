@@ -13,15 +13,6 @@ const elementosBitacora = {
     semanaAnterior: document.querySelector("#semanaAnterior"),
     semanaSiguiente: document.querySelector("#semanaSiguiente"),
     fechaReferencia: document.querySelector("#fechaReferencia"),
-
-    totalEventos: document.querySelector("#totalEventos"),
-    totalAlertas: document.querySelector("#totalAlertas"),
-    totalDespachos: document.querySelector("#totalDespachos"),
-    totalEvaluaciones: document.querySelector("#totalEvaluaciones"),
-    totalTecnicos: document.querySelector("#totalTecnicos"),
-
-    tarjetasResumen: document.querySelectorAll("[data-resumen]"),
-
     recargar: document.querySelector("#recargarBitacora"),
     formulario: document.querySelector("#formFiltros"),
     filtroAlerta: document.querySelector("#filtroAlerta"),
@@ -67,7 +58,6 @@ const elementosBitacora = {
 let fechaReferencia = new Date();
 let offsetActual = 0;
 let totalActual = 0;
-let resumenActivo = "todos";
 let eventoSeleccionado = null;
 let focoAnterior = null;
 let numeroCarga = 0;
@@ -310,40 +300,6 @@ async function consultarTotal(accion = null) {
     return Number(datos.total) || 0;
 }
 
-async function obtenerResumenPeriodo() {
-    const resultados = await Promise.all([
-        consultarTotal(),
-        consultarTotal("alerts.register"),
-        consultarTotal("notifications.send"),
-        consultarTotal("alerts.evaluate"),
-        consultarTotal("analysis.speechmatics"),
-        consultarTotal("analysis.jev"),
-        consultarTotal("alerts.flow")
-    ]);
-
-    if (resultados.some((resultado) => resultado === null)) {
-        return null;
-    }
-
-    return {
-        todos: resultados[0],
-        alertas: resultados[1],
-        despachos: resultados[2],
-        evaluaciones: resultados[3],
-        tecnicos: resultados[4] + resultados[5] + resultados[6]
-    };
-}
-
-function renderizarResumen(resumen) {
-    if (!resumen) return;
-
-    elementosBitacora.totalEventos.textContent = resumen.todos;
-    elementosBitacora.totalAlertas.textContent = resumen.alertas;
-    elementosBitacora.totalDespachos.textContent = resumen.despachos;
-    elementosBitacora.totalEvaluaciones.textContent = resumen.evaluaciones;
-    elementosBitacora.totalTecnicos.textContent = resumen.tecnicos;
-}
-
 async function obtenerPaginaNormal() {
     const parametros = parametrosPeriodo();
     agregarFiltrosTabla(parametros);
@@ -438,10 +394,6 @@ async function obtenerPaginaTecnica() {
 }
 
 async function obtenerEventosActuales() {
-    if (resumenActivo === "tecnicos") {
-        return obtenerPaginaTecnica();
-    }
-
     return obtenerPaginaNormal();
 }
 
@@ -627,39 +579,15 @@ function actualizarPaginacion(total) {
         offsetActual + LIMITE_PAGINA >= total;
 }
 
-function actualizarTarjetasActivas() {
-    elementosBitacora.tarjetasResumen.forEach((tarjeta) => {
-        tarjeta.classList.toggle(
-            "activa",
-            tarjeta.dataset.resumen === resumenActivo
-        );
-    });
-}
-
-function resumenDesdeAccion(accion) {
-    if (accion === "alerts.register") return "alertas";
-    if (accion === "notifications.send") return "despachos";
-    if (accion === "alerts.evaluate") return "evaluaciones";
-    return "todos";
-}
-
 async function cargarBitacora() {
     const carga = ++numeroCarga;
 
     mostrarCarga();
     actualizarPeriodoVisible();
-    actualizarTarjetasActivas();
-
-    try {
-        const [resumen, datos] = await Promise.all([
-            obtenerResumenPeriodo(),
-            obtenerEventosActuales()
-        ]);
+    try {const datos = await obtenerEventosActuales();
 
         if (carga !== numeroCarga) return;
-        if (!resumen || !datos) return;
-
-        renderizarResumen(resumen);
+        if (!datos) return;
 
         const eventos = Array.isArray(datos.items)
             ? datos.items
@@ -698,23 +626,6 @@ async function cargarBitacora() {
     }
 }
 
-function seleccionarResumen(tipo) {resumenActivo = tipo; offsetActual = 0;
-
-    if (tipo === "todos") {elementosBitacora.filtroAccion.value = "";}
-
-    if (tipo === "alertas") {
-        elementosBitacora.filtroAccion.value ="alerts.register";}
-
-    if (tipo === "despachos") {
-        elementosBitacora.filtroAccion.value ="notifications.send";}
-
-    if (tipo === "evaluaciones") {elementosBitacora.filtroAccion.value ="alerts.evaluate";}
-
-    if (tipo === "tecnicos") {elementosBitacora.filtroAccion.value = "";}
-
-    cargarBitacora();
-}
-
 function cambiarSemana(cantidad) {
     const nuevaFecha = new Date(fechaReferencia);
 
@@ -744,10 +655,6 @@ function manejarCambioFecha() {
 function aplicarFiltros(evento) {
     evento.preventDefault();
 
-    resumenActivo = resumenDesdeAccion(
-        elementosBitacora.filtroAccion.value
-    );
-
     offsetActual = 0;
 
     cargarBitacora();
@@ -759,7 +666,7 @@ function limpiarFiltros() {
     elementosBitacora.filtroResultado.value = "";
     elementosBitacora.filtroOrden.value = "desc";
 
-    resumenActivo = "todos";
+
     offsetActual = 0;
 
     cargarBitacora();
@@ -893,7 +800,6 @@ function consultarEventosAlerta() {
         eventoSeleccionado.alerta_id;
 
     elementosBitacora.filtroAccion.value = "";
-    resumenActivo = "todos";
     offsetActual = 0;
     cerrarDetalle();
     cargarBitacora();
@@ -943,14 +849,6 @@ elementosBitacora.detalleFondo?.addEventListener(
         }
     }
 );
-
-elementosBitacora.tarjetasResumen.forEach((tarjeta) => {
-    tarjeta.addEventListener("click", () => {
-        seleccionarResumen(
-            tarjeta.dataset.resumen || "todos"
-        );
-    });
-});
 document.addEventListener("keydown",manejarEscape);
 fechaReferencia = new Date();
 elementosBitacora.filtroOrden.value = "desc";

@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="{% static 'web/css/styles.css' %}">
     <link rel="stylesheet" href="{% static 'web/css/dashboard.css' %}?v=5">
     <link rel="stylesheet" href="{% static 'web/css/estados.css' %}">
-    <link rel="stylesheet" href="{% static 'web/css/bitacora.css' %}?v=5">
+    <link rel="stylesheet" href="{% static 'web/css/bitacora.css' %}?v=6">
 </head>
 
 <body>
@@ -82,66 +82,41 @@
                 </div>
             </section>
 
-            <section class="resumen-bitacora" aria-label="Resumen de eventos">
-                <button
-                    type="button"
-                    class="tarjeta-resumen activa"
-                    data-resumen="todos"
-                >
-                    <span class="tarjeta-resumen-etiqueta">
-                        Todos los eventos
-                    </span>
-                    <strong id="totalEventos">0</strong>
-                    <span>Registros del periodo</span>
-                </button>
+            <section class="resumen-bitacora" aria-label="Tipos de eventos">
+                <div class="tarjeta-resumen">
+                    <span class="tarjeta-resumen-etiqueta">Registro de alerta</span>
+                    <span>Indica cuando el sistema genera y registra una nueva alerta.</span>
+                </div>
 
-                <button
-                    type="button"
-                    class="tarjeta-resumen"
-                    data-resumen="alertas"
-                >
-                    <span class="tarjeta-resumen-etiqueta">
-                        Alertas creadas
-                    </span>
-                    <strong id="totalAlertas">0</strong>
-                    <span>Alertas registradas</span>
-                </button>
+                <div class="tarjeta-resumen">
+                    <span class="tarjeta-resumen-etiqueta">Evaluación</span>
+                    <span>Registra la revisión realizada por un usuario sobre una alerta.</span>
+                </div>
 
-                <button
-                    type="button"
-                    class="tarjeta-resumen"
-                    data-resumen="despachos"
-                >
-                    <span class="tarjeta-resumen-etiqueta">
-                        Despachos
-                    </span>
-                    <strong id="totalDespachos">0</strong>
-                    <span>Intentos de notificación</span>
-                </button>
+                <div class="tarjeta-resumen">
+                    <span class="tarjeta-resumen-etiqueta">Notificación</span>
+                    <span>Registra los intentos de envío de una alerta a los destinatarios configurados.</span>
+                </div>
 
-                <button
-                    type="button"
-                    class="tarjeta-resumen"
-                    data-resumen="evaluaciones"
-                >
-                    <span class="tarjeta-resumen-etiqueta">
-                        Atenciones
-                    </span>
-                    <strong id="totalEvaluaciones">0</strong>
-                    <span>Evaluaciones realizadas</span>
-                </button>
+                <div class="tarjeta-resumen">
+                    <span class="tarjeta-resumen-etiqueta">Resumen de notificación</span>
+                    <span>Muestra el resultado general del proceso de envío de una notificación.</span>
+                </div>
 
-                <button
-                    type="button"
-                    class="tarjeta-resumen"
-                    data-resumen="tecnicos"
-                >
-                    <span class="tarjeta-resumen-etiqueta">
-                        Eventos técnicos
-                    </span>
-                    <strong id="totalTecnicos">0</strong>
-                    <span>Procesos e integraciones</span>
-                </button>
+                <div class="tarjeta-resumen">
+                    <span class="tarjeta-resumen-etiqueta">Speechmatics</span>
+                    <span>Registra eventos relacionados con la transcripción y procesamiento del audio.</span>
+                </div>
+
+                <div class="tarjeta-resumen">
+                    <span class="tarjeta-resumen-etiqueta">JEV</span>
+                    <span>Registra eventos asociados al análisis del contenido procesado por JEV.</span>
+                </div>
+
+                <div class="tarjeta-resumen">
+                    <span class="tarjeta-resumen-etiqueta">Flujo de alerta</span>
+                    <span>Registra las distintas etapas por las que pasa una alerta dentro del sistema.</span>
+                </div>
             </section>
 
             <section class="panel-bitacora">
