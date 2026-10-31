@@ -235,6 +235,7 @@ class EmailClientTests(SimpleTestCase):
     def setUp(self):
         self.payload = NotificationPayload('ALTO', 'riesgo_suicida', 'box-3', '2026-10-17T14:00:00Z')
 
+    @override_settings(NOTIFICATION_EMAIL_BACKUP_TO='backup@example.test')
     def test_local_mail_uses_separate_configured_recipients(self):
         self.assertTrue(EmailClient(["primary@example.test"]).send(self.payload).exitoso)
         self.assertEqual(mail.outbox[-1].to, ['primary@example.test'])

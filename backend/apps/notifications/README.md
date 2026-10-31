@@ -40,3 +40,91 @@ sin direcciones, contenido clínico, credenciales ni errores libres. Los eventos
 anteriores siguen consultables con `notification=null`, sin inventar conteos.
 Los intentos sin resumen por una interrupción no prueban éxito global.
 [Formato, validador y ejemplos](../../../docs/MONGODB.md#6-colección-audit_events-bitácora).
+
+## Configuración de destinatarios y respaldo
+
+La configuración operativa admite una sola modalidad principal de notificación a la vez:
+
+- `lista_distribucion`: utiliza exclusivamente el correo almacenado en `primary_email`.
+- `supervisores_activos`: resuelve dinámicamente todos los usuarios con rol Supervisor que se encuentren activos y posean un correo válido.
+
+Las modalidades son excluyentes. No se admite configurar ambas simultáneamente. Los cambios de correo, rol o estado de un usuario se reflejan en la siguiente resolución de destinatarios, sin requerir reinicio del sistema ni una sesión iniciada del supervisor.
+
+### Ejemplo: lista de distribución
+
+```json
+{
+  "notification_mode": "lista_distribucion",
+  "primary_email": "lista@example.test",
+  "backup_enabled": false,
+  "backup_email": ""
+}
+```
+
+### Ejemplo: supervisores activos
+
+```json
+{
+  "notification_mode": "supervisores_activos",
+  "primary_email": "",
+  "backup_enabled": false,
+  "backup_email": ""
+}
+```
+
+En esta modalidad no se configura manualmente una lista de supervisores. Los destinatarios se obtienen desde las cuentas vigentes del sistema. Solamente se consideran usuarios con rol Supervisor, estado activo y correo válido. Cada supervisor recibe un mensaje independiente.
+
+### Ejemplo: respaldo habilitado
+
+```json
+{
+  "notification_mode": "supervisores_activos",
+  "primary_email": "",
+  "backup_enabled": true,
+  "backup_email": "respaldo@example.test"
+}
+```
+
+Cuando el respaldo está habilitado, un fallo parcial o total de los destinatarios principales puede generar un único intento de contingencia al correo configurado en `backup_email`.
+
+Aunque fallen varios destinatarios principales, el sistema no genera un aviso de respaldo por cada fallo individual. Se ejecuta como máximo un intento de respaldo por proceso de notificación.
+
+Si todos los envíos principales son exitosos, el respaldo no se utiliza.
+
+Si el respaldo está deshabilitado, los fallos principales se registran normalmente, pero no se realiza ningún intento adicional.
+
+Los campos de correo solamente son obligatorios cuando corresponden a un destino habilitado:
+
+- `primary_email` debe contener un correo válido cuando se utiliza `lista_distribucion`.
+- `backup_email` debe contener un correo válido cuando `backup_enabled` es `true`.
+- Los correos asociados a opciones deshabilitadas pueden mantenerse guardados sin participar en el envío.
+
+## Pruebas de aceptación de destinatarios y respaldo
+
+Las pruebas de aceptación del flujo se ejecutan con:
+
+```bash
+python manage.py test backend.apps.notifications backend.apps.operational
+```
+
+La suite valida, entre otros casos:
+
+- exclusividad y persistencia de las modalidades;
+- selección exclusiva de supervisores activos;
+- actualización de destinatarios ante cambios de correo, rol o estado;
+- envío mediante lista de distribución;
+- envío independiente a múltiples supervisores;
+- ausencia de destinatarios válidos;
+- éxito total;
+- fallo parcial;
+- fallo total;
+- timeout;
+- respaldo habilitado y deshabilitado;
+- ejecución de un único respaldo ante múltiples fallos principales;
+- permisos de administración;
+- validaciones condicionales de los correos;
+- persistencia de la configuración operativa.
+
+En la ejecución de aceptación se completaron 70 pruebas sin errores.
+
+Las pruebas utilizan direcciones reservadas para testing, como `@example.test`, correo en memoria, mocks y servicios simulados. No utilizan destinatarios reales ni realizan entregas externas. Las pruebas reales de entrega SMTP y la prueba integral de captura permanecen fuera del alcance de esta validación.
