@@ -821,3 +821,74 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
     margin-bottom: 35px;
   }
 }
+
+/* Recuperación de acceso: comparte estructura y controles con el login. */
+.password-reset-card .password-requirements {
+  margin: 0 0 22px;
+  padding: 16px 18px;
+  border: 1px solid var(--borde);
+  border-radius: 11px;
+  background: rgba(232, 240, 247, 0.45);
+}
+
+.password-reset-card .checklist-title {
+  margin-bottom: 10px;
+  color: #30475e;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.password-reset-card .checklist {
+  display: grid;
+  gap: 7px;
+  list-style: none;
+}
+
+.password-reset-card .checklist-item {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  color: var(--texto-secundario);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.password-reset-card .chk-icon {
+  width: 14px;
+  flex: 0 0 14px;
+  text-align: center;
+}
+
+.password-reset-card .checklist-item.valid {
+  color: #15803d;
+}
+
+.password-reset-card .reset-back-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 0;
+  min-height: 32px;
+}
+
+.password-reset-card .toggle-password-btn[aria-pressed="true"] .eye-open {
+  display: none;
+}
+
+.password-reset-card .toggle-password-btn[aria-pressed="true"] .eye-closed {
+  display: block;
+}
+
+.password-reset-card .input-shell input:disabled {
+  background: var(--azul-claro);
+  color: var(--texto-secundario);
+  cursor: not-allowed;
+}
+
+.password-reset-card .toggle-password-btn:disabled,
+.password-reset-card .btn-primary:disabled:not([aria-busy="true"]) {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

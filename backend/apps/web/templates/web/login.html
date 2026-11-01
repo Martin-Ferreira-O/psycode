@@ -5,46 +5,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sistema de Alertas - Acceso institucional</title>
-  <link rel="stylesheet" href="{% static 'web/css/login.css' %}?v=2">
+  <link rel="stylesheet" href="{% static 'web/css/login.css' %}?v=3">
   <link rel="stylesheet" href="{% static 'web/css/estados.css' %}">
 </head>
 <body>
   <main class="login-wrapper">
-    <section class="login-visual">
-      <div class="login-university-logo"><img
-        src="{% static 'web/img/logo.png' %}"
-        alt="Universidad Autónoma de Chile">
-      </div>
-      <div class="visual-glow visual-glow-1"></div>
-      <div class="visual-glow visual-glow-2"></div>
-      <div class="visual-grid"></div>
-      <div class="visual-content">
-        <h1>Información clara para decisiones que importan.</h1>
-
-        <div class="visual-features">
-          <div class="visual-feature">
-            <span class="feature-dot"></span>
-            <span>Gestión de alertas</span>
-          </div>
-          <div class="visual-feature">
-            <span class="feature-dot"></span>
-            <span>Evaluación profesional</span>
-          </div>
-          <div class="visual-feature">
-            <span class="feature-dot"></span>
-            <span>Seguimiento centralizado</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="visual-footer">
-        <span>Plataforma institucional</span>
-        <span class="visual-status">
-          <span class="status-dot"></span>
-          Acceso seguro
-        </span>
-      </div>
-    </section>
+    {% include "web/components/auth_visual.html" %}
 
     <section class="login-panel">
       <div class="login-card">
