@@ -1,12 +1,12 @@
-"""Rutas pendientes; no devolver datos ficticios como si fueran reales."""
 from django.urls import path
 
-from .audit_api import AuditListView
+from .audit_api import AuditExportView, AuditListView
 from .views import AlertDetailView, AlertEvaluationView, AlertListView
 
 app_name = "alerts"
 
 urlpatterns = [
+    path("audit-events/export", AuditExportView.as_view(), name="audit-export"),
     path("audit-events", AuditListView.as_view(), name="audit-list"),
     path("alerts", AlertListView.as_view(), name="list"),
     path("alerts/<str:alerta_id>/evaluacion", AlertEvaluationView.as_view(), name="evaluation"),

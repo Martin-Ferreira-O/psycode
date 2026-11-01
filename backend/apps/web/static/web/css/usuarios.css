@@ -61,7 +61,7 @@
 
 .tabla-usuarios {
     width: 100%;
-    min-width: 1100px;
+    min-width: 0;
     table-layout: fixed;
     border-collapse: collapse;
 }
@@ -69,29 +69,28 @@
 .tabla-usuarios th,
 .tabla-usuarios td {
     box-sizing: border-box;
-    padding: 20px 16px;
+    padding: 16px 10px;
 
     font-family: "Segoe UI", Arial, sans-serif;
     vertical-align: middle;
 }
 
 .tabla-usuarios th {
-    height: 60px;
+    height: 56px;
 
     background: #f5f8fb;
     color: #52677c;
 
-    font-size: 15px;
+    font-size: 14px;
     font-weight: 700;
     letter-spacing: 0.2px;
 
     text-transform: uppercase;
-    white-space: nowrap;
+    white-space: normal;
 }
 
 .tabla-usuarios tbody tr {
     background: #ffffff;
-
     transition: background 0.15s ease;
 }
 
@@ -100,11 +99,11 @@
 }
 
 .tabla-usuarios tbody td {
-    height: 74px;
+    min-height: 72px;
 
     color: #263548;
 
-    font-size: 16px;
+    font-size: 15px;
     font-weight: 400;
 
     border-top: 1px solid #edf1f5;
@@ -112,12 +111,13 @@
 
 .tabla-usuarios tbody td strong {
     color: #173858;
-    font-size: 16px;
+    font-size: 15px;
     font-weight: 600;
 }
+
 .tabla-usuarios th:nth-child(1),
 .tabla-usuarios td:nth-child(1) {
-    width: 14%;
+    width: 15%;
     text-align: left;
 }
 
@@ -129,19 +129,19 @@
 
 .tabla-usuarios th:nth-child(3),
 .tabla-usuarios td:nth-child(3) {
-    width: 29%;
+    width: 31%;
     text-align: left;
 }
 
 .tabla-usuarios th:nth-child(4),
 .tabla-usuarios td:nth-child(4) {
-    width: 13%;
+    width: 11%;
     text-align: center;
 }
 
 .tabla-usuarios th:nth-child(5),
 .tabla-usuarios td:nth-child(5) {
-    width: 11%;
+    width: 10%;
     text-align: center;
 }
 
@@ -150,11 +150,36 @@
     width: 12%;
     text-align: center;
 }
+
+.tabla-usuarios th:nth-child(4),
+.tabla-usuarios td:nth-child(4),
+.tabla-usuarios th:nth-child(5),
+.tabla-usuarios td:nth-child(5),
+.tabla-usuarios th:nth-child(6),
+.tabla-usuarios td:nth-child(6) {
+    padding-left: 6px;
+    padding-right: 6px;
+}
+
+.tabla-usuarios td:nth-child(1),
+.tabla-usuarios td:nth-child(2),
+.tabla-usuarios td:nth-child(3) {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    line-height: 1.35;
+}
+
+.tabla-usuarios td:nth-child(4),
+.tabla-usuarios td:nth-child(5),
+.tabla-usuarios td:nth-child(6) {
+    white-space: nowrap;
+}
+
 .etiqueta-rol {
     display: inline-flex;
 
-    width: 118px;
-    min-width: 118px;
+    width: auto;
+    min-width: 96px;
 
     height: 34px;
     min-height: 34px;
@@ -191,8 +216,8 @@
 .etiqueta-usuario-estado {
     display: inline-flex;
 
-    width: 104px;
-    min-width: 104px;
+    width: auto;
+    min-width: 82px;
 
     height: 34px;
     min-height: 34px;
@@ -771,7 +796,8 @@
 
 @media (max-width: 1100px) {
     .tabla-usuarios {
-        min-width: 1000px;
+        width: 100%;
+        min-width: 0;
     }
 
     .panel-cabecera-usuarios {
@@ -936,6 +962,27 @@
         translateX(-50%)
         translateY(0);
 }
+
+.acciones-usuario .boton-icono-usuario:last-child::after {
+    left: auto;
+    right: 0;
+    max-width: 180px;
+    white-space: normal;
+    text-align: center;
+    transform: translateY(3px);
+}
+
+.acciones-usuario .boton-icono-usuario:last-child:hover::after,
+.acciones-usuario .boton-icono-usuario:last-child:focus-visible::after {
+    transform: translateY(0);
+}
+
+.acciones-usuario .boton-icono-usuario:last-child::before {
+    left: auto;
+    right: 9px;
+    transform: none;
+}
+
 .boton-icono-usuario::before {
     content: "";
 

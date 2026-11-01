@@ -1,4 +1,5 @@
 const URL_BITACORA = "/api/v1/audit-events";
+const URL_EXPORTAR_BITACORA = "/api/v1/audit-events/export";
 const LIMITE_PAGINA = 20;
 const LIMITE_DESCARGA = 100;
 
@@ -14,6 +15,7 @@ const elementosBitacora = {
     semanaSiguiente: document.querySelector("#semanaSiguiente"),
     fechaReferencia: document.querySelector("#fechaReferencia"),
     recargar: document.querySelector("#recargarBitacora"),
+    descargarExcel: document.querySelector("#descargarExcelBitacora"),
     formulario: document.querySelector("#formFiltros"),
     filtroAlerta: document.querySelector("#filtroAlerta"),
     filtroAccion: document.querySelector("#filtroAccion"),
@@ -829,6 +831,54 @@ function manejarEscape(evento) {
     ) {cerrarDetalle();}
 }
 
+async function descargarExcelBitacora() {
+    const boton = elementosBitacora.descargarExcel;
+
+    try {
+        if (boton) {
+            boton.disabled = true;
+            boton.querySelector("span").textContent = "Descargando...";
+        }
+
+        const response = await apiGet(URL_EXPORTAR_BITACORA);
+
+        if (!response) return;
+
+        if (!response.ok) {
+            throw new Error("No fue posible generar el archivo Excel.");
+        }
+
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+
+        const disposition = response.headers.get("Content-Disposition");
+        const coincidencia = disposition?.match(/filename="([^"]+)"/);
+
+        const nombreArchivo = coincidencia?.[1]
+            || "bitacora_eventos.xlsx";
+
+        const enlace = document.createElement("a");
+        enlace.href = url;
+        enlace.download = nombreArchivo;
+
+        document.body.appendChild(enlace);
+        enlace.click();
+        enlace.remove();
+
+        URL.revokeObjectURL(url);
+    } catch (error) {
+        alert(
+            error.message
+            || "No fue posible descargar la bitácora."
+        );
+    } finally {
+        if (boton) {
+            boton.disabled = false;
+            boton.querySelector("span").textContent = "Descargar Excel";
+        }
+    }
+}
+
 elementosBitacora.semanaAnterior?.addEventListener(
     "click",
     () => cambiarSemana(-1)
@@ -841,6 +891,10 @@ elementosBitacora.semanaSiguiente?.addEventListener("click",
 elementosBitacora.fechaReferencia?.addEventListener("change",manejarCambioFecha);
 
 elementosBitacora.recargar?.addEventListener("click",cargarBitacora);
+elementosBitacora.descargarExcel?.addEventListener(
+    "click",
+    descargarExcelBitacora
+);
 
 elementosBitacora.reintentar?.addEventListener("click",cargarBitacora);
 

@@ -922,38 +922,6 @@
     .cabecera-bitacora {min-height: auto;}
 }
 
-@media (max-width: 720px) {
-    .barra-periodo,
-    .panel-bitacora {padding: 18px;}
-
-    .periodo-controles {align-items: stretch; flex-direction: column;}
-
-    .boton-periodo,
-    .campo-fecha {width: 100%;}
-    .resumen-bitacora {grid-template-columns: 1fr;}
-    .tarjeta-resumen {min-height: 120px;}
-
-    .filtros-bitacora {grid-template-columns: 1fr;padding: 15px;}
-
-    .acciones-filtros {align-items: stretch;flex-direction: column;}
-
-    .acciones-filtros .boton-principal,
-    .acciones-filtros .boton-limpiar {width: 100%;}
-
-    .cabecera-panel-bitacora {
-        align-items: stretch;
-        flex-direction: column;
-    }
-
-    .cabecera-panel-bitacora .boton-secundario {width: 100%;}
-
-    .paginacion-bitacora {align-items: stretch; flex-direction: column;}
-
-    .botones-paginacion {width: 100%;}
-
-    .boton-paginacion {flex: 1;}
-    .panel-detalle-evento {width: 100%; padding: 22px;}
-}
 @media (prefers-reduced-motion: reduce) {
     .spinner,
     .panel-detalle-evento,
@@ -1042,4 +1010,58 @@
     --color-card: #6e7f96;
     --color-titulo: #48596f;
     --fondo-card: #f5f7fa;
+}
+.acciones-cabecera-bitacora {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
+.boton-exportar-excel {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 42px;
+    padding: 0 16px;
+    border: 1px solid #198754;
+    border-radius: 11px;
+    background: #198754;
+    color: #ffffff;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition:
+        background 0.2s ease,
+        border-color 0.2s ease,
+        transform 0.2s ease;
+}
+
+.boton-exportar-excel:hover {
+    background: #146c43;
+    border-color: #146c43;
+}
+
+.boton-exportar-excel:active {
+    transform: translateY(1px);
+}
+
+.boton-exportar-excel:disabled {
+    cursor: not-allowed;
+    opacity: 0.65;
+}
+
+.icono-descarga-excel {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
 }
