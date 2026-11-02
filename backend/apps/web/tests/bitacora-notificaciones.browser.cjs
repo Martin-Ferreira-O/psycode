@@ -44,12 +44,15 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         await page.goto(`${base}/bitacora`);
         await page.locator('#tablaEventos tr').first().waitFor();
         assert.equal(await page.locator('#tablaEventos tr').count(), 4);
+        assert.equal(await page.locator('.resumen-bitacora .tarjeta-resumen').count(), 7);
+        assert.equal(await page.locator('select#filtroAccion').count(), 1);
+        assert.equal(await page.locator('.cabecera-dashboard h1').innerText(), 'Bitácora del sistema');
         assert.match(await page.locator('#tablaEventos tr').first().innerText(), /Resumen.*Fallo parcial/s);
         const summaryBadge = page.locator('#tablaEventos tr').first().locator('.etiqueta-evento');
-        assert.equal(await summaryBadge.innerText(), 'Resumen');
+        assert.equal(await summaryBadge.innerText(), 'Resumen de notificación');
         assert.equal(await summaryBadge.getAttribute('title'), 'Resumen de notificación');
         const missingBadge = page.locator('#tablaEventos tr').nth(3).locator('.etiqueta-resultado');
-        assert.equal(await missingBadge.innerText(), 'Sin destinatarios');
+        assert.equal(await missingBadge.innerText(), 'Sin destinatarios válidos');
         assert.equal(await missingBadge.getAttribute('title'), 'Sin destinatarios válidos');
         const checkBadges = async () => {
             const overflows = await page.locator('.etiqueta-evento, .etiqueta-resultado, .etiqueta-canal').evaluateAll(labels =>
@@ -58,12 +61,11 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
                     range.selectNodeContents(label);
                     const text = range.getBoundingClientRect();
                     const badge = label.getBoundingClientRect();
-                    return Math.abs(badge.width - 118) > 1 || Math.abs(badge.height - 28) > 1 ||
-                        text.left < badge.left - 1 || text.right > badge.right + 1 ||
+                    return text.left < badge.left - 1 || text.right > badge.right + 1 ||
                         text.top < badge.top - 1 || text.bottom > badge.bottom + 1;
                 }).map(label => label.textContent)
             );
-            assert.deepEqual(overflows, [], 'las etiquetas conservan 118 × 28 px y contienen el texto');
+            assert.deepEqual(overflows, [], 'las etiquetas contienen su texto sin recortarlo');
         };
         await checkBadges();
         if (process.env.FRONTEND_SCREENSHOT_DIR) {
@@ -79,6 +81,14 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
             assert.ok((await detail.innerText()).includes(text), text);
         }
         assert.equal(await page.locator('#detalleContingencia').innerText(), 'Sí');
+        await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+        await page.locator('#copiarAlerta').click();
+        assert.equal(await page.evaluate(() => navigator.clipboard.readText()), alertId);
+        await page.locator('#cerrarDetalle').focus();
+        await page.keyboard.press('Shift+Tab');
+        assert.ok(await page.locator('#copiarEvento').evaluate(el => el === document.activeElement));
+        await page.keyboard.press('Tab');
+        assert.ok(await page.locator('#cerrarDetalle').evaluate(el => el === document.activeElement));
         if (process.env.FRONTEND_SCREENSHOT_DIR) {
             await detail.scrollIntoViewIfNeeded();
             await page.locator('#panelDetalle').screenshot({
@@ -146,7 +156,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         for (const [indice, [textoTabla, textoDetalle]] of casos.entries()) {
             const fila = page.locator('#tablaEventos tr').nth(indice);
             const celdaActor = fila.locator('td').nth(3);
-            assert.equal(await celdaActor.textContent(), textoTabla,
+            assert.equal((await celdaActor.getAttribute("aria-label")) || (await celdaActor.textContent()), textoTabla,
                 `Actor incorrecto en la tabla, fila ${indice}`);
             await fila.getByRole('button').click();
             assert.equal(await page.locator('#detalleActor').textContent(), textoDetalle,
@@ -157,7 +167,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         assert.equal(await page.locator('#tablaEventos tr').first()
             .locator('td').nth(3).textContent(), 'Ana & José');
         assert.deepEqual(errors, []);
-        console.log('OK: resumen parcial, modalidad, conteos, respaldo, ausencia de destinatarios, filtro, históricos y móvil.');
+        console.log('OK: diseño general original, tabla y detalle renovados, copia, foco, notificaciones, filtro, históricos y móvil.');
         console.log('OK SCRUM-86: nombres de usuario, Sistema, UUID de respaldo y texto seguro.');
     } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

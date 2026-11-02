@@ -9,6 +9,17 @@ const ACCIONES_TECNICAS = [
     "alerts.flow"
 ];
 
+const DESCRIPCIONES_EVENTO = {
+    "": "Consulta registros, evaluaciones, notificaciones y procesos técnicos del período.",
+    "alerts.register": "Registro de la generación de una nueva alerta en el sistema.",
+    "alerts.evaluate": "Registro de una revisión realizada por un usuario sobre una alerta.",
+    "notifications.send": "Intento de envío a un destinatario mediante un canal configurado.",
+    "notifications.result": "Resultado general del proceso de notificación, incluidos sus envíos de respaldo.",
+    "analysis.speechmatics": "Evento técnico del proceso de transcripción de audio con Speechmatics.",
+    "analysis.jev": "Evento técnico del análisis del contenido procesado por JEV.",
+    "alerts.flow": "Registro de una etapa del procesamiento de una alerta."
+};
+
 const elementosBitacora = {
     periodoActual: document.querySelector("#periodoActual"),
     semanaAnterior: document.querySelector("#semanaAnterior"),
@@ -63,6 +74,26 @@ let totalActual = 0;
 let eventoSeleccionado = null;
 let focoAnterior = null;
 let numeroCarga = 0;
+
+const porId = (id) => document.getElementById(id);
+function icono(nombre) {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("aria-hidden", "true");
+    const uso = document.createElementNS(svg.namespaceURI, "use");
+    uso.setAttribute("href", `#i-${nombre}`);
+    svg.append(uso);
+    return svg;
+}
+function nodo(etiqueta, clase, texto) {
+    const elemento = document.createElement(etiqueta);
+    if (clase) elemento.className = clase;
+    if (texto !== undefined) elemento.textContent = texto;
+    return elemento;
+}
+function abreviarId(id) { return id.length > 16 ? `${id.slice(0, 8)}…${id.slice(-4)}` : id; }
+function horaChile(fecha, opciones) {
+    return new Intl.DateTimeFormat("es-CL", { timeZone: "America/Santiago", ...opciones }).format(fecha);
+}
 
 function mostrar(elemento) {
     if (elemento) elemento.hidden = false;
@@ -456,21 +487,26 @@ function crearCelda(texto = "") {
 }
 
 function crearCeldaFecha(evento) {
-    const celda = document.createElement("td");
-    celda.className = "celda-fecha";
-    celda.textContent = formatearFechaEvento(evento.timestamp);
+    const celda = nodo("td", "celda-fecha");
+    const fecha = new Date(evento.timestamp);
+    if (!evento.timestamp || Number.isNaN(fecha.getTime())) { celda.textContent = "Fecha no registrada"; return celda; }
+    const tiempo = nodo("time");
+    tiempo.dateTime = evento.timestamp;
+    tiempo.append(nodo("strong", "", horaChile(fecha, {day: "2-digit", month: "short"})),
+        nodo("span", "celda-secundaria", horaChile(fecha, {hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false})));
+    tiempo.title = formatearFechaEvento(evento.timestamp);
+    tiempo.setAttribute("aria-label", tiempo.title);
+    celda.append(tiempo);
     return celda;
 }
-
 function crearCeldaAccion(evento) {
-    const celda = document.createElement("td");
-    const etiqueta = document.createElement("span");
-
-    etiqueta.className = "etiqueta-evento";
+    const celda = nodo("td");
+    const etiqueta = nodo("span", "etiqueta-evento", textoAccion(evento.action));
     etiqueta.title = textoAccion(evento.action);
-    etiqueta.textContent = evento.action === "notifications.result" ? "Resumen" : etiqueta.title;
-    celda.setAttribute("aria-label", etiqueta.title);
-    celda.appendChild(etiqueta);
+    celda.append(etiqueta);
+    const fase = {principal: "Principal", respaldo: "Respaldo", resumen: "Resumen de envíos"}[evento.notification?.phase];
+    const contexto = [evento.channel ? textoCanal(evento.channel) : null, fase].filter(Boolean);
+    if (contexto.length) celda.append(nodo("span", "celda-secundaria etiqueta-canal", contexto.join(" · ")));
     return celda;
 }
 
@@ -490,8 +526,8 @@ function crearCeldaResultado(evento) {
         `etiqueta-resultado ${claseResultado(evento.outcome)}`;
 
     etiqueta.title = textoResultadoEvento(evento);
-    etiqueta.textContent = evento.notification?.status === "SIN_DESTINATARIOS_VALIDOS"
-        ? "Sin destinatarios" : etiqueta.title;
+    etiqueta.append(icono(evento.outcome === "failure" ? "warning" : evento.outcome === "success" ? "check" : "minus"),
+        nodo("span", "", etiqueta.title));
     celda.setAttribute("aria-label", etiqueta.title);
 
     celda.appendChild(etiqueta);
@@ -509,24 +545,10 @@ function crearCeldaAlerta(evento) {
     const identificador = document.createElement("span");
 
     identificador.className = "id-recortado";
-    identificador.textContent = evento.alerta_id;
+    identificador.textContent = abreviarId(evento.alerta_id);
+    identificador.setAttribute("aria-label", `ID de alerta ${evento.alerta_id}. Valor completo disponible en el detalle.`);
     identificador.title = evento.alerta_id;
     celda.appendChild(identificador);
-    return celda;
-}
-
-function crearCeldaCanal(evento) {
-    const celda = document.createElement("td");
-
-    if (!evento.channel) {
-        celda.textContent = "—";
-        return celda;
-    }
-
-    const etiqueta = document.createElement("span");
-    etiqueta.className = "etiqueta-canal";
-    etiqueta.textContent = textoCanal(evento.channel);
-    celda.appendChild(etiqueta);
     return celda;
 }
 
@@ -536,10 +558,10 @@ function crearCeldaDetalle(evento) {
 
     boton.type = "button";
     boton.className = "boton-detalle-evento";
-    boton.textContent = "Ver detalle";
+    boton.append(icono("arrow"));
     boton.setAttribute(
         "aria-label",
-        `Ver detalle del evento ${textoAccion(evento.action)}`
+        `Ver detalle: ${textoAccion(evento.action)}, ${formatearFechaEvento(evento.timestamp)}`
     );
 
     boton.addEventListener("click", () => {
@@ -555,13 +577,19 @@ function renderizarEventos(eventos) {
 
     for (const evento of eventos) {
         const fila = document.createElement("tr");
+        fila.dataset.resultado = evento.outcome;
 
         fila.appendChild(crearCeldaFecha(evento));
         fila.appendChild(crearCeldaAccion(evento));
         fila.appendChild(crearCeldaResultado(evento));
-        fila.appendChild(crearCelda(textoActor(evento)));
+        const actor = crearCelda(textoActor(evento));
+        if (evento.actor_id && textoActor(evento) === `Usuario (${evento.actor_id})`) {
+            actor.textContent = `Usuario (${abreviarId(evento.actor_id)})`;
+            actor.title = textoActor(evento);
+            actor.setAttribute("aria-label", textoActor(evento));
+        }
+        fila.appendChild(actor);
         fila.appendChild(crearCeldaAlerta(evento));
-        fila.appendChild(crearCeldaCanal(evento));
         fila.appendChild(crearCeldaDetalle(evento));
 
         elementosBitacora.tabla.appendChild(fila);
@@ -710,6 +738,15 @@ function irPaginaSiguiente() {
 
 function abrirDetalle(evento, elementoOrigen) {
     eventoSeleccionado = evento;
+    porId("detalleId").textContent = evento.event_id || "No registrado";
+    porId("detalleAccionTecnica").textContent = evento.action || "No registrada";
+    porId("explicacionEvento").textContent = `${DESCRIPCIONES_EVENTO[evento.action] || "Evento registrado en el sistema."} Resultado de ejecución: ${textoResultadoEvento(evento).toLowerCase()}.`;
+    porId("detalleResultado").className = `etiqueta-resultado ${claseResultado(evento.outcome)}`;
+    porId("copiarAlerta").hidden = !evento.alerta_id;
+    porId("copiarEvento").hidden = !evento.event_id;
+    porId("alcanceRelacion").hidden = !evento.alerta_id;
+    porId("seccionNotificacion").hidden = !evento.notification;
+    porId("estadoCopia").textContent = "";
     focoAnterior = elementoOrigen || document.activeElement;
 
     elementosBitacora.detalleFecha.textContent =
@@ -760,8 +797,10 @@ function abrirDetalle(evento, elementoOrigen) {
     mostrar(elementosBitacora.detalleFondo);
 
     document.body.style.overflow = "hidden";
+    porId("aplicacionBitacora").inert = true;
 
-    setTimeout(() => {elementosBitacora.cerrarDetalle.focus();}, 0);
+    elementosBitacora.panelDetalle.scrollTop = 0;
+    elementosBitacora.cerrarDetalle.focus();
 }
 
 function mostrarDetalleNotificacion(notificacion) {
@@ -778,23 +817,23 @@ function mostrarDetalleNotificacion(notificacion) {
     };
     const datos = [
         ["ID de notificación", notificacion.id],
-        ["Modalidad principal", modos[notificacion.mode] || "Sin configuración válida"],
+        ["Modalidad principal", modos[notificacion.mode] || "No registrada"],
         ["Etapa", fases[notificacion.phase] || "—"],
-        ["Motivo", motivos[notificacion.reason] || (notificacion.phase === "resumen" ? "Sin fallos principales" : "No aplica")]
+        ["Motivo", motivos[notificacion.reason] || "No registrado"]
     ];
     if (notificacion.attempt !== undefined) datos.push(["Número de intento", notificacion.attempt]);
     if (notificacion.phase === "resumen") {
-        const conteos = (exitos, fallos) => `${exitos} ${exitos === 1 ? "éxito" : "éxitos"} · ${fallos} ${fallos === 1 ? "fallo" : "fallos"}`;
+        const conteos = (exitos, fallos) => Number.isFinite(exitos) && Number.isFinite(fallos) ? `${exitos} ${exitos === 1 ? "éxito" : "éxitos"} · ${fallos} ${fallos === 1 ? "fallo" : "fallos"}` : "Conteos no registrados";
         datos.push(["Envíos principales", conteos(notificacion.primary_successes, notificacion.primary_failures)]);
         datos.push(["Envíos de respaldo", conteos(notificacion.backup_successes, notificacion.backup_failures)]);
     }
     for (const [etiqueta, valor] of datos) {
         const dato = document.createElement("div");
-        dato.className = "dato-detalle";
+        dato.className = etiqueta === "ID de notificación" ? "dato-detalle dato-completo" : "dato-detalle";
         const nombre = document.createElement("span");
         nombre.textContent = etiqueta;
         const contenido = document.createElement("strong");
-        contenido.textContent = valor;
+        contenido.textContent = valor ?? "No registrado";
         dato.append(nombre, contenido);
         contenedor.appendChild(dato);
     }
@@ -804,10 +843,11 @@ function cerrarDetalle() {
     ocultar(elementosBitacora.detalleFondo);
 
     document.body.style.overflow = "";
+    porId("aplicacionBitacora").inert = false;
 
     eventoSeleccionado = null;
 
-    if (focoAnterior) {focoAnterior.focus();}
+    if (focoAnterior?.isConnected) {focoAnterior.focus();}
 }
 
 function consultarEventosAlerta() {
@@ -817,9 +857,11 @@ function consultarEventosAlerta() {
         eventoSeleccionado.alerta_id;
 
     elementosBitacora.filtroAccion.value = "";
+    elementosBitacora.filtroResultado.value = "";
     offsetActual = 0;
     cerrarDetalle();
     cargarBitacora();
+    elementosBitacora.filtroAlerta.focus();
 }
 
 function manejarEscape(evento) {
@@ -919,6 +961,30 @@ elementosBitacora.detalleFondo?.addEventListener(
     }
 );
 document.addEventListener("keydown",manejarEscape);
+async function copiarIdentificador(clave, boton) {
+    const valor = eventoSeleccionado?.[clave];
+    if (!valor) return;
+    try {
+        await navigator.clipboard.writeText(valor);
+        boton.replaceChildren(icono("check"));
+        porId("estadoCopia").textContent = "Identificador copiado.";
+        setTimeout(() => boton.replaceChildren(icono("copy")), 1800);
+    } catch {
+        porId("estadoCopia").textContent = "No se pudo copiar. Selecciona el identificador completo para copiarlo manualmente.";
+        const rango = document.createRange();
+        rango.selectNodeContents(porId(clave === "alerta_id" ? "detalleAlerta" : "detalleId"));
+        const seleccion = window.getSelection(); seleccion.removeAllRanges(); seleccion.addRange(rango);
+    }
+}
+porId("copiarAlerta").addEventListener("click", e => copiarIdentificador("alerta_id", e.currentTarget));
+porId("copiarEvento").addEventListener("click", e => copiarIdentificador("event_id", e.currentTarget));
+document.addEventListener("keydown", e => {
+    if (elementosBitacora.detalleFondo.hidden || e.key !== "Tab") return;
+    const controles = [...elementosBitacora.panelDetalle.querySelectorAll("button, summary, [tabindex='0']")].filter(el => el.getClientRects().length && !el.disabled);
+    const primero = controles[0], ultimo = controles.at(-1);
+    if (e.shiftKey && document.activeElement === primero) { e.preventDefault(); ultimo.focus(); }
+    else if (!e.shiftKey && document.activeElement === ultimo) { e.preventDefault(); primero.focus(); }
+});
 fechaReferencia = new Date();
 elementosBitacora.filtroOrden.value = "desc";
 

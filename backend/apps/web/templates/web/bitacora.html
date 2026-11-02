@@ -11,11 +11,19 @@
     <link rel="stylesheet" href="{% static 'web/css/styles.css' %}">
     <link rel="stylesheet" href="{% static 'web/css/dashboard.css' %}?v=5">
     <link rel="stylesheet" href="{% static 'web/css/estados.css' %}">
-    <link rel="stylesheet" href="{% static 'web/css/bitacora.css' %}?v=7">
+    <link rel="stylesheet" href="{% static 'web/css/bitacora.css' %}?v=9">
 </head>
 
 <body>
-    <div class="aplicacion">
+    <svg class="iconos-eventos" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>
+        <symbol id="i-arrow" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></symbol>
+        <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
+        <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V3H3v13h5"/></symbol>
+        <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+        <symbol id="i-warning" viewBox="0 0 24 24"><path d="m12 3 10 18H2L12 3Z M12 9v5m0 3v.01"/></symbol>
+        <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+    </defs></svg>
+    <div class="aplicacion" id="aplicacionBitacora">
         {% include "web/components/sidebar.html" with seccion_activa="bitacora" %}
 
         <main class="contenido-dashboard contenido-bitacora">
@@ -352,27 +360,7 @@
                     </span>
                 </div>
 
-                <div
-                    class="contenedor-tabla-bitacora"
-                    id="contenedorTabla"
-                >
-                    <table class="tabla-bitacora">
-                        <thead>
-                            <tr>
-                                <th>Fecha y hora</th>
-                                <th>Acción</th>
-                                <th>Resultado</th>
-                                <th>Actor</th>
-                                <th>Alerta</th>
-                                <th>Canal</th>
-                                <th>Detalle</th>
-                            </tr>
-                        </thead>
-
-                        <tbody id="tablaEventos"></tbody>
-                    </table>
-                </div>
-
+                <div class="contenedor-tabla-bitacora bitacora-eventos" id="contenedorTabla" hidden><table class="tabla-bitacora"><caption class="sr-only">Eventos consultados. Las horas corresponden a Chile. Abre un detalle para consultar los identificadores completos.</caption><thead><tr><th scope="col">Momento</th><th scope="col">Evento / canal</th><th scope="col">Resultado</th><th scope="col">Responsable</th><th scope="col">Alerta vinculada</th><th scope="col"><span class="sr-only">Detalle del evento</span></th></tr></thead><tbody id="tablaEventos"></tbody></table></div>
                 <div
                     class="paginacion-bitacora"
                     id="paginacionBitacora"
@@ -405,113 +393,20 @@
         </main>
     </div>
 
-    <div
-        class="panel-detalle-fondo"
-        id="detalleFondo"
-        hidden
-    >
-        <aside
-            class="panel-detalle-evento"
-            id="panelDetalle"
-            aria-labelledby="tituloDetalleEvento"
-            aria-modal="true"
-            role="dialog"
-        >
-            <div class="cabecera-detalle-evento">
-                <div>
-                    <h2 id="tituloDetalleEvento">
-                        Detalle del evento
-                    </h2>
-                </div>
-
-                <button
-                    type="button"
-                    class="boton-cerrar-detalle"
-                    id="cerrarDetalle"
-                    aria-label="Cerrar detalle"
-                >
-                    ×
-                </button>
-            </div>
-
-            <div class="contenido-detalle-evento">
-                <div class="dato-detalle">
-                    <span>Fecha y hora</span>
-                    <strong id="detalleFecha">—</strong>
-                </div>
-
-                <div class="dato-detalle">
-                    <span>Acción</span>
-                    <strong id="detalleAccion">—</strong>
-                </div>
-
-                <div class="dato-detalle">
-                    <span>Resultado</span>
-                    <strong id="detalleResultado">—</strong>
-                </div>
-
-                <div class="dato-detalle">
-                    <span>Actor</span>
-                    <strong id="detalleActor">—</strong>
-                </div>
-
-                <div class="dato-detalle">
-                    <span>ID de alerta</span>
-                    <strong id="detalleAlerta">—</strong>
-                </div>
-
-                <div class="dato-detalle">
-                    <span>ID de sesión</span>
-                    <strong id="detalleSesion">—</strong>
-                </div>
-
-                <div class="dato-detalle">
-                    <span>Secuencia</span>
-                    <strong id="detalleSecuencia">—</strong>
-                </div>
-
-                <div class="dato-detalle">
-                    <span>Canal</span>
-                    <strong id="detalleCanal">—</strong>
-                </div>
-
-                <div class="dato-detalle">
-                    <span>Código de error</span>
-                    <strong id="detalleError">—</strong>
-                </div>
-
-                <div class="dato-detalle">
-                    <span>Duración</span>
-                    <strong id="detalleDuracion">—</strong>
-                </div>
-
-                <div class="dato-detalle">
-                    <span>Uso del respaldo</span>
-                    <strong id="detalleContingencia">—</strong>
-                </div>
-            </div>
-
-            <div
-                class="contenido-detalle-evento"
-                id="detalleNotificacion"
-                hidden
-            ></div>
-
-            <button
-                type="button"
-                class="boton-principal boton-ver-alerta"
-                id="verEventosAlerta"
-                hidden
-            >
-                Ver eventos relacionados con esta alerta
-            </button>
+    <div class="panel-detalle-fondo detalle-bitacora" id="detalleFondo" hidden>
+        <aside class="panel-detalle-evento" id="panelDetalle" aria-labelledby="tituloDetalleEvento" aria-describedby="explicacionEvento" aria-modal="true" role="dialog" tabindex="-1">
+            <div class="cabecera-detalle-evento"><div><span class="sobrelinea">INSPECCIÓN DEL REGISTRO</span><h2 id="tituloDetalleEvento">Detalle del evento</h2></div><button type="button" class="boton-icono" id="cerrarDetalle" aria-label="Cerrar detalle"><svg aria-hidden="true"><use href="#i-close"/></svg></button></div>
+            <div class="detalle-resumen"><span id="detalleResultado" class="etiqueta-resultado">—</span><h3 id="detalleAccion">—</h3><p id="explicacionEvento"></p><span id="detalleFecha">—</span></div>
+            <div class="seccion-detalle"><h3>Contexto del evento</h3><div class="contenido-detalle-evento"><div class="dato-detalle"><span>Responsable</span><strong id="detalleActor">—</strong></div><div class="dato-detalle"><span>Canal</span><strong id="detalleCanal">—</strong></div><div class="dato-detalle dato-completo"><span>ID de alerta</span><div class="identificador-detalle"><strong id="detalleAlerta">—</strong><button type="button" class="boton-icono" id="copiarAlerta" aria-label="Copiar ID de alerta"><svg aria-hidden="true"><use href="#i-copy"/></svg></button></div></div></div><button type="button" class="boton-principal boton-ver-alerta" id="verEventosAlerta" hidden>Seguir esta alerta en el período<svg aria-hidden="true"><use href="#i-arrow"/></svg></button><p id="alcanceRelacion" class="nota-detalle" hidden>Consulta la misma alerta en todas las categorías y resultados. Se conserva el período y el orden.</p></div>
+            <section class="seccion-detalle" id="seccionNotificacion" hidden><h3>Proceso de notificación</h3><div class="contenido-detalle-evento" id="detalleNotificacion" hidden></div></section>
+            <details class="seccion-detalle datos-tecnicos" open><summary>Datos técnicos</summary><div class="contenido-detalle-evento"><div class="dato-detalle dato-completo"><span>ID del evento</span><div class="identificador-detalle"><strong id="detalleId">—</strong><button type="button" class="boton-icono" id="copiarEvento" aria-label="Copiar ID del evento"><svg aria-hidden="true"><use href="#i-copy"/></svg></button></div></div><div class="dato-detalle dato-completo"><span>ID de sesión</span><strong id="detalleSesion">—</strong></div><div class="dato-detalle"><span>Secuencia</span><strong id="detalleSecuencia">—</strong></div><div class="dato-detalle"><span>Duración</span><strong id="detalleDuracion">—</strong></div><div class="dato-detalle"><span>Código de error técnico</span><strong id="detalleError">—</strong></div><div class="dato-detalle"><span>Uso del respaldo</span><strong id="detalleContingencia">—</strong></div><div class="dato-detalle dato-completo"><span>Acción registrada</span><strong id="detalleAccionTecnica">—</strong></div></div></details>
+            <div class="detalle-pie">El resultado operativo no indica severidad clínica.</div><p id="estadoCopia" class="sr-only" role="status"></p>
         </aside>
     </div>
-
     <script src="{% static 'web/js/solicitudes.js' %}"></script>
     <script src="{% static 'web/js/estados.js' %}"></script>
     <script src="{% static 'web/js/api.js' %}"></script>
     <script src="{% static 'web/js/components.js' %}"></script>
-    <script src="{% static 'web/js/bitacora.js' %}?v=3"></script>
+    <script src="{% static 'web/js/bitacora.js' %}?v=5"></script>
 </body>
 </html>
