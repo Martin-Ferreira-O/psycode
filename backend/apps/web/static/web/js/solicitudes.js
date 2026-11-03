@@ -1,3 +1,11 @@
+function cabecerasNavegador(iniciales = {}) {
+    const headers = new Headers(iniciales);
+    headers.set("X-Psycode-Browser", "1");
+    const csrf = document.cookie.split("; ").find(c => c.startsWith("csrftoken="));
+    if (csrf) headers.set("X-CSRFToken", decodeURIComponent(csrf.slice("csrftoken=".length)));
+    return headers;
+}
+
 // Traducción de transporte: nunca se muestra el cuerpo de error de la API.
 class ErrorSolicitud extends Error {
     constructor(estado = null, codigo = "RESPUESTA_INVALIDA") {

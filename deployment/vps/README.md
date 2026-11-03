@@ -52,6 +52,12 @@ Las versiones comparten estos datos; un despliegue no copia `.env` desde Git ni
 reemplaza las credenciales. Nginx sirve únicamente los estáticos y el proxy ASGI;
 no publica estos directorios privados. ASGI escucha solo en `127.0.0.1:8000`.
 
+El login tiene límites SQL por IP/cuenta y usa cookies HttpOnly con CSRF en el
+navegador. Las variables nuevas tienen valores seguros por defecto; el despliegue
+crea la tabla de contadores con las migraciones. Consultar [seguridad del
+acceso](../../docs/SEGURIDAD-AUTENTICACION.md), incluido el comando opcional de
+mantenimiento diario `cleanup_auth_rate_limits`.
+
 La configuración inicial deja deshabilitados los proveedores externos y las
 notificaciones; el correo se escribe en archivos privados. No se copian claves
 del entorno local. Para conectarse con agentes reales, configurar `CAPTURE_AGENTS`

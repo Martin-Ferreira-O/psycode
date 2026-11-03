@@ -29,6 +29,8 @@ def exception_handler(exc, context):
     headers = {}
     if isinstance(exc, ServiceError):
         status, code, message, details = exc.status, exc.code, exc.message, exc.details
+        if status == 429 and "retry_after" in details:
+            headers["Retry-After"] = str(details["retry_after"])
     elif isinstance(exc, (OperationalError, InterfaceError)):
         status, code, message, details = 503, "PERSISTENCE_UNAVAILABLE", "Persistencia no disponible", {}
     else:

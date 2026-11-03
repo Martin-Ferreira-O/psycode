@@ -1,13 +1,19 @@
 import time
 from uuid import UUID
 
+from django.conf import settings
+from django.middleware.csrf import rotate_token
 from rest_framework import serializers
+from rest_framework.authentication import SessionAuthentication
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.views import APIView
 
 from backend.common.audit import AuditWriter
+from backend.common.errors import ServiceError
 from backend.common.responses import success_response
 
+from .browser_sessions import REFRESH_COOKIE, clear_browser_session, is_browser_request, set_browser_session
+from .rate_limits import consume_auth_attempt
 from .serializers import (
     AdminUserCreateSerializer,
     AdminUserUpdateSerializer,
@@ -23,6 +29,8 @@ class AccountsView(APIView):
 
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)
+        if is_browser_request(request):
+            SessionAuthentication().enforce_csrf(request)
         if request.query_params:
             raise serializers.ValidationError({"query": ["Esta operación no acepta parámetros de consulta."]})
         if request.method in {"GET", "HEAD"} and request.body:
@@ -30,7 +38,16 @@ class AccountsView(APIView):
 
     def perform(self, method, serializer_type, message, status=200, user_argument=False, client_ip=False):
         try:
-            serializer = serializer_type(data=self.request.data)
+            data = self.request.data
+            browser = is_browser_request(self.request)
+            if browser and method in {"refresh", "logout"}:
+                if data != {}:
+                    raise serializers.ValidationError({"body": ["Esta operación requiere un objeto vacío."]})
+                raw = self.request.COOKIES.get(REFRESH_COOKIE)
+                if not raw:
+                    raise ServiceError("AUTH_INVALID_REFRESH_TOKEN", "Sesión inválida", 401)
+                data = {"refresh_token": raw}
+            serializer = serializer_type(data=data)
             serializer.is_valid(raise_exception=True)
             kwargs = dict(serializer.validated_data)
             if user_argument:
@@ -43,20 +60,50 @@ class AccountsView(APIView):
             raise
         actor = getattr(self.request.user, "pk", None)
         AuditWriter.record("auth." + method, "success", actor_id=actor)
+        if browser and method in {"login", "refresh"}:
+            response = success_response({"authenticated": True}, message, status)
+            set_browser_session(response, data)
+            if method == "login":
+                rotate_token(self.request)
+            return response
+        if browser and method == "logout":
+            response = success_response({}, message, status)
+            clear_browser_session(response)
+            return response
         return success_response(data if data is not None else {}, message, status)
 
 
 class PublicAccountsView(AccountsView):
     authentication_classes = []
     permission_classes = [AllowAny]
+    rate_scope = None
+
+    def initial(self, request, *args, **kwargs):
+        if request.method == "POST" and self.rate_scope:
+            limit = {
+                "login": settings.AUTH_LOGIN_IP_LIMIT,
+                "refresh": settings.AUTH_REFRESH_IP_LIMIT,
+                "reset": settings.AUTH_RESET_IP_LIMIT,
+                "reset-confirm": settings.AUTH_RESET_IP_LIMIT,
+            }[self.rate_scope]
+            consume_auth_attempt(
+                self.rate_scope + ".ip", request.META.get("REMOTE_ADDR", ""), limit=limit,
+                seconds=(settings.AUTH_LOGIN_WINDOW_SECONDS if self.rate_scope == "login"
+                         else settings.AUTH_OTHER_WINDOW_SECONDS),
+            )
+        super().initial(request, *args, **kwargs)
 
 
 class LoginView(PublicAccountsView):
+    rate_scope = "login"
+
     def post(self, request):
         return self.perform("login", LoginSerializer, "Sesión iniciada")
 
 
 class RefreshView(PublicAccountsView):
+    rate_scope = "refresh"
+
     def post(self, request):
         return self.perform("refresh", RefreshSerializer, "Sesión renovada")
 
@@ -72,6 +119,8 @@ class MeView(AccountsView):
 
 
 class PasswordResetView(PublicAccountsView):
+    rate_scope = "reset"
+
     def post(self, request):
         started = time.monotonic()
         response = self.perform(
@@ -86,6 +135,8 @@ class PasswordResetView(PublicAccountsView):
 
 
 class PasswordResetConfirmView(PublicAccountsView):
+    rate_scope = "reset-confirm"
+
     def post(self, request):
         return self.perform("confirm_password_reset", PasswordResetConfirmSerializer, "Contraseña actualizada")
 

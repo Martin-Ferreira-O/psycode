@@ -1,122 +1,61 @@
-//Este archivo contiene funciones compartidas para autenticación y solicitudes a la API.
-
-function obtenerAccessToken() {
-    return localStorage.getItem("access_token");
-}
-
-
-function obtenerRefreshToken() {
-    return localStorage.getItem("refresh_token");
-}
-
-
-function limpiarSesion() {
+// Las credenciales solo viajan en cookies HttpOnly; nunca se leen desde JavaScript.
+function retirarTokensAntiguos() {
     localStorage.removeItem("access_token");
     localStorage.removeItem("refresh_token");
+}
+
+function limpiarSesion() {
+    retirarTokensAntiguos();
     sessionStorage.clear();
 }
 
+// Retira las credenciales persistentes de versiones anteriores.
+retirarTokensAntiguos();
 
 function redirigirAlLogin() {
     limpiarSesion();
-
-    if (window.location.pathname !== "/") {
-        window.location.replace("/");
-    }
-}
-
-
-function verificarSesion() {
-    const token = obtenerAccessToken();
-
-    if (!token) {
-        redirigirAlLogin();
-        return false;
-    }
-
-    return true;
+    if (window.location.pathname !== "/") window.location.replace("/");
 }
 
 let solicitudRenovacion = null;
+let revisionSesion = 0;
 
 async function renovarSesion() {
-    const refreshToken = obtenerRefreshToken();
-    if (!refreshToken) {
-        return false;
-    }
-
     if (!solicitudRenovacion) {
         solicitudRenovacion = (async () => {
             try {
                 const response = await fetch("/api/v1/auth/refresh", {
                     method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        Accept: "application/json",
-                    },
-                    body: JSON.stringify({ refresh_token: refreshToken }),
+                    credentials: "same-origin",
+                    headers: cabecerasNavegador({ "Content-Type": "application/json" }),
+                    body: "{}",
                 });
-                if ([400, 401, 403].includes(response.status)) {
-                    return false;
-                }
-                if (!response.ok) {
-                    return null;
-                }
-
+                if ([400, 401, 403].includes(response.status)) return false;
+                if (!response.ok) return null;
                 const body = await response.json();
-                const tokens = body.data;
-                if (!body.success || !tokens?.access_token || !tokens?.refresh_token) {
-                    return false;
-                }
-
-                localStorage.setItem("access_token", tokens.access_token);
-                localStorage.setItem("refresh_token", tokens.refresh_token);
+                if (!body.success || body.data?.authenticated !== true) return false;
+                revisionSesion++;
                 return true;
-            } catch (error) {
+            } catch {
                 return null;
             } finally {
                 solicitudRenovacion = null;
             }
         })();
     }
-
     return solicitudRenovacion;
 }
 
-
 async function apiRequest(url, opciones = {}) {
-    const token = obtenerAccessToken();
-
-    if (!token) {
-        redirigirAlLogin();
-        return null;
-    }
-
-    const headers = new Headers(
-        opciones.headers || {}
-    );
-
-    headers.set(
-        "Authorization",
-        `Bearer ${token}`
-    );
-
-    if (!headers.has("Accept")) {
-        headers.set(
-            "Accept",
-            "application/json"
-        );
-    }
-
-    const response = await fetch(url, { ...opciones, headers });
-
+    const revision = revisionSesion;
+    const headers = cabecerasNavegador(opciones.headers);
+    if (!headers.has("Accept")) headers.set("Accept", "application/json");
+    const opcionesSeguras = { ...opciones, headers, credentials: "same-origin" };
+    const response = await fetch(url, opcionesSeguras);
     if (response.status === 401) {
-        const renovada = obtenerAccessToken() !== token
-            ? true
-            : await renovarSesion();
+        const renovada = revisionSesion !== revision ? true : await renovarSesion();
         if (renovada === true) {
-            headers.set("Authorization", `Bearer ${obtenerAccessToken()}`);
-            const reintentada = await fetch(url, { ...opciones, headers });
+            const reintentada = await fetch(url, opcionesSeguras);
             if (reintentada.status === 401) {
                 redirigirAlLogin();
                 return null;
@@ -128,10 +67,8 @@ async function apiRequest(url, opciones = {}) {
             return null;
         }
     }
-
     return response;
 }
-
 
 async function apiGet(url, opciones = {}) {
     return apiRequest(url, {
@@ -173,38 +110,19 @@ async function apiPost(
 
 
 async function cerrarSesion() {
-    const refreshToken =
-        obtenerRefreshToken();
-
     try {
-        if (
-            refreshToken &&
-            obtenerAccessToken()
-        ) {
-            await apiPost(
-                "/api/v1/auth/logout",
-                {
-                    refresh_token:
-                        refreshToken,
-                }
-            );
-        }
-    } catch (error) {
-        console.error(
-            "Error al cerrar sesión:",
-            error
-        );
-    } finally {
+        const response = await apiPost("/api/v1/auth/logout", {});
+        if (response && !response.ok) throw new Error("Logout no confirmado");
         redirigirAlLogin();
+    } catch {
+        window.alert("No se pudo cerrar la sesión. Revisa tu conexión e inténtalo nuevamente antes de dejar el equipo.");
     }
 }
 
-window.addEventListener(
-    "pageshow",
-    () => {
-        verificarSesion();
-    }
-);
+window.addEventListener("pageshow", () => {
+    apiGet("/api/v1/auth/me").catch(() => {});
+});
+
 // Mantiene apiGet/apiPost compatibles con consumidores que necesitan Response.
 async function apiGetDatos(url, opciones = {}) {
     return solicitarJson(url, { ...opciones, method: "GET" }, apiRequest);

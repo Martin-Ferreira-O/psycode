@@ -22,11 +22,11 @@ class StrictSerializer(serializers.Serializer):
 
 class LoginSerializer(StrictSerializer):
     usuario = StrictStringField(max_length=254)
-    password = StrictStringField(trim_whitespace=False, write_only=True)
+    password = StrictStringField(max_length=1024, trim_whitespace=False, write_only=True)
 
 
 class RefreshSerializer(StrictSerializer):
-    refresh_token = StrictStringField(trim_whitespace=False, write_only=True)
+    refresh_token = StrictStringField(max_length=4096, trim_whitespace=False, write_only=True)
 
 
 class PasswordResetSerializer(StrictSerializer):
@@ -37,8 +37,8 @@ class PasswordResetSerializer(StrictSerializer):
 
 
 class PasswordResetConfirmSerializer(StrictSerializer):
-    token = StrictStringField(trim_whitespace=False, write_only=True)
-    nueva_password = StrictStringField(trim_whitespace=False, write_only=True)
+    token = StrictStringField(max_length=128, trim_whitespace=False, write_only=True)
+    nueva_password = StrictStringField(max_length=1024, trim_whitespace=False, write_only=True)
 
 
 
@@ -46,7 +46,7 @@ class AdminUserCreateSerializer(StrictSerializer):
     usuario = StrictStringField(max_length=150)
     nombre = StrictStringField(max_length=150)
     correo = StrictStringField(max_length=254)
-    password = StrictStringField(trim_whitespace=False, write_only=True)
+    password = StrictStringField(max_length=1024, trim_whitespace=False, write_only=True)
     rol = serializers.ChoiceField(choices=Role.choices, default=Role.SUPERVISOR)
     activo = serializers.BooleanField(default=True)
 

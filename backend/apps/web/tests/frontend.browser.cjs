@@ -20,6 +20,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
             status: 200, contentType: 'application/json',
             body: JSON.stringify({ success: true, data: { usuario: 'supervisor-sintetico', rol: 'supervisor' } }),
         }));
+        await page.route('**/api/v1/auth/refresh', route => route.fulfill({ status: 401 }));
         await page.route('**/api/v1/auth/login', async route => {
             peticiones++;
             if (liberar === null) await new Promise(resolve => { liberar = resolve; });
@@ -47,7 +48,6 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         assert.equal(new URL(page.url()).pathname, '/');
         assert.equal(await page.locator('body').innerText().then(t => t.includes('TRAZA_PRIVADA')), false);
 
-        await page.evaluate(() => localStorage.setItem('access_token', 'token-sintetico'));
         estado = 503;
         liberar = null;
         await page.route('**/api/v1/alerts?revisadas=true', async route => {
@@ -112,7 +112,6 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
             }
             await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, data }) });
         });
-        await page.evaluate(() => localStorage.setItem('access_token', 'token-sintetico'));
         await page.goto(`${base}/dashboard`);
         await page.locator('[data-alerta]').first().waitFor();
         await page.locator('#buscar').fill('sin coincidencias');

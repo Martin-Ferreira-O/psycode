@@ -112,6 +112,12 @@ Se comprueba usuario activo también al renovar y en cada petición protegida. C
 
 Login acepta usuario o correo institucional. Nombres de usuario sin @ y comparación exacta; correos únicos normalizados a minúsculas y comparación sin distinguir mayúsculas. Contraseña se compara exactamente. El comando seed_demo_user de SCRUM-31 crea una cuenta sintética exclusivamente local.
 
+### Protección de acceso y modalidad de navegador
+
+Login admite 30 solicitudes por IP y 10 por cuenta cada 15 minutos; usuario y correo comparten presupuesto entre IP distintas. El presupuesto incluye éxitos y errores, y el límite de IP se aplica antes de parsear JSON. Refresh admite 120 solicitudes por IP/15 minutos; solicitud y confirmación de recuperación, 20 cada una. Se mantiene además el límite existente por correo/IP de recuperación. Los nuevos límites responden `429 AUTH_RATE_LIMITED` con `details.retry_after` y cabecera `Retry-After`. Persisten en SQL entre procesos y reinicios. [Configuración y alcance](docs/SEGURIDAD-AUTENTICACION.md).
+
+Los ejemplos JSON de tokens siguientes corresponden al cliente API Bearer. La interfaz usa `X-Psycode-Browser: 1`: login y refresh devuelven `data: {"authenticated": true}` y escriben cookies JWT HttpOnly, SameSite=Strict, Secure en producción. En esta modalidad, refresh y logout envían `{}`; el servidor lee el refresh de la cookie. GET `/` inicializa CSRF y las escrituras envían `X-CSRFToken`; se comprueba CSRF incluso en login. El access autenticado mediante cookie se contrasta con la sesión persistida y se invalida tras logout. Las respuestas HTML/API tienen `Cache-Control: no-store, private`.
+
 ### POST /api/v1/auth/login
 
 Ambos strings obligatorios; usuario máximo 254 caracteres.
@@ -176,7 +182,7 @@ Access válido y refresh propio obligatorio:
 
 Respuesta **204 sin cuerpo**. Revoca el refresh presentado. Repetir con el mismo refresh ya revocado y un access aún válido retorna 204; refresh mal formado/expirado → `401 AUTH_INVALID_REFRESH_TOKEN`; refresh válido ajeno → `403 AUTH_FORBIDDEN`.
 
-Frontend elimina su par local y vuelve al login. El access previamente emitido conserva su vigencia restante; no se promete cierre inmediato de access ni de otros dispositivos. Si access venció, el frontend puede descartar los tokens sin esperar logout exitoso.
+La interfaz elimina las cookies mediante la respuesta de logout y vuelve al login; la sesión de cookie queda revocada inmediatamente. Para clientes Bearer, el access previamente emitido conserva su vigencia restante; no se promete cierre inmediato de access Bearer ni de otros dispositivos.
 
 ### GET /api/v1/auth/me
 

@@ -78,8 +78,11 @@ INSTALLED_APPS = [
 ]
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "backend.common.middleware.BrowserSecurityMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
 TEMPLATES = [
@@ -157,6 +160,12 @@ def positive_int(name, default):
 EMAIL_DELIVERY_TIMEOUT = positive_int("EMAIL_TIMEOUT_SECONDS", 10)
 PASSWORD_RESET_RATE_LIMIT_MAX = positive_int("PASSWORD_RESET_RATE_LIMIT_MAX", 5)
 PASSWORD_RESET_RATE_LIMIT_WINDOW_SECONDS = positive_int("PASSWORD_RESET_RATE_LIMIT_WINDOW_SECONDS", 900)
+AUTH_LOGIN_IP_LIMIT = positive_int("AUTH_LOGIN_IP_LIMIT", 30)
+AUTH_LOGIN_ACCOUNT_LIMIT = positive_int("AUTH_LOGIN_ACCOUNT_LIMIT", 10)
+AUTH_LOGIN_WINDOW_SECONDS = positive_int("AUTH_LOGIN_WINDOW_SECONDS", 900)
+AUTH_REFRESH_IP_LIMIT = positive_int("AUTH_REFRESH_IP_LIMIT", 120)
+AUTH_RESET_IP_LIMIT = positive_int("AUTH_RESET_IP_LIMIT", 20)
+AUTH_OTHER_WINDOW_SECONDS = positive_int("AUTH_OTHER_WINDOW_SECONDS", 900)
 EMAIL_BACKEND_CHOICE = os.getenv("EMAIL_BACKEND", "file" if DEBUG else "smtp")
 EMAIL_BACKEND_CHOICE = {
     "django.core.mail.backends.filebased.EmailBackend": "file",
@@ -186,6 +195,11 @@ SECURE_HSTS_INCLUDE_SUBDOMAINS = not DEBUG
 SECURE_HSTS_PRELOAD = False
 SESSION_COOKIE_SECURE = not DEBUG
 CSRF_COOKIE_SECURE = not DEBUG
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = "Strict"
+CSRF_COOKIE_SAMESITE = "Strict"
+SECURE_REFERRER_POLICY = "no-referrer"
+X_FRAME_OPTIONS = "DENY"
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,

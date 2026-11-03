@@ -30,7 +30,6 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
             primary_successes: 0, primary_failures: 0, backup_successes: 0 } };
     const events = [summary, backup, historic, missing];
     try {
-        await page.addInitScript(() => localStorage.setItem('access_token', 'token-sintetico'));
         await page.route('**/api/v1/auth/me', route => route.fulfill({
             json: { success: true, data: { usuario: 'admin-prueba', rol: 'admin' } } }));
         await page.route('**/api/v1/audit-events**', route => {
