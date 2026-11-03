@@ -1,0 +1,22 @@
+[Unit]
+Description=Psycode ASGI web and agent WebSockets
+After=network.target mongod.service
+
+[Service]
+User=psycode
+Group=psycode
+WorkingDirectory=/srv/psycode/current
+EnvironmentFile=/srv/psycode/shared/server.env
+ExecStart=/srv/psycode/current/.venv/bin/uvicorn backend.config.asgi:application --host 127.0.0.1 --port 8000 --workers 2 --ws-max-size 65536 --proxy-headers --forwarded-allow-ips 127.0.0.1 --timeout-graceful-shutdown 90
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=100
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/psycode/shared
+
+[Install]
+WantedBy=multi-user.target

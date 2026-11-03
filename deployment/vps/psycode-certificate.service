@@ -1,0 +1,9 @@
+[Unit]
+Description=Obtain or renew Psycode IP HTTPS certificate
+After=network-online.target nginx.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/psycode-certificate
+TimeoutStartSec=180

@@ -17,6 +17,10 @@ Incluye preparación de ambos entornos, construcción del paquete del agente,
 comandos para macOS/Linux y PowerShell, resultados esperados y una prueba manual
 opcional con OBS. La integración automática no necesita OBS ni credenciales reales.
 
+El despliegue temporal de `main` en `144.22.56.52`, sus servicios, HTTPS y la
+integración con GitHub Actions están documentados en
+[operación de la VPS](deployment/vps/README.md).
+
 La [revisión funcional posterior a la separación](docs/REVISION-FUNCIONAMIENTO-SERVIDOR.md) registra las correcciones, pruebas ejecutadas y validaciones pendientes en el entorno institucional.
 
 La integración interna de Speechmatics Batch y JEV está documentada en [implementación y pruebas sin credenciales](docs/INTEGRACION-SPEECHMATICS-JEV.md). Incluye el contrato de salida 1.0, procedencia del código y conexión a alertas/bitácora; no añade una interfaz ni habilita envíos externos por defecto.
