@@ -9,7 +9,7 @@ from backend.common.audit import AuditWriter
 from .domain import CaptureError, Command, Session, TECHNICAL_ERRORS
 from .models import (
     OPEN_STATES, AcceptedSequence, AgentCommand, CaptureEvent, CaptureSession,
-    CommandKind, SessionState,
+    CommandKind, FragmentJob, SessionState,
 )
 
 
@@ -55,17 +55,19 @@ def _event(session, action, now, *, command=None, sequence=None, error_code=""):
 
 class CaptureSessionService:
     def __init__(self, authorization_service=None, *, start_timeout=None,
-                 heartbeat_timeout=None, finalization_timeout=None):
+                 heartbeat_timeout=None, finalization_timeout=None, reception_grace=None):
         from django.conf import settings
         start_timeout = start_timeout if start_timeout is not None else timedelta(seconds=settings.CAPTURE_START_TIMEOUT_SECONDS)
         heartbeat_timeout = heartbeat_timeout if heartbeat_timeout is not None else timedelta(seconds=settings.CAPTURE_INACTIVITY_TIMEOUT_SECONDS)
         finalization_timeout = finalization_timeout if finalization_timeout is not None else timedelta(seconds=settings.CAPTURE_FINALIZATION_TIMEOUT_SECONDS)
-        if any(value <= timedelta(0) for value in (start_timeout, heartbeat_timeout, finalization_timeout)):
+        reception_grace = reception_grace if reception_grace is not None else timedelta(seconds=settings.CAPTURE_RECEPTION_GRACE_SECONDS)
+        if any(value <= timedelta(0) for value in (start_timeout, heartbeat_timeout, finalization_timeout, reception_grace)):
             raise ValueError("Los tiempos de espera deben ser positivos")
         self.authorization_service = authorization_service
         self.start_timeout = start_timeout
         self.heartbeat_timeout = heartbeat_timeout
         self.finalization_timeout = finalization_timeout
+        self.reception_grace = reception_grace
 
     def reconcile_box(self, box, *, now=None):
         """Evaluar SCRUM-70 en cada tick, no solo sus transiciones en memoria."""
@@ -99,7 +101,9 @@ class CaptureSessionService:
                 previous.authorization_ended_at = now
                 previous.save(update_fields=["authorization_ended_at"])
                 _event(previous, "authorization.ended", now)
-            current = CaptureSession.objects.select_for_update().filter(box=box, state__in=OPEN_STATES).first()
+            current = CaptureSession.objects.select_for_update().filter(
+                box=box, state__in=OPEN_STATES, actual_end__isnull=True,
+            ).first()
             if current:
                 if (not authorization.authorized or now >= current.scheduled_end
                         or (authorization.authorized and (
@@ -112,7 +116,8 @@ class CaptureSessionService:
                 return None
             # Una detención de una sesión fallida bloquea nuevos inicios
             # hasta que el agente confirme que dejó de capturar.
-            if AgentCommand.objects.filter(session__box=box, kind=CommandKind.STOP).exclude(succeeded=True).exists():
+            if AgentCommand.objects.filter(session__box=box, session__actual_end__isnull=True,
+                                           kind=CommandKind.STOP).exclude(succeeded=True).exists():
                 return None
             previous = CaptureSession.objects.filter(
                 box=box, origin=authorization.origen, scheduled_start=start, scheduled_end=end,
@@ -129,7 +134,7 @@ class CaptureSessionService:
             except IntegrityError:
                 # Solo recuperar la carrera de inserción. Los errores en
                 # órdenes o bitácora deben revertir toda la operación.
-                existing = CaptureSession.objects.filter(box=box, state__in=OPEN_STATES).first()
+                existing = CaptureSession.objects.filter(box=box, state__in=OPEN_STATES, actual_end__isnull=True).first()
                 if existing is None:
                     existing = CaptureSession.objects.filter(
                         box=box, origin=authorization.origen, scheduled_start=start, scheduled_end=end,
@@ -163,26 +168,51 @@ class CaptureSessionService:
             return
         self._stop(session, now)
         session.state, session.error_code, session.closed_at = SessionState.FAILED, code, now
-        session.save(update_fields=["state", "error_code", "closed_at"])
+        session.diagnostic_code = ""
+        session.save(update_fields=["state", "error_code", "closed_at", "diagnostic_code"])
         _event(session, "session.failed", now, error_code=code)
 
     def _complete(self, session, now):
         if (session.state == SessionState.STOPPING and session.actual_end is not None
                 and session.final_sequence is not None and session.next_sequence == session.final_sequence + 1):
             session.state, session.closed_at = SessionState.COMPLETED, now
-            session.save(update_fields=["state", "closed_at"])
+            session.diagnostic_code = ""
+            session.save(update_fields=["state", "closed_at", "diagnostic_code"])
             _event(session, "session.completed", now)
+
+    def _capture_limit(self, session):
+        return min(value for value in (session.scheduled_end, session.authorization_ended_at,
+                                       session.stop_requested_at, session.actual_end) if value is not None)
+
+    def _reception_deadline(self, session):
+        deadline = self._capture_limit(session) + self.reception_grace
+        return max(deadline, session.reception_extended_until) if session.reception_extended_until else deadline
+
+    def _diagnose(self, session, code, now):
+        if session.diagnostic_code == code:
+            return
+        session.diagnostic_code = code
+        session.save(update_fields=["diagnostic_code"])
+        _event(session, "session.diagnostic", now, error_code=code)
 
     def _expire(self, session, now):
         if session.state in (SessionState.STARTED, SessionState.ACTIVE) and now >= session.scheduled_end:
             self._stop(session, now)
-        if session.state == SessionState.STOPPING:
-            if now >= session.stop_requested_at + self.finalization_timeout:
-                self._fail(session, "FINAL_SEQUENCE_TIMEOUT" if session.actual_end else "SESSION_ABANDONED", now)
+        if session.state == SessionState.STOPPING or (session.state == SessionState.FAILED and session.actual_end is not None):
+            if (session.actual_end is not None and session.final_sequence is not None
+                    and session.next_sequence == session.final_sequence + 1):
+                return
+            if now >= self._reception_deadline(session):
+                if session.reception_intervention_at is None:
+                    session.reception_intervention_at = now
+                    session.save(update_fields=["reception_intervention_at"])
+                self._diagnose(session, "RECEPTION_INTERVENTION_REQUIRED", now)
+            elif session.actual_end is None and now >= session.stop_requested_at + self.finalization_timeout:
+                self._diagnose(session, "STOP_CONFIRMATION_PENDING", now)
         elif session.state == SessionState.STARTED and now >= session.authorized_at + self.start_timeout:
-            self._fail(session, "AGENT_UNAVAILABLE", now)
+            self._diagnose(session, "START_CONFIRMATION_PENDING", now)
         elif session.state == SessionState.ACTIVE and now >= session.last_seen_at + self.heartbeat_timeout:
-            self._fail(session, "SESSION_ABANDONED", now)
+            self._diagnose(session, "CONTROL_DISCONNECTED", now)
 
     def recover(self, *, now=None):
         """Una pasada recuperable tras reinicio; ejecutar periódicamente."""
@@ -191,9 +221,9 @@ class CaptureSessionService:
         for session_id in ids:
             with transaction.atomic():
                 session = CaptureSession.objects.select_for_update().get(pk=session_id)
-                previous = session.state
+                previous = session.state, session.diagnostic_code, session.reception_intervention_at
                 self._expire(session, now)
-                changed += previous != session.state
+                changed += previous != (session.state, session.diagnostic_code, session.reception_intervention_at)
         return changed
 
     def _load(self, box, session_id):
@@ -211,6 +241,7 @@ class CaptureSessionService:
             for session in sessions:
                 self._expire(session, now)
             pending = AgentCommand.objects.filter(session__box=box, cancelled_at=None).exclude(succeeded=True)
+            pending = pending.exclude(kind=CommandKind.STOP, session__actual_end__isnull=False)
             # Fallos de inicio no se reejecutan; las detenciones sí se reintentan.
             pending = pending.exclude(kind=CommandKind.START, acknowledged_at__isnull=False)
             commands = list(pending.select_for_update().select_related("session").order_by("created_at", "command_id"))
@@ -261,7 +292,8 @@ class CaptureSessionService:
             occurred = occurred or now
             if not session.authorized_at <= occurred <= now:
                 raise CaptureError("INVALID_TIMESTAMP")
-            if success and command.kind == CommandKind.STOP and occurred < command.created_at:
+            if (success and command.kind == CommandKind.STOP and occurred < command.created_at
+                    and occurred < self._capture_limit(session)):
                 raise CaptureError("INVALID_TIMESTAMP")
             if success and command.kind == CommandKind.START:
                 if occurred >= session.scheduled_end or (session.actual_end and occurred > session.actual_end):
@@ -278,12 +310,20 @@ class CaptureSessionService:
                         or (session.actual_start and occurred < session.actual_start)
                         or (latest and occurred < latest.captured_at)):
                     raise CaptureError("INVALID_FINAL_SEQUENCE")
+                if session.actual_end is not None and session.actual_end != occurred:
+                    raise CaptureError("CONFIRMATION_CONFLICT")
+                if session.final_sequence is not None and session.final_sequence != last_sequence:
+                    raise CaptureError("CONFIRMATION_CONFLICT")
                 session.actual_end, session.final_sequence = occurred, last_sequence
             command.acknowledged_at, command.succeeded = now, success
             command.occurred_at, command.last_sequence, command.error_code = occurred, last_sequence, code
             command.save(update_fields=["acknowledged_at", "succeeded", "occurred_at", "last_sequence", "error_code"])
             session.last_seen_at = max(session.last_seen_at, now)
-            session.save(update_fields=["state", "actual_start", "actual_end", "final_sequence", "last_seen_at"])
+            if (session.diagnostic_code == "CONTROL_DISCONNECTED"
+                    or command.kind == CommandKind.START and session.diagnostic_code == "START_CONFIRMATION_PENDING"
+                    or command.kind == CommandKind.STOP and session.diagnostic_code == "STOP_CONFIRMATION_PENDING"):
+                session.diagnostic_code = ""
+            session.save(update_fields=["state", "actual_start", "actual_end", "final_sequence", "last_seen_at", "diagnostic_code"])
             _event(session, "command.acknowledged", now, command=command, error_code=code)
             if not success:
                 self._fail(session, code, now)
@@ -308,11 +348,15 @@ class CaptureSessionService:
             if existing.captured_at != captured_at:
                 raise CaptureError("SEQUENCE_CONFLICT")
             return False
-        if session.state not in (SessionState.ACTIVE, SessionState.STOPPING) or session.actual_start is None:
+        receiving = session.state in (SessionState.ACTIVE, SessionState.STOPPING) or (
+            session.state == SessionState.FAILED and session.actual_end is not None)
+        if not receiving or session.actual_start is None:
             raise CaptureError("SESSION_NOT_ACCEPTING_SEQUENCES")
+        if session.state in (SessionState.STOPPING, SessionState.FAILED) and now >= self._reception_deadline(session):
+            raise CaptureError("RECEPTION_INTERVENTION_REQUIRED")
         if number != session.next_sequence or (session.final_sequence is not None and number > session.final_sequence):
             raise CaptureError("SEQUENCE_OUT_OF_ORDER")
-        upper = min(value for value in (session.scheduled_end, session.stop_requested_at, session.actual_end, now)
+        upper = min(value for value in (self._capture_limit(session), now)
                     if value is not None)
         if not session.actual_start <= captured_at <= upper:
             raise CaptureError("SEQUENCE_OUTSIDE_CAPTURE_WINDOW")
@@ -322,7 +366,9 @@ class CaptureSessionService:
         AcceptedSequence.objects.create(session=session, number=number, captured_at=captured_at, accepted_at=now)
         session.next_sequence += 1
         session.last_seen_at = max(session.last_seen_at, now)
-        session.save(update_fields=["next_sequence", "last_seen_at"])
+        if session.diagnostic_code == "CONTROL_DISCONNECTED":
+            session.diagnostic_code = ""
+        session.save(update_fields=["next_sequence", "last_seen_at", "diagnostic_code"])
         _event(session, "sequence.accepted", now, sequence=number)
         self._complete(session, now)
         return True
@@ -340,8 +386,124 @@ class CaptureSessionService:
             self._expire(session, now)
             if session.state in OPEN_STATES:
                 session.last_seen_at = max(session.last_seen_at, now)
-                session.save(update_fields=["last_seen_at"])
+                if session.diagnostic_code == "CONTROL_DISCONNECTED":
+                    session.diagnostic_code = ""
+                session.save(update_fields=["last_seen_at", "diagnostic_code"])
             return _snapshot(session)
+
+    def resume_reception(self, box, session_id, *, now=None, until=None):
+        """Intervención explícita del operador; nunca modifica autorización ni captura."""
+        now = _instant(now)
+        until = _instant(until) if until is not None else now + self.reception_grace
+        if until <= now:
+            raise CaptureError("INVALID_TIMESTAMP")
+        with transaction.atomic():
+            session = self._load(box, session_id)
+            self._expire(session, now)
+            if session.state == SessionState.FAILED and session.error_code in {
+                "AGENT_UNAVAILABLE", "SESSION_ABANDONED", "FINAL_SEQUENCE_TIMEOUT",
+            }:
+                # Recuperación explícita de cierres por red de versiones anteriores.
+                # No convertir fallos reales de OBS/captura en sesiones recuperables.
+                if session.actual_end is None and CaptureSession.objects.filter(
+                    box=session.box, state__in=OPEN_STATES, actual_end__isnull=True,
+                ).exclude(pk=session.pk).exists():
+                    raise CaptureError("CAPTURE_STATE_CONFLICT")
+                session.state = SessionState.STOPPING
+                session.closed_at = None
+                session.error_code = ""
+                session.stop_requested_at = session.stop_requested_at or min(now, session.scheduled_end)
+                session.save(update_fields=["state", "closed_at", "error_code", "stop_requested_at"])
+            if session.state != SessionState.STOPPING and not (
+                session.state == SessionState.FAILED and session.actual_end is not None
+            ):
+                raise CaptureError("SESSION_NOT_ACCEPTING_SEQUENCES")
+            session.reception_extended_until = max(until, self._reception_deadline(session))
+            session.reception_intervention_at = None
+            session.diagnostic_code = ""
+            session.save(update_fields=["reception_extended_until", "reception_intervention_at", "diagnostic_code"])
+            _event(session, "reception.resumed", now)
+            return _snapshot(session)
+
+    def confirm_capture_ended(self, box, session_id, *, ended_at, last_sequence=None, reason_code, now=None):
+        """Evidencia física separada del ACK: no inventa una secuencia desconocida."""
+        now, ended_at = _instant(now), _instant(ended_at)
+        if reason_code not in {"AUTHORIZATION_ENDED", "AGENT_STOPPED", "AGENT_INTERRUPTED", "RECOVERY_STOPPED", "DISK_LOW", "SHUTDOWN"}:
+            raise CaptureError("INVALID_TECHNICAL_ERROR")
+        if last_sequence is not None and (type(last_sequence) is not int or not -1 <= last_sequence <= 9223372036854775806):
+            raise CaptureError("INVALID_FINAL_SEQUENCE")
+        with transaction.atomic():
+            session = self._load(box, session_id)
+            if (not session.authorized_at <= ended_at <= now
+                    or (session.actual_start and ended_at < session.actual_start)):
+                raise CaptureError("INVALID_TIMESTAMP")
+            latest = session.sequences.order_by("-number").first()
+            if latest and ended_at < latest.captured_at:
+                raise CaptureError("INVALID_TIMESTAMP")
+            if (session.actual_end is not None and session.actual_end != ended_at
+                    or session.capture_end_reason and session.capture_end_reason != reason_code):
+                raise CaptureError("CONFIRMATION_CONFLICT")
+            if last_sequence is not None:
+                if last_sequence < session.next_sequence - 1:
+                    raise CaptureError("INVALID_FINAL_SEQUENCE")
+                if session.final_sequence is not None and session.final_sequence != last_sequence:
+                    raise CaptureError("CONFIRMATION_CONFLICT")
+            if reason_code in {"AGENT_INTERRUPTED", "DISK_LOW"}:
+                if session.state == SessionState.COMPLETED:
+                    # El reporte HTTPS puede llegar después del ACK legado y
+                    # acredita un fallo real aunque ya esté toda la recepción.
+                    session.state = SessionState.FAILED
+                    session.error_code = "AGENT_INTERRUPTED"
+                    session.save(update_fields=["state", "error_code"])
+                    _event(session, "session.failed", now, error_code="AGENT_INTERRUPTED")
+                else:
+                    self._fail(session, "AGENT_INTERRUPTED", now)
+            if (session.actual_end == ended_at and session.capture_end_reason == reason_code
+                    and (last_sequence is None or session.final_sequence == last_sequence)):
+                return _snapshot(session)
+            self._stop(session, now)
+            session.actual_end = ended_at
+            session.capture_end_reason = reason_code
+            if last_sequence is not None:
+                session.final_sequence = last_sequence
+            if session.final_sequence is None:
+                session.reception_intervention_at = session.reception_intervention_at or now
+                session.diagnostic_code = "FINAL_SEQUENCE_UNKNOWN"
+            elif session.diagnostic_code == "FINAL_SEQUENCE_UNKNOWN":
+                session.reception_intervention_at = None
+                session.diagnostic_code = ""
+            session.save(update_fields=["actual_end", "capture_end_reason", "final_sequence", "reception_intervention_at", "diagnostic_code"])
+            _event(session, "capture.ended", now)
+            self._expire(session, now)
+            self._complete(session, now)
+            return _snapshot(session)
+
+    def inspection(self, box, session_id, *, now=None):
+        """Proyección operativa independiente del DTO y estados del protocolo legado."""
+        now = _instant(now)
+        with transaction.atomic():
+            session = self._load(box, session_id)
+            self._expire(session, now)
+            received = session.final_sequence is not None and session.next_sequence == session.final_sequence + 1
+            jobs = FragmentJob.objects.filter(sequence__session=session)
+            counts = {state: jobs.filter(state=state).count() for state in FragmentJob.State.values}
+            pending = counts[FragmentJob.State.PENDING] + counts[FragmentJob.State.PROCESSING]
+            cutoff = self._capture_limit(session)
+            age = max(0, (now - cutoff).total_seconds()) if not received and now >= cutoff else 0
+            backlog_alert = "critical" if age >= 72 * 3600 else "warning" if age >= 24 * 3600 else "notice" if age >= 15 * 60 else ""
+            return {
+                "session_id": str(session.pk), "box": session.box, "state": session.state,
+                "capture": "finished" if session.actual_end is not None else "stop_unconfirmed" if session.state in (SessionState.STOPPING, SessionState.FAILED) else "active" if session.actual_start else "start_unconfirmed",
+                "reception": "complete" if received else "intervention_required" if session.reception_intervention_at else "pending",
+                "processing": "pending" if pending or not received else "failed" if counts[FragmentJob.State.FAILED] else "complete",
+                "next_sequence": session.next_sequence, "final_sequence": session.final_sequence,
+                "actual_start": session.actual_start.isoformat() if session.actual_start else None,
+                "actual_end": session.actual_end.isoformat() if session.actual_end else None,
+                "capture_end_reason": session.capture_end_reason,
+                "capture_limit": cutoff.isoformat(), "reception_deadline": self._reception_deadline(session).isoformat(),
+                "diagnostic_code": session.diagnostic_code, "error_code": session.error_code,
+                "job_counts": counts, "backlog_alert": backlog_alert,
+            }
 
     def interrupted(self, box, session_id, *, error_code="AGENT_INTERRUPTED", now=None):
         if error_code not in TECHNICAL_ERRORS:

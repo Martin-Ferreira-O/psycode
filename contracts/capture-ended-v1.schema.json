@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Psycode physical capture end 1.0 request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "occurred_at",
+    "reason_code"
+  ],
+  "properties": {
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "last_sequence": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": -1,
+      "maximum": 9223372036854775806
+    },
+    "reason_code": {
+      "enum": [
+        "AUTHORIZATION_ENDED",
+        "AGENT_STOPPED",
+        "AGENT_INTERRUPTED",
+        "RECOVERY_STOPPED",
+        "DISK_LOW",
+        "SHUTDOWN"
+      ]
+    }
+  }
+}

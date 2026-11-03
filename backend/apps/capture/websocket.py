@@ -149,7 +149,8 @@ async def agent_websocket(scope, receive, send):
         await db(control.open)
         opened = True
         await emit("ready", {"box": identity.box, "server_time": timezone.now().isoformat(),
-            "capabilities": ["audio.v1", "audio.v2", "agenda.excel.v1", "agenda.smile-json.v1"],
+            "capabilities": ["audio.v1", "audio.v2", "agenda.excel.v1", "agenda.smile-json.v1",
+                             "agent.events.v1", "sessions.capture-ended.v1"],
             "heartbeat_interval": settings.CAPTURE_HEARTBEAT_SECONDS}, hello["message_id"])
         next_poll = 0
         pending = asyncio.create_task(receive())

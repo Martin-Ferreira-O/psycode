@@ -9,6 +9,7 @@ function contexto() {
     const redirecciones = [];
     const context = vm.createContext({
         Headers, fetch,
+        document: { cookie: 'csrftoken=csrf-sintetico' },
         localStorage: { getItem: k => tokens.get(k), removeItem: k => tokens.delete(k) },
         sessionStorage: { clear() {} },
         window: { addEventListener() {}, location: { pathname: '/evaluaciones', replace: p => redirecciones.push(p) } },
@@ -44,6 +45,48 @@ test('una lista vacía es éxito y un sobre inválido es error', async () => {
     }
     context.response = new Response('no JSON');
     await assert.rejects(vm.runInContext('leerRespuesta(response)', context), /No se pudo/);
+});
+
+test('las peticiones usan cookies y CSRF sin enviar tokens desde localStorage', async () => {
+    const { context, tokens } = contexto();
+    const requests = [];
+    context.fetch = async (url, options) => {
+        requests.push({ url, options });
+        return Response.json({ success: true, data: {} });
+    };
+    await vm.runInContext('apiPost("/api/v1/alerts/test/evaluacion", {evaluacion: "correcta"})', context);
+    assert.equal(tokens.size, 0);
+    assert.equal(requests[0].options.credentials, 'same-origin');
+    assert.equal(requests[0].options.headers.get('Authorization'), null);
+    assert.equal(requests[0].options.headers.get('X-CSRFToken'), 'csrf-sintetico');
+    assert.equal(requests[0].options.headers.get('X-Psycode-Browser'), '1');
+});
+
+test('401 renueva cookies una sola vez para solicitudes simultáneas', async () => {
+    const { context } = contexto();
+    let renewals = 0;
+    let authenticated = false;
+    context.fetch = async (url, options) => {
+        if (url.endsWith('/refresh')) {
+            renewals++;
+            assert.equal(options.body, '{}');
+            authenticated = true;
+            return Response.json({ success: true, data: { authenticated: true } });
+        }
+        return authenticated ? Response.json({ success: true, data: {} }) : new Response(null, { status: 401 });
+    };
+    await vm.runInContext('Promise.all([apiGet("/api/v1/alerts"), apiGet("/api/v1/auth/me")])', context);
+    assert.equal(renewals, 1);
+});
+
+test('logout fallido avisa y no presenta un cierre de sesión exitoso', async () => {
+    const { context, redirecciones } = contexto();
+    let warning = '';
+    context.window.alert = message => { warning = message; };
+    context.fetch = async () => new Response(null, { status: 503 });
+    await vm.runInContext('cerrarSesion()', context);
+    assert.deepEqual(redirecciones, []);
+    assert.match(warning, /No se pudo cerrar la sesión/);
 });
 
 test('204 no intenta leer JSON', async () => {

@@ -192,8 +192,11 @@ class AgentHTTPIntegrationTests(IngestionFixtures, TransactionTestCase):
         CaptureSession.objects.filter(pk=self.session.session_id).update(
             actual_start=started_at,
         )
+        # Fixture independiente: un WAV publicado nunca se sobrescribe para
+        # representar otra captura o fecha.
+        precision_folder = self.root / "precision" / str(self.session.session_id)
         metadata = save_fragment(
-            folder=self.folder,
+            folder=precision_folder,
             box="box-3",
             session_id=self.session.session_id,
             sequence=0,
@@ -202,7 +205,7 @@ class AgentHTTPIntegrationTests(IngestionFixtures, TransactionTestCase):
         )
 
         result, created = self.receive(
-            content=self.wav_path.read_bytes(),
+            content=(precision_folder / "000000.wav").read_bytes(),
             checksum=metadata["checksum_sha256"],
             captured_at=datetime.fromisoformat(metadata["captured_at"]),
         )

@@ -292,22 +292,26 @@ class CaptureLifecycleTests(CaptureFixtures, TestCase):
         self.assertEqual([item.kind for item in commands], ["detencion"])
         self.assertEqual(CaptureSession.objects.get().state, "finalizando")
 
-    def test_recovery_fails_missing_start_and_is_idempotent(self):
+    def test_recovery_diagnoses_missing_start_without_closing_and_is_idempotent(self):
         self.create()
         now = NOW + timedelta(minutes=2)
         self.assertEqual(CaptureSessionService().recover(now=now), 1)
         self.assertEqual(CaptureSessionService().recover(now=now), 0)
-        self.assertEqual(CaptureSession.objects.get().error_code, "AGENT_UNAVAILABLE")
-        self.assertIsNotNone(CaptureSession.objects.get().closed_at)
+        self.assertEqual(CaptureSession.objects.get().diagnostic_code, "START_CONFIRMATION_PENDING")
+        self.assertEqual(CaptureSession.objects.get().error_code, "")
+        self.assertIsNone(CaptureSession.objects.get().closed_at)
 
-    def test_heartbeat_keeps_live_session_and_missing_heartbeat_fails_it(self):
+    def test_missing_heartbeat_is_diagnostic_and_recovery_keeps_authorized_session(self):
         session = self.active()
         self.service.heartbeat(3, session.session_id, now=NOW + timedelta(seconds=90))
         self.service.recover(now=NOW + timedelta(seconds=150))
         self.assertEqual(CaptureSession.objects.get().state, "activa")
-        result = self.service.heartbeat(3, session.session_id, now=NOW + timedelta(seconds=210))
-        self.assertEqual(result.state, "fallida")
-        self.assertEqual(result.error_code, "SESSION_ABANDONED")
+        self.service.recover(now=NOW + timedelta(seconds=210))
+        self.assertEqual(CaptureSession.objects.get().diagnostic_code, "CONTROL_DISCONNECTED")
+        result = self.service.heartbeat(3, session.session_id, now=NOW + timedelta(seconds=211))
+        self.assertEqual(result.state, "activa")
+        self.assertEqual(result.error_code, "")
+        self.assertEqual(CaptureSession.objects.get().diagnostic_code, "")
 
     def test_delayed_heartbeat_cannot_move_activity_backwards(self):
         session = self.active()
@@ -318,11 +322,12 @@ class CaptureLifecycleTests(CaptureFixtures, TestCase):
     def test_delayed_start_confirmation_does_not_revive_failed_session(self):
         self.create()
         start, = self.service.commands(3, now=NOW)
+        self.service.interrupted(3, start.session_id, now=NOW + timedelta(seconds=10))
         result = self.service.acknowledge(3, start.command_id, occurred_at=NOW,
                                           now=NOW + timedelta(seconds=121))
         self.assertEqual(result.state, "fallida")
         self.assertEqual(result.actual_start, NOW)
-        self.assertEqual(result.error_code, "AGENT_UNAVAILABLE")
+        self.assertEqual(result.error_code, "AGENT_INTERRUPTED")
         stop, = self.service.commands(3, now=NOW + timedelta(seconds=121))
         self.assertEqual(stop.kind, "detencion")
 
@@ -333,24 +338,29 @@ class CaptureLifecycleTests(CaptureFixtures, TestCase):
         self.assertEqual(CaptureSession.objects.filter(state="iniciada").count(), 2)
         self.assertEqual([item.box for item in self.service.commands(4, now=NOW)], ["box-4"])
 
-    def test_missing_final_sequence_times_out_even_with_heartbeats(self):
+    def test_missing_final_sequence_survives_old_finalization_timeout(self):
         session = self.active()
         self.ack_stop(self.stop(), 1)
         now = NOW + timedelta(minutes=6)
         self.service.heartbeat(3, session.session_id, now=now)
-        self.assertEqual(CaptureSession.objects.get().error_code, "FINAL_SEQUENCE_TIMEOUT")
-        self.assert_code("SESSION_NOT_ACCEPTING_SEQUENCES", self.accept, session, received=361)
+        self.assertEqual(CaptureSession.objects.get().error_code, "")
+        self.assertEqual(CaptureSession.objects.get().state, "finalizando")
+        self.assertTrue(self.accept(session, received=361))
 
-    def test_late_sequence_cannot_revive_abandoned_session(self):
+    def test_late_sequence_after_disconnect_is_accepted_without_extending_capture_window(self):
         session = self.active()
-        self.assert_code("SESSION_NOT_ACCEPTING_SEQUENCES", self.accept, session, received=121)
-        self.assertEqual(CaptureSession.objects.get().state, "fallida")
+        self.assertTrue(self.accept(session, received=121))
+        self.assertEqual(CaptureSession.objects.get().state, "activa")
+        self.assert_code("SEQUENCE_OUTSIDE_CAPTURE_WINDOW", self.accept, session, number=1,
+                         seconds=3601, received=4000)
 
-    def test_missing_stop_confirmation_times_out(self):
+    def test_missing_stop_confirmation_remains_pending_with_diagnostic(self):
         self.active()
         self.stop()
         self.service.recover(now=NOW + timedelta(minutes=6))
-        self.assertEqual(CaptureSession.objects.get().error_code, "SESSION_ABANDONED")
+        self.assertEqual(CaptureSession.objects.get().diagnostic_code, "STOP_CONFIRMATION_PENDING")
+        self.assertEqual(CaptureSession.objects.get().error_code, "")
+        self.assertEqual(CaptureSession.objects.get().state, "finalizando")
 
     def test_reported_interruption_is_persistent_idempotent_and_blocks_late_sequences(self):
         session = self.active()
@@ -430,7 +440,8 @@ class CaptureLifecycleTests(CaptureFixtures, TestCase):
             output = StringIO()
             call_command("recover_capture_sessions", stdout=output)
         self.assertIn("Sesiones actualizadas: 1", output.getvalue())
-        self.assertEqual(CaptureSession.objects.get().state, "fallida")
+        self.assertEqual(CaptureSession.objects.get().state, "iniciada")
+        self.assertEqual(CaptureSession.objects.get().diagnostic_code, "START_CONFIRMATION_PENDING")
 
 
 class CaptureConcurrencyTests(CaptureFixtures, TransactionTestCase):

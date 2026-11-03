@@ -15,3 +15,7 @@ jobs:
       - run: uv run --no-sync python scripts/check_boundaries.py
       - run: uv run --no-sync python manage.py test --settings=backend.config.test_settings --noinput
       - run: uv run --no-sync python manage.py makemigrations --check --dry-run --settings=backend.config.test_settings
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test backend/apps/web/tests/*.test.cjs

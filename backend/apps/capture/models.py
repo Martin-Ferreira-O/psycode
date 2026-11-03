@@ -26,17 +26,21 @@ class CaptureSession(models.Model):
     authorization_ended_at = models.DateTimeField(null=True)
     actual_start = models.DateTimeField(null=True)
     actual_end = models.DateTimeField(null=True)
+    capture_end_reason = models.CharField(max_length=40, blank=True, default="")
     stop_requested_at = models.DateTimeField(null=True)
     closed_at = models.DateTimeField(null=True)
     last_seen_at = models.DateTimeField()
     next_sequence = models.PositiveBigIntegerField(default=0)
     final_sequence = models.BigIntegerField(null=True)
     error_code = models.CharField(max_length=40, blank=True)
+    diagnostic_code = models.CharField(max_length=40, blank=True, default="")
+    reception_intervention_at = models.DateTimeField(null=True)
+    reception_extended_until = models.DateTimeField(null=True)
     audio_profile = models.JSONField(default=dict)
 
     class Meta:
         constraints = [
-            models.UniqueConstraint(fields=["box"], condition=models.Q(state__in=OPEN_STATES),
+            models.UniqueConstraint(fields=["box"], condition=models.Q(state__in=OPEN_STATES, actual_end__isnull=True),
                                     name="capture_one_open_session_per_box"),
             models.UniqueConstraint(fields=["box", "origin", "scheduled_start", "scheduled_end"],
                                     condition=models.Q(authorization_ended_at__isnull=True),
@@ -157,3 +161,21 @@ class AgentStatus(models.Model):
     box = models.CharField(max_length=16, primary_key=True)
     seen_at = models.DateTimeField()
     diagnostics = models.JSONField(default=dict)
+
+
+class AgentConnectivityEvent(models.Model):
+    """Eventos locales inmutables, deduplicados por identidad autenticada y UUID."""
+    event_id = models.UUIDField()
+    agent_id = models.CharField(max_length=64)
+    box = models.CharField(max_length=16)
+    session_id = models.UUIDField(null=True)
+    kind = models.CharField(max_length=40)
+    occurred_at = models.DateTimeField()
+    received_at = models.DateTimeField()
+    outage_id = models.UUIDField(null=True)
+    duration_ms = models.PositiveBigIntegerField(null=True)
+    cause = models.CharField(max_length=40, blank=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["agent_id", "event_id"], name="capture_unique_agent_event")]
+        indexes = [models.Index(fields=["box", "occurred_at"], name="capture_agent_event_time")]

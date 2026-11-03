@@ -1,5 +1,7 @@
 # Sesiones de captura e ingesta interna
 
+> La política actual de desconexiones, recepción de siete días y cierre físico independiente está en [Continuidad de captura](../../../docs/CONTINUIDAD-CAPTURA.md). Sustituye los plazos de cierre definitivo históricos descritos más abajo.
+
 > Actualización de separación: [operación vigente](../../../docs/OPERACION-SEPARADA.md). Agente en el repositorio independiente `psycode-agent`; control WS autenticado, audio v1/v2 y agenda durable. Las instrucciones históricas incompatibles quedan sustituidas por ese runbook.
 
 

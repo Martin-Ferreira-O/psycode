@@ -75,3 +75,10 @@ class PasswordResetRateLimit(models.Model):
     key = models.CharField(max_length=64, primary_key=True)
     window_started_at = models.DateTimeField()
     count = models.PositiveIntegerField(default=0)
+
+
+class AuthRateLimit(models.Model):
+    """Presupuestos de autenticación compartidos; sin IP ni identidad en claro."""
+    key = models.CharField(max_length=64, primary_key=True)
+    expires_at = models.DateTimeField(db_index=True)
+    count = models.PositiveIntegerField(default=0)

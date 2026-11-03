@@ -16,6 +16,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from backend.common.errors import ServiceError
 
 from .models import Role, User
+from .rate_limits import consume_auth_attempt
 from .tokens import credential_hash, validate_token_user
 
 
@@ -30,6 +31,7 @@ class AccountsService:
 
     def _issue_pair(self, user):
         refresh = RefreshToken.for_user(user)
+        refresh["session_jti"] = refresh["jti"]
         self.repository.create_refresh(
             user, refresh["jti"], datetime.fromtimestamp(refresh["exp"], tz=datetime_timezone.utc)
         )
@@ -41,12 +43,23 @@ class AccountsService:
         }
 
     def login(self, usuario, password):
-        # IMMEDIATE serializa cambio de contraseña y emisión/rotación en SQLite.
+        usuario = User.normalize_username(usuario).strip()
+        candidate = self.repository.find_user(usuario)
+        identity = str(candidate.pk) if candidate else "unknown:" + usuario.casefold()
+        consume_auth_attempt(
+            "login.account", identity, limit=settings.AUTH_LOGIN_ACCOUNT_LIMIT,
+            seconds=settings.AUTH_LOGIN_WINDOW_SECONDS,
+        )
+        # El hash costoso no sostiene el bloqueo global de escritura de SQLite.
+        if candidate is None:
+            make_password(password)
+        if candidate is None or not candidate.check_password(password):
+            raise ServiceError("AUTH_INVALID_CREDENTIALS", "Credenciales incorrectas", 401)
+        # Revalidar la credencial dentro de la transacción evita emitir tokens si
+        # una recuperación/cambio de contraseña ocurrió mientras se verificaba.
         with self.repository.atomic():
-            user = self.repository.find_user(usuario)
-            if user is None:
-                make_password(password)  # Costo comparable al caso de contraseña incorrecta.
-            if user is None or not user.check_password(password):
+            user = self.repository.find_by_id(candidate.pk)
+            if user is None or not constant_time_compare(user.password, candidate.password):
                 raise ServiceError("AUTH_INVALID_CREDENTIALS", "Credenciales incorrectas", 401)
             if not user.is_active:
                 raise ServiceError("AUTH_USER_INACTIVE", "Usuario inactivo", 403)

@@ -112,6 +112,12 @@ Se comprueba usuario activo también al renovar y en cada petición protegida. C
 
 Login acepta usuario o correo institucional. Nombres de usuario sin @ y comparación exacta; correos únicos normalizados a minúsculas y comparación sin distinguir mayúsculas. Contraseña se compara exactamente. El comando seed_demo_user de SCRUM-31 crea una cuenta sintética exclusivamente local.
 
+### Protección de acceso y modalidad de navegador
+
+Login admite 30 solicitudes por IP y 10 por cuenta cada 15 minutos; usuario y correo comparten presupuesto entre IP distintas. El presupuesto incluye éxitos y errores, y el límite de IP se aplica antes de parsear JSON. Refresh admite 120 solicitudes por IP/15 minutos; solicitud y confirmación de recuperación, 20 cada una. Se mantiene además el límite existente por correo/IP de recuperación. Los nuevos límites responden `429 AUTH_RATE_LIMITED` con `details.retry_after` y cabecera `Retry-After`. Persisten en SQL entre procesos y reinicios. [Configuración y alcance](docs/SEGURIDAD-AUTENTICACION.md).
+
+Los ejemplos JSON de tokens siguientes corresponden al cliente API Bearer. La interfaz usa `X-Psycode-Browser: 1`: login y refresh devuelven `data: {"authenticated": true}` y escriben cookies JWT HttpOnly, SameSite=Strict, Secure en producción. En esta modalidad, refresh y logout envían `{}`; el servidor lee el refresh de la cookie. GET `/` inicializa CSRF y las escrituras envían `X-CSRFToken`; se comprueba CSRF incluso en login. El access autenticado mediante cookie se contrasta con la sesión persistida y se invalida tras logout. Las respuestas HTML/API tienen `Cache-Control: no-store, private`.
+
 ### POST /api/v1/auth/login
 
 Ambos strings obligatorios; usuario máximo 254 caracteres.
@@ -176,7 +182,7 @@ Access válido y refresh propio obligatorio:
 
 Respuesta **204 sin cuerpo**. Revoca el refresh presentado. Repetir con el mismo refresh ya revocado y un access aún válido retorna 204; refresh mal formado/expirado → `401 AUTH_INVALID_REFRESH_TOKEN`; refresh válido ajeno → `403 AUTH_FORBIDDEN`.
 
-Frontend elimina su par local y vuelve al login. El access previamente emitido conserva su vigencia restante; no se promete cierre inmediato de access ni de otros dispositivos. Si access venció, el frontend puede descartar los tokens sin esperar logout exitoso.
+La interfaz elimina las cookies mediante la respuesta de logout y vuelve al login; la sesión de cookie queda revocada inmediatamente. Para clientes Bearer, el access previamente emitido conserva su vigencia restante; no se promete cierre inmediato de access Bearer ni de otros dispositivos.
 
 ### GET /api/v1/auth/me
 
@@ -1103,3 +1109,39 @@ El campo persistido `nivel_severidad` usa la escala operativa acordada para aler
 La relación es única y automática. Los valores menores que 1, mayores que 3, no enteros y booleanos se rechazan. La conversión o retiro de documentos históricos 0–7 se describe en [MONGODB.md](docs/MONGODB.md#actualización-de-la-escala-histórica).
 
 Los materiales fuente pueden organizar categorías clínicas con otra numeración; no se debe inferir equivalencia exacta con C-SSRS ni diagnóstico. Cualquier clasificación requiere validación clínica, cultural y externa antes de producción.
+
+
+## Continuidad de captura: extensiones aditivas
+
+La política de vencimientos de recepción descrita en secciones anteriores queda
+actualizada por [Continuidad de captura](docs/CONTINUIDAD-CAPTURA.md). Los estados,
+mensajes WS, uploads y recibos v1/v2 conservan su formato. Una ausencia de red
+produce diagnóstico; no invalida automáticamente audio capturado dentro de la
+ventana original. La recepción automática dura siete días desde el límite de
+captura; después requiere `resume_capture_reception`, conservando pendientes.
+
+| Método | Ruta interna | Uso |
+|---|---|---|
+| GET | `/api/v1/internal/sessions/<uuid>` | Captura, recepción y procesamiento separados, limitado al box autenticado. |
+| POST | `/api/v1/internal/sessions/<uuid>/capture-ended` | Evidencia física durable de detención, independiente del ACK y los uploads. |
+| POST | `/api/v1/internal/agent-events` | Hasta 64 eventos técnicos, JSON de hasta 64 KiB, deduplicación por agente/evento. |
+
+Todas usan `Authorization: Agent <agent_id>.<secret>`, sin JWT de profesionales.
+`capture-ended` admite `last_sequence: null` para un manifiesto desconocido; no
+lo convierte en `-1` ni inventa una confirmación de orden. Conserva fecha/motivo
+y permite enriquecer únicamente la secuencia desconocida. El recibo devuelve
+la proyección de sesión. El cierre físico libera el box para otra captura
+central autorizada; no completa recepción ni procesamiento pendientes.
+
+`agent-events` recibe `{version: "1.0", events: [...]}` conforme al esquema
+versionado. Fija identidad/box desde la credencial. La confirmación contiene
+`data.accepted_event_ids` con todos los UUID del lote. Repetir contenido idéntico
+mantiene el evento y su fecha de recepción originales; cambiar una identidad
+existente devuelve `409 EVENT_CONFLICT` y revierte el lote. Causas/tipos tienen
+lista cerrada; se rechazan campos adicionales y contenido libre. No contiene
+audio, rutas, tokens ni transcripciones.
+
+Los schemas `contracts/agent-events-v1.schema.json` y
+`contracts/capture-ended-v1.schema.json`, incluidos en `manifest.json`, son la
+referencia para solicitudes. El `ready` anuncia `agent.events.v1` y
+`sessions.capture-ended.v1`. Desplegar/migrar primero central y después agentes.

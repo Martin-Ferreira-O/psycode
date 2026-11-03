@@ -1,7 +1,3 @@
-if (!verificarSesion()) {
-    throw new Error("Sesión no válida");
-}
-
 let evaluaciones = [];
 let cargandoEvaluaciones = false;
 let solicitudDetalle = 0;

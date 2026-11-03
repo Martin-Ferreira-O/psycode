@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Psycode agent events 1.0 request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "events"
+  ],
+  "properties": {
+    "version": {
+      "const": "1.0"
+    },
+    "events": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "event_id",
+          "session_id",
+          "kind",
+          "occurred_at",
+          "outage_id",
+          "duration_ms",
+          "cause"
+        ],
+        "properties": {
+          "event_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "session_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "kind": {
+            "enum": [
+              "https.disconnected",
+              "https.reconnected",
+              "wss.disconnected",
+              "wss.reconnected",
+              "storage.disconnected",
+              "storage.reconnected"
+            ]
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "outage_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "duration_ms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 9223372036854775807
+          },
+          "cause": {
+            "enum": [
+              "",
+              "UNKNOWN",
+              "TIMEOUT",
+              "CONNECTION_ERROR",
+              "HTTP_ERROR",
+              "DISK_LOW",
+              "STORAGE_WARNING",
+              "STORAGE_CRITICAL",
+              "LOCAL_WRITE_FAILED",
+              "RECOVERY_REQUIRED"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

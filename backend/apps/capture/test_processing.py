@@ -4,7 +4,7 @@ from uuid import uuid4
 from django.test import TestCase
 
 from backend.apps.analysis.domain import AnalysisResult, AnalysisState
-from .models import FragmentJob
+from .models import CaptureSession, FragmentJob
 from .processing import FragmentJobProcessor
 from .test_ingestion import IngestionFixtures
 from .tests import NOW
@@ -274,6 +274,40 @@ class FragmentJobProcessorTests(IngestionFixtures, TestCase):
         self.assertEqual(first, FragmentJob.State.COMPLETED)
         self.assertIsNone(second)
         self.assertEqual(len(analysis.calls), 1)
+
+    def test_failed_capture_keeps_analysis_context_until_late_final_fragment_is_processed(self):
+        self.receive()
+        sid = self.session.session_id
+        self.service.interrupted(3, sid, now=NOW + timedelta(seconds=25))
+        self.service.confirm_capture_ended(3, sid, ended_at=NOW + timedelta(seconds=25),
+            last_sequence=1, reason_code="AGENT_INTERRUPTED", now=NOW + timedelta(seconds=26))
+        processor, analysis, _ = self.processor()
+        self.assertEqual(processor.process_next(now=NOW + timedelta(seconds=27)), FragmentJob.State.COMPLETED)
+        self.assertEqual(analysis.closed, [])
+        self.assertFalse(FragmentJob.objects.filter(state=FragmentJob.State.PENDING).exists())
+        self.receive(number=1, captured_at=NOW + timedelta(seconds=11), now=NOW + timedelta(days=2))
+        self.assertEqual(processor.process_next(now=NOW + timedelta(days=2, seconds=1)), FragmentJob.State.COMPLETED)
+        self.assertEqual([fragment.sequence for fragment, _ in analysis.calls], [0, 1])
+        self.assertEqual(analysis.closed, [str(sid)])
+        self.assertEqual(CaptureSession.objects.get(pk=sid).state, "fallida")
+
+    def test_unknown_final_sequence_does_not_close_failed_session_analysis_early(self):
+        self.receive()
+        sid = self.session.session_id
+        ended = NOW + timedelta(seconds=25)
+        self.service.interrupted(3, sid, now=ended)
+        processor, analysis, _ = self.processor()
+        analysis.histories = {str(sid): object()}
+        processor.process_next(now=NOW + timedelta(seconds=26))
+        self.assertEqual(analysis.closed, [])
+        self.service.confirm_capture_ended(3, sid, ended_at=ended,
+            reason_code="AGENT_INTERRUPTED", now=NOW + timedelta(seconds=27))
+        processor.close_finished_contexts()
+        self.assertEqual(analysis.closed, [])
+        self.service.confirm_capture_ended(3, sid, ended_at=ended, last_sequence=0,
+            reason_code="AGENT_INTERRUPTED", now=NOW + timedelta(seconds=28))
+        processor.close_finished_contexts()
+        self.assertEqual(analysis.closed, [str(sid)])
 
     def test_stuck_job_is_not_recovered_while_fragment_is_leased(self):
         self.receive()

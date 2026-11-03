@@ -39,7 +39,7 @@ class AccountsRepository:
         )
 
     def count_reset_attempt(self, key, now, window):
-        counter, _ = PasswordResetRateLimit.objects.get_or_create(
+        counter, _ = PasswordResetRateLimit.objects.select_for_update().get_or_create(
             key=key, defaults={"window_started_at": now, "count": 0}
         )
         if counter.window_started_at + window <= now:

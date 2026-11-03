@@ -1,7 +1,3 @@
-if (!verificarSesion()) {
-    throw new Error("Sesión no válida");
-}
-
 const etiquetas = {
     riesgo_suicida: "Riesgo suicida",
     vulneracion_derechos: "Vulneración de derechos",

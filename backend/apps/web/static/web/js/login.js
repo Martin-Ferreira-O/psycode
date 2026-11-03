@@ -1,4 +1,6 @@
 document.addEventListener("DOMContentLoaded", () => {
+  localStorage.removeItem("access_token");
+  localStorage.removeItem("refresh_token");
   const form = document.getElementById("login-form");
   const usernameInput = document.getElementById("username");
   const passwordInput = document.getElementById("password");
@@ -52,21 +54,20 @@ document.addEventListener("DOMContentLoaded", () => {
     try {
       const data = await solicitarJson("/api/v1/auth/login", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
+        credentials: "same-origin",
+        headers: cabecerasNavegador({ "Content-Type": "application/json" }),
         body: JSON.stringify({
           usuario,
           password
         })
       });
 
-      if (!data.access_token || !data.refresh_token) {
+      if (data.authenticated !== true) {
         throw new ErrorSolicitud();
       }
 
-      localStorage.setItem("access_token", data.access_token);
-      localStorage.setItem("refresh_token", data.refresh_token);
+      localStorage.removeItem("access_token");
+      localStorage.removeItem("refresh_token");
 
       window.location.href = "/dashboard";
     } catch (error) {
@@ -132,9 +133,8 @@ document.addEventListener("DOMContentLoaded", () => {
     try {
       await solicitarJson("/api/v1/auth/password-reset", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
+        credentials: "same-origin",
+        headers: cabecerasNavegador({ "Content-Type": "application/json" }),
         body: JSON.stringify({
           correo: usuario
         })

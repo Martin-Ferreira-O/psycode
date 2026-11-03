@@ -9,6 +9,8 @@
 
 Servidor central del proyecto Psycode, desarrollado en Python y Django. Incluye la interfaz web, autenticación, recuperación de contraseña, alertas en MongoDB, consulta y evaluación HTTP, bitácora protegida y notificación por correo a destinatarios de la configuración operativa (envíos desactivados por defecto). El programa instalable en los PCs de psicología se mantiene por separado en `psycode-agent`.
 
+El acceso incluye límites persistentes por IP/cuenta y cookies HttpOnly con CSRF para el navegador. [Seguridad del login, configuración y alcance](docs/SEGURIDAD-AUTENTICACION.md).
+
 Para el VPS, seguir [instalación y operación separada](docs/OPERACION-SEPARADA.md): se necesitan ASGI para HTTP/WebSocket, el coordinador de captura y el trabajador de fragmentos. Las instrucciones de `runserver` de este README son para desarrollo local.
 
 Para probar este servidor con el otro repositorio, comienza por
@@ -319,3 +321,5 @@ uv export --locked --no-dev --no-emit-project --format requirements-txt --output
 ```
 
 Incluye `pyproject.toml`, `uv.lock` y `requirements.txt` en el mismo cambio. `requirements.txt` se genera; no se edita a mano.
+
+La recuperación de audio pendiente y el despliegue coordinado de estas extensiones están descritos en [Continuidad de captura](docs/CONTINUIDAD-CAPTURA.md).
