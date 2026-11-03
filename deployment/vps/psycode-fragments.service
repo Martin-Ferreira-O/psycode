@@ -1,0 +1,22 @@
+[Unit]
+Description=Psycode sequential fragment worker
+After=network.target mongod.service psycode-web.service
+
+[Service]
+User=psycode
+Group=psycode
+WorkingDirectory=/srv/psycode/current
+EnvironmentFile=/srv/psycode/shared/server.env
+ExecStart=/srv/psycode/current/.venv/bin/python manage.py process_fragment_jobs --continuous --idle-seconds 1
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=infinity
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/psycode/shared
+
+[Install]
+WantedBy=multi-user.target
