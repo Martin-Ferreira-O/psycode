@@ -1,0 +1,22 @@
+[Unit]
+Description=Psycode capture coordinator
+After=network.target psycode-web.service
+
+[Service]
+User=psycode
+Group=psycode
+WorkingDirectory=/srv/psycode/current
+EnvironmentFile=/srv/psycode/shared/server.env
+ExecStart=/srv/psycode/current/.venv/bin/python manage.py coordinate_capture
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=90
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/psycode/shared
+
+[Install]
+WantedBy=multi-user.target
