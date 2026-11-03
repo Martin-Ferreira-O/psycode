@@ -7,7 +7,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from backend.apps.analysis.domain import AnalysisContextLost, AnalysisState, Fragment
-from .models import FragmentJob, SessionState
+from .models import CaptureSession, FragmentJob, SessionState
 from .storage import FragmentError
 
 
@@ -463,6 +463,16 @@ class FragmentJobProcessor:
         return True
 
     def _close_session_if_finished(self, session_id):
+        session = CaptureSession.objects.filter(
+            pk=session_id,
+            state__in=[SessionState.COMPLETED, SessionState.FAILED],
+        ).first()
+        # Una captura fallida puede terminar de recibir archivos válidos después
+        # del cierre físico. El estado de captura no demuestra recepción completa.
+        # Tampoco lo demuestra que momentáneamente no queden trabajos en SQL.
+        if (session is None or session.actual_end is None or session.final_sequence is None
+                or session.next_sequence != session.final_sequence + 1):
+            return
         open_jobs = FragmentJob.objects.filter(
             sequence__session_id=session_id,
             state__in=[
@@ -474,16 +484,7 @@ class FragmentJobProcessor:
         if open_jobs:
             return
 
-        terminal_session = FragmentJob.objects.filter(
-            sequence__session_id=session_id,
-            sequence__session__state__in=[
-                SessionState.COMPLETED,
-                SessionState.FAILED,
-            ],
-        ).exists()
-
-        if terminal_session:
-            self.analysis.close_session(session_id)
+        self.analysis.close_session(session_id)
 
     def close_finished_contexts(self):
         for session_id in list(getattr(self.analysis, "histories", {})):

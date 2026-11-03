@@ -315,3 +315,5 @@ uv export --locked --no-dev --no-emit-project --format requirements-txt --output
 ```
 
 Incluye `pyproject.toml`, `uv.lock` y `requirements.txt` en el mismo cambio. `requirements.txt` se genera; no se edita a mano.
+
+La recuperación de audio pendiente y el despliegue coordinado de estas extensiones están descritos en [Continuidad de captura](docs/CONTINUIDAD-CAPTURA.md).

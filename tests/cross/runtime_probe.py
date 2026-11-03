@@ -9,7 +9,7 @@ from psycode_agent.config import AgentConfig
 from psycode_agent.runtime import run
 
 base,token,root=sys.argv[1:]
-stop=threading.Event();started=threading.Event();stopped=threading.Event()
+stop=threading.Event();started=threading.Event();stopped=threading.Event();errors=[]
 class Controller:
     active=False
     client=None
@@ -37,22 +37,32 @@ class Process:
     def wait(self,timeout=None):self.event.wait(timeout);return self.returncode
 cfg=AgentConfig('box-3','127.0.0.1',4455,'synthetic','rtsp://127.0.0.1/synthetic',10,1,
     backend_url=base,agent_token=token,agent_state_root=root,websocket_url=base.replace('http:','ws:')+'/ws/v1/agents',
-    max_retries=2,retry_backoff=0,http_timeout=2,heartbeat_interval=.2,min_free_bytes=1)
+    max_retries=2,retry_backoff=0,http_timeout=2,heartbeat_interval=.2,min_free_bytes=1,reserve_bytes=1024)
 def finish():
-    assert started.wait(10),'START_TIMEOUT'
-    assert stopped.wait(15),'STOP_TIMEOUT'
-    # Esperar confirmación durable, no solo la acción física.
-    for _ in range(200):
-        entries=[json.loads(p.read_text()) for p in (Path(root)/'box-3').glob('*.json')]
-        if any(e['kind']=='detencion' and e['state']=='acknowledged' for e in entries):
-            stop.set();return
-        time.sleep(.05)
-    stop.set()
+    try:
+        assert started.wait(10),'START_TIMEOUT'
+        assert stopped.wait(15),'STOP_TIMEOUT'
+        # El cierre físico y el envío terminan independientemente. Mantener el
+        # runtime disponible hasta observar también los recibos durables.
+        for _ in range(200):
+            manifests=[json.loads(p.read_text()) for p in (Path(root)/'fragments').glob('*/*.json')]
+            ends=[json.loads(p.read_text()) for p in (Path(root)/'box-3'/'session-state').glob('*.json')]
+            entries=[json.loads(p.read_text()) for p in (Path(root)/'box-3').glob('*.json')]
+            started_ack=any(e.get('kind')=='inicio' and e.get('state')=='acknowledged' for e in entries)
+            if started_ack and manifests and all(m['status']=='accepted' for m in manifests) and any('receipt' in e for e in ends):
+                return
+            time.sleep(.05)
+        raise AssertionError('RECEPTION_TIMEOUT')
+    except Exception as exc:
+        errors.append(str(exc))
+    finally:
+        stop.set()
 threading.Thread(target=finish,daemon=True).start()
 with patch('psycode_agent.session_coordinator.OBSController',Controller),patch('psycode_agent.audio_chunker.subprocess.Popen',Process):
     run(cfg,stop)
+assert errors==[],errors
 entries=[json.loads(p.read_text()) for p in (Path(root)/'box-3').glob('*.json')]
-assert len(entries)==2 and all(e['state']=='acknowledged' for e in entries),entries
+assert any(e.get('kind')=='inicio' and e.get('state')=='acknowledged' for e in entries),entries
 manifests=[json.loads(p.read_text()) for p in (Path(root)/'fragments').glob('*/*.json')]
 assert len(manifests)==1 and manifests[0]['status']=='accepted',manifests
 assert manifests[0]['temporal']['session_end_sample']==3200

@@ -1,0 +1,61 @@
+{
+  "observed_at": "2026-11-02T23:51:56.910383-03:00",
+  "scope": "Implementación local sintética; sin despliegue ni captura institucional",
+  "platform": "macOS-26.6.1-arm64-arm-64bit",
+  "central_tests": {
+    "run": 380,
+    "passed": 375,
+    "skipped": 5,
+    "settings": "backend.config.test_settings"
+  },
+  "agent_tests": {
+    "passed": 199,
+    "installed_sources_match": true,
+    "wheel_sources_match": true
+  },
+  "cross_tests": {
+    "passed": 7,
+    "agents": 5,
+    "sessions_per_agent": 2,
+    "same_state_root_per_agent": true,
+    "tests": [
+      "lost HTTPS receipts after commit",
+      "backlog of A while B authorized",
+      "reopened durable state",
+      "two ASGI processes",
+      "WSS replacement and lost ACK",
+      "autonomous runtime simulated OBS/FFmpeg",
+      "v1/v2 compatibility"
+    ]
+  },
+  "process_crash": {
+    "audio_crash_scenarios": 12,
+    "maximum_observed_lost_seconds": 1.0,
+    "checkpoint_seconds": [
+      1.0,
+      0.7
+    ],
+    "measurement_origin": "PCM sintético entregado al capturador",
+    "physical_power_loss_verified": false,
+    "upstream_OBS_RTSP_buffers_verified": false
+  },
+  "storage": {
+    "configured_authorized_audio_hours": 24,
+    "wav_budget_bytes": 5368709120,
+    "close_reserve_bytes": 268435456,
+    "warning_hours": 4,
+    "critical_hours": 1,
+    "tests": "Reserva física reducida en fixtures, ENOSPC sintético, conservación de pendientes; OBS requiere dimensionamiento real"
+  },
+  "reception_grace_seconds": 604800,
+  "wheel_sha256": "51fb626bfc136f2387301038cbe4af43a8fca96452fc7ecd71c2275a75055484",
+  "pending_validation": [
+    "Windows/NTFS/ACL and real devices",
+    "physical power interruption and end-to-end maximum loss",
+    "real OBS bitrate and total volume autonomy"
+  ],
+  "source_tree_sha256": {
+    "central_capture": "5a2d025de6a919ca87bad71ff5bc8983cec376da8d717f137e9d8aa36a257a3c",
+    "agent": "dc684066b0c24f4da8ab4e8601e7827a4fadac93436d619aa68ca11e07438943"
+  }
+}

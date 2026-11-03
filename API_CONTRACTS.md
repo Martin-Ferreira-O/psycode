@@ -1103,3 +1103,39 @@ El campo persistido `nivel_severidad` usa la escala operativa acordada para aler
 La relación es única y automática. Los valores menores que 1, mayores que 3, no enteros y booleanos se rechazan. La conversión o retiro de documentos históricos 0–7 se describe en [MONGODB.md](docs/MONGODB.md#actualización-de-la-escala-histórica).
 
 Los materiales fuente pueden organizar categorías clínicas con otra numeración; no se debe inferir equivalencia exacta con C-SSRS ni diagnóstico. Cualquier clasificación requiere validación clínica, cultural y externa antes de producción.
+
+
+## Continuidad de captura: extensiones aditivas
+
+La política de vencimientos de recepción descrita en secciones anteriores queda
+actualizada por [Continuidad de captura](docs/CONTINUIDAD-CAPTURA.md). Los estados,
+mensajes WS, uploads y recibos v1/v2 conservan su formato. Una ausencia de red
+produce diagnóstico; no invalida automáticamente audio capturado dentro de la
+ventana original. La recepción automática dura siete días desde el límite de
+captura; después requiere `resume_capture_reception`, conservando pendientes.
+
+| Método | Ruta interna | Uso |
+|---|---|---|
+| GET | `/api/v1/internal/sessions/<uuid>` | Captura, recepción y procesamiento separados, limitado al box autenticado. |
+| POST | `/api/v1/internal/sessions/<uuid>/capture-ended` | Evidencia física durable de detención, independiente del ACK y los uploads. |
+| POST | `/api/v1/internal/agent-events` | Hasta 64 eventos técnicos, JSON de hasta 64 KiB, deduplicación por agente/evento. |
+
+Todas usan `Authorization: Agent <agent_id>.<secret>`, sin JWT de profesionales.
+`capture-ended` admite `last_sequence: null` para un manifiesto desconocido; no
+lo convierte en `-1` ni inventa una confirmación de orden. Conserva fecha/motivo
+y permite enriquecer únicamente la secuencia desconocida. El recibo devuelve
+la proyección de sesión. El cierre físico libera el box para otra captura
+central autorizada; no completa recepción ni procesamiento pendientes.
+
+`agent-events` recibe `{version: "1.0", events: [...]}` conforme al esquema
+versionado. Fija identidad/box desde la credencial. La confirmación contiene
+`data.accepted_event_ids` con todos los UUID del lote. Repetir contenido idéntico
+mantiene el evento y su fecha de recepción originales; cambiar una identidad
+existente devuelve `409 EVENT_CONFLICT` y revierte el lote. Causas/tipos tienen
+lista cerrada; se rechazan campos adicionales y contenido libre. No contiene
+audio, rutas, tokens ni transcripciones.
+
+Los schemas `contracts/agent-events-v1.schema.json` y
+`contracts/capture-ended-v1.schema.json`, incluidos en `manifest.json`, son la
+referencia para solicitudes. El `ready` anuncia `agent.events.v1` y
+`sessions.capture-ended.v1`. Desplegar/migrar primero central y después agentes.

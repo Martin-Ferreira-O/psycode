@@ -4,6 +4,7 @@ import hashlib
 import io
 import json
 import os
+import re
 from pathlib import Path
 import socket
 import subprocess
@@ -34,7 +35,8 @@ def main():
         agent_env=root/'agent-env'
         subprocess.run(['uv','venv',str(agent_env),'--python',sys.executable],check=True,capture_output=True)
         apython=agent_env/('Scripts/python.exe' if os.name=='nt' else 'bin/python')
-        subprocess.run(['uv','pip','install','--python',str(apython),str(wheel)],check=True,capture_output=True)
+        subprocess.run(['uv','pip','install','--reinstall-package','psycode-agent',
+                        '--python',str(apython),str(wheel)],check=True,capture_output=True)
         with socket.socket() as sock:
             sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
         base=f'http://127.0.0.1:{port}'
@@ -63,7 +65,10 @@ def main():
                     with socket.create_connection(('127.0.0.1',port2),timeout=.1):break
                 except OSError:time.sleep(.05)
             isolated=subprocess.run([str(apython),'-I','-c',
-                'import importlib.util; import psycode_agent; assert all(importlib.util.find_spec(n) is None for n in ("django","backend","pymongo"))'],
+                'import importlib.util, pathlib, sys, zipfile; import psycode_agent; '
+                'assert all(importlib.util.find_spec(n) is None for n in ("django","backend","pymongo")); '
+                'root=pathlib.Path(psycode_agent.__file__).parent; wheel=zipfile.ZipFile(sys.argv[1]); '
+                'assert all(p.read_bytes()==wheel.read("psycode_agent/"+p.name) for p in root.glob("*.py"))',str(wheel)],
                 check=True,capture_output=True)
             from openpyxl import Workbook
             from zoneinfo import ZoneInfo
@@ -160,11 +165,15 @@ def main():
             assert FragmentJob.objects.filter(sequence__session_id=sid2).count()==1
             # Ejecutar también la cobertura HTTP v1 y ACK históricos, fuera de la suite ordinaria.
             # Esta instalación temporal del servidor admite el agente solo para esas pruebas.
-            result=subprocess.run(['uv','run','--with',str(wheel),'--no-editable','python','manage.py','test','tests/cross',
+            result=subprocess.run(['uv','run','--with',str(wheel),'--reinstall-package','psycode-agent','--no-editable','python','manage.py','test','tests/cross',
                 '--settings=backend.config.test_settings','--noinput'],cwd=ROOT,env=env,capture_output=True,text=True)
             if result.returncode:raise RuntimeError(result.stdout+result.stderr)
+            test_count = re.search(r'Ran (\d+) tests?', result.stderr)
+            assert test_count is not None, result.stderr
             print(json.dumps({'result':'passed','agent_wheel_sha256':hashlib.sha256(wheel.read_bytes()).hexdigest(),
-                'coverage':['separate WS/HTTP processes','SQL agenda and coordinator restart','lost ACK after commit',
+                'cross_test_count': int(test_count.group(1)),
+                'coverage':['five concurrent simulated agents with consecutive sessions and old backlog',
+                'lost HTTPS responses after commit for each agent','separate WS/HTTP processes','SQL agenda and coordinator restart','lost ACK after commit',
                 'reconnect','idempotent uploads','stop and final sequence','queue to simulated unknown-speaker analysis','historical v1 HTTP and ACK tests','autonomous runtime with simulated OBS/FFmpeg','lease replacement across two ASGI processes','isolated agent without Django/backend/MongoDB','native delivered Smile JSON through HTTP to authorization']}))
         finally:
             if agent is not None and agent.poll() is None:agent.terminate();agent.wait(timeout=5)

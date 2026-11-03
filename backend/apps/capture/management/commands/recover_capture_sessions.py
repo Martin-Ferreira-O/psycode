@@ -1,17 +1,18 @@
 from datetime import timedelta
 
+from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
 from backend.apps.capture.services import CaptureSessionService
 
 
 class Command(BaseCommand):
-    help = "Finaliza autorizaciones vencidas y cierra sesiones de captura abandonadas. No inicia capturas."
+    help = "Finaliza autorizaciones vencidas y diagnostica sesiones desconectadas sin descartar pendientes."
 
     def add_arguments(self, parser):
-        parser.add_argument("--start-timeout", type=int, default=120, help="Segundos para confirmar inicio")
-        parser.add_argument("--heartbeat-timeout", type=int, default=120, help="Segundos sin actividad")
-        parser.add_argument("--finalization-timeout", type=int, default=300, help="Segundos para confirmar cierre")
+        parser.add_argument("--start-timeout", type=int, default=settings.CAPTURE_START_TIMEOUT_SECONDS, help="Segundos para advertir inicio sin confirmar")
+        parser.add_argument("--heartbeat-timeout", type=int, default=settings.CAPTURE_INACTIVITY_TIMEOUT_SECONDS, help="Segundos sin actividad para diagnóstico")
+        parser.add_argument("--finalization-timeout", type=int, default=settings.CAPTURE_FINALIZATION_TIMEOUT_SECONDS, help="Segundos para advertir detención sin confirmar")
 
     def handle(self, *args, **options):
         values = {key: options[key] for key in ("start_timeout", "heartbeat_timeout", "finalization_timeout")}

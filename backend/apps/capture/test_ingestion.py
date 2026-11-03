@@ -124,7 +124,7 @@ class FragmentIngestionTests(IngestionFixtures, TestCase):
         self.assertFalse(AcceptedSequence.objects.exists())
         self.assertEqual(self.blobs(), [])
 
-    def test_rejects_wrong_box_missing_started_failed_and_expired_sessions(self):
+    def test_rejects_wrong_box_and_invalid_states_but_recovers_disconnected_session(self):
         with self.assertRaises(FragmentError) as caught:
             self.receive(box="box-4")
         self.assertEqual(caught.exception.code, "SESSION_NOT_FOUND")
@@ -132,10 +132,11 @@ class FragmentIngestionTests(IngestionFixtures, TestCase):
             CaptureSession.objects.filter(pk=self.session.session_id).update(state=state)
             self.assert_code("SESSION_NOT_ACCEPTING_SEQUENCES", self.receive)
         CaptureSession.objects.filter(pk=self.session.session_id).update(state="activa")
-        self.assert_code("SESSION_NOT_ACCEPTING_SEQUENCES", self.receive, now=NOW + timedelta(minutes=3))
-        self.assertEqual(CaptureSession.objects.get().state, "fallida")
-        self.assertFalse(FragmentJob.objects.exists())
-        self.assertEqual(self.blobs(), [])
+        result, created = self.receive(now=NOW + timedelta(minutes=3))
+        self.assertTrue(created)
+        self.assertEqual(CaptureSession.objects.get().state, "activa")
+        self.assertEqual(FragmentJob.objects.get().pk, result.job_id)
+        self.assertEqual(len(self.blobs()), 1)
 
     def test_rejects_gaps_and_invalid_capture_timestamps(self):
         self.assert_code("SEQUENCE_OUT_OF_ORDER", self.receive, number=1)
