@@ -3,13 +3,10 @@
 from __future__ import annotations
 
 import json
-import logging
-import uuid
-from datetime import datetime, timezone
 
 from pymongo.errors import DuplicateKeyError, PyMongoError
 
-from backend.common.audit import AuditWriter
+from .audit import AlertAudit
 from backend.common.errors import PersistenceUnavailable
 
 from .documents import alerta_a_documento, documento_a_alerta, evaluacion_a_documento
@@ -86,7 +83,7 @@ class AlertsRepository(AlertWritePort, AlertQueryPort):
             raise AlertAlreadyExists(alert.alerta_id) from None
         except PyMongoError:
             raise PersistenceUnavailable() from None
-        self._audit("alerts.register", "success", alerta_id=alert.alerta_id)
+        self._audit("alerts.register", "success", alerta_id=alert.alerta_id, sesion_id=alert.sesion_id)
         return alert
 
     def get_alert(self, alerta_id: str) -> Alerta:
@@ -184,26 +181,28 @@ class AlertsRepository(AlertWritePort, AlertQueryPort):
             raise AlertNotFound(ident)
         raise EvaluationAlreadyRegistered(ident)
 
-    def _audit(self, action, outcome, *, alerta_id, actor_id=None, error_code=None):
-        AuditWriter.record(action, outcome, actor_id=actor_id, error_code=error_code, alerta_id=alerta_id)
-        evento = {
-            "event_id": str(uuid.uuid4()),
-            "timestamp": datetime.now(timezone.utc),
-            "action": action,
-            "outcome": outcome,
-            "actor_id": actor_id,
-            "alerta_id": alerta_id,
-            "channel": None,
-            "contingencia": None,
-            "motivo": None,
-            "error_code": error_code,
-            "duration_ms": None,
-            "intentos": [],
-        }
+    def _audit(self, action, outcome, **metadata):
+        return AlertAudit(self._events).record(action, outcome, **metadata)
+
+    def list_events(self, filters):
+        query = {}
+        for field in ("alerta_id", "action", "outcome"):
+            if filters.get(field) is not None:
+                query[field] = filters[field]
+        period = {}
+        if filters.get("fecha_desde"):
+            period["$gte"] = filters["fecha_desde"]
+        if filters.get("fecha_hasta"):
+            period["$lte"] = filters["fecha_hasta"]
+        if period:
+            query["timestamp"] = period
+        direction = 1 if filters["order"] == "asc" else -1
         try:
-            self._events().insert_one(evento)
+            col = self._events()
+            total = col.count_documents(query)
+            items = list(col.find(query, {"_id": 0}).sort(
+                [("timestamp", direction), ("event_id", direction)]
+            ).skip(filters["offset"]).limit(filters["limit"]))
+            return items, total
         except PyMongoError:
-            logging.getLogger("psycode.audit").error(
-                '{"action":"audit_events.write","outcome":"failure","alerta_id":"%s"}',
-                alerta_id,
-            )
+            raise PersistenceUnavailable() from None

@@ -2,8 +2,8 @@
   "alerta_id": "11111111-1111-4111-8111-111111111111",
   "box": "box-3",
   "tipo_riesgo": "riesgo_suicida",
-  "nivel_severidad": 2,
-  "semaforo": "BAJO",
+  "nivel_severidad": 3,
+  "semaforo": "ALTO",
   "fecha_hora": { "$date": "2026-09-12T14:05:22.000Z" },
   "estado_evaluacion": "correcta",
   "evaluacion": {

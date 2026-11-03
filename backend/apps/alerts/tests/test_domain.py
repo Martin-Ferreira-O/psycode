@@ -39,30 +39,27 @@ def alta(**overrides):
 
 
 class DomainTests(SimpleTestCase):
-    def test_semaforo_derivado_del_anexo_a(self):
+    def test_cada_nivel_tiene_un_semaforo_unico(self):
         esperado = {
-            0: Semaforo.NULO,
             1: Semaforo.BAJO,
-            2: Semaforo.BAJO,
-            3: Semaforo.MEDIO,
-            4: Semaforo.MEDIO,
-            5: Semaforo.ALTO,
-            6: Semaforo.ALTO,
-            7: Semaforo.ALTO,
+            2: Semaforo.MEDIO,
+            3: Semaforo.ALTO,
         }
         for nivel, semaforo in esperado.items():
             with self.subTest(nivel=nivel):
                 self.assertEqual(semaforo_desde_severidad(nivel), semaforo)
 
     def test_severidad_invalida(self):
-        for valor in (-1, 8, True, False, "2", 2.0):
+        for valor in (-1, 0, 4, 8, True, False, "2", 2.0):
             with self.subTest(valor=valor):
                 with self.assertRaises(DomainError):
                     semaforo_desde_severidad(valor)
+                with self.assertRaises(DomainError):
+                    alta(nivel_severidad=valor)
 
     def test_alta_pendiente_sin_evaluacion_y_semaforo_derivado(self):
         alerta = alta()
-        self.assertEqual(alerta.semaforo, Semaforo.BAJO)
+        self.assertEqual(alerta.semaforo, Semaforo.MEDIO)
         self.assertEqual(alerta.estado_evaluacion, EstadoEvaluacion.PENDIENTE)
         self.assertIsNone(alerta.evaluacion)
         self.assertEqual(alerta.trazabilidad.registrada_en, alerta.trazabilidad.actualizada_en)
@@ -75,6 +72,29 @@ class DomainTests(SimpleTestCase):
 
     def test_descripcion_vacia_queda_null(self):
         self.assertIsNone(alta(descripcion="   ").descripcion)
+
+   
+    def test_descripcion_normaliza_espacios(self):
+        alerta = alta(descripcion="  No   quiero\nseguir\t sintiéndome   así.  ")
+
+        self.assertEqual(alerta.descripcion,"No quiero seguir sintiéndome así.")
+
+    def test_descripcion_normaliza_caracteres_unicode(self):
+        alerta = alta(descripcion="Me siento asi\u0301")
+        self.assertEqual(alerta.descripcion,"Me siento así")
+
+    def test_descripcion_rechaza_tipo_no_texto(self):
+        for valor in (123, True, ["texto"], {"texto": "ejemplo"}):
+            with self.subTest(valor=valor):
+                with self.assertRaises(DomainError):
+                    alta(descripcion=valor)
+
+    def test_descripcion_acepta_exactamente_500_caracteres(self):
+        descripcion = "x" * 500
+
+        alerta = alta(descripcion=descripcion)
+
+        self.assertEqual(alerta.descripcion, descripcion)
 
     def test_limites_de_campos(self):
         with self.assertRaises(DomainError):
@@ -101,7 +121,7 @@ class DomainTests(SimpleTestCase):
         self.assertEqual(revisada.estado_evaluacion, EstadoEvaluacion.CORRECTA)
         self.assertEqual(revisada.evaluacion.usuario_id, USUARIO_ID)
         self.assertTrue(es_revisada(revisada.estado_evaluacion))
-        self.assertEqual(revisada.semaforo, Semaforo.BAJO)
+        self.assertEqual(revisada.semaforo, Semaforo.MEDIO)
         self.assertEqual(revisada.fecha_hora, MOMENTO)
 
     def test_no_permite_reevaluar_ni_pendiente_como_resultado(self):

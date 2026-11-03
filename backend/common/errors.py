@@ -50,7 +50,8 @@ def exception_handler(exc, context):
             code, message = mapping.get(status, ("INTERNAL_ERROR", "Error interno del servidor"))
             details = {"fields": response.data} if isinstance(exc, exceptions.ValidationError) else {}
     if status == 401:
-        headers["WWW-Authenticate"] = "Bearer"
+        challenge = headers.get("WWW-Authenticate", "Bearer")
+        headers["WWW-Authenticate"] = "Bearer" if challenge.startswith("Bearer") else challenge
     return Response(error_body(code, message, details), status=status, headers=headers)
 
 

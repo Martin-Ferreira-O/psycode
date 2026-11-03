@@ -1,0 +1,120 @@
+from rest_framework import status
+from rest_framework.test import APITestCase
+from rest_framework_simplejwt.tokens import RefreshToken
+
+from backend.apps.accounts.models import Role, User
+
+
+class AdminUserManagementTests(APITestCase):
+    def setUp(self):
+        # 1. Admin con permisos
+        self.admin_user = User.objects.create_user(
+            username="admin_test",
+            email="admin@test.cl",
+            password="Password-Segura-1234",
+            role=Role.ADMIN,
+            is_active=True,
+        )
+        refresh = RefreshToken.for_user(self.admin_user)
+        self.admin_token = str(refresh.access_token)
+
+        # 2. Supervisor sin permisos de administración
+        self.supervisor_user = User.objects.create_user(
+            username="supervisor_test",
+            email="supervisor@test.cl",
+            password="Password-Segura-1234",
+            role=Role.SUPERVISOR,
+            is_active=True,
+        )
+        refresh_sup = RefreshToken.for_user(self.supervisor_user)
+        self.supervisor_token = str(refresh_sup.access_token)
+
+        self.url_users = "/api/v1/auth/admin/users"
+
+    def test_creacion_usuario_por_admin(self):
+        """Crear usuario con éxito y verificar rol supervisor por defecto."""
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.admin_token}")
+        payload = {
+            "usuario": "nuevo_psicologo",
+            "nombre": "Juan Perez",
+            "correo": "juan@test.cl",
+            "password": "Password-Segura-1234",
+        }
+        res = self.client.post(self.url_users, payload, format="json")
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(res.data["data"]["rol"], Role.SUPERVISOR)
+        self.assertTrue(res.data["data"]["activo"])
+
+    def test_listado_usuarios_por_admin(self):
+        """Listar usuarios correctamente siendo admin."""
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.admin_token}")
+        res = self.client.get(self.url_users)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertGreaterEqual(len(res.data["data"]), 2)
+
+    def test_actualizacion_usuario(self):
+        """Actualizar nombre y rol de un usuario."""
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.admin_token}")
+        url = f"{self.url_users}/{self.supervisor_user.id}"
+        payload = {
+            "nombre": "Supervisor Modificado",
+            "rol": Role.ADMIN,
+        }
+        res = self.client.patch(url, payload, format="json")
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data["data"]["nombre"], "Supervisor Modificado")
+        self.assertEqual(res.data["data"]["rol"], Role.ADMIN)
+
+    def test_activacion_y_desactivacion_toggle(self):
+        """Invertir estado activo de un usuario (toggle-active)."""
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.admin_token}")
+        url = f"{self.url_users}/{self.supervisor_user.id}/toggle-active"
+        
+        # Desactivar
+        res = self.client.patch(url)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertFalse(res.data["data"]["activo"])
+
+        # Reactivar
+        res2 = self.client.patch(url)
+        self.assertEqual(res2.status_code, status.HTTP_200_OK)
+        self.assertTrue(res2.data["data"]["activo"])
+
+    def test_correo_duplicado_falla(self):
+        """Validar que no permita crear un usuario con un correo ya existente."""
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.admin_token}")
+        payload = {
+            "usuario": "otro_usuario",
+            "nombre": "Otro Nombre",
+            "correo": "supervisor@test.cl",  # Ya existe
+            "password": "Password-Segura-1234",
+        }
+        res = self.client.post(self.url_users, payload, format="json")
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(res.data["error"]["code"], "VALIDATION_ERROR")
+
+    def test_permisos_insuficientes_supervisor(self):
+        """Impedir que un usuario con rol supervisor administre cuentas."""
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.supervisor_token}")
+        
+        # Intentar listar
+        res_get = self.client.get(self.url_users)
+        self.assertEqual(res_get.status_code, status.HTTP_403_FORBIDDEN)
+
+        # Intentar crear
+        payload = {
+            "usuario": "intruso",
+            "nombre": "Intruso",
+            "correo": "intruso@test.cl",
+            "password": "Password-Segura-1234",
+        }
+        res_post = self.client.post(self.url_users, payload, format="json")
+        self.assertEqual(res_post.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_admin_no_puede_autodesactivarse(self):
+        """Impedir que un administrador se desactive a sí mismo."""
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.admin_token}")
+        url = f"{self.url_users}/{self.admin_user.id}/toggle-active"
+        res = self.client.patch(url)
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(res.data["error"]["code"], "VALIDATION_ERROR")

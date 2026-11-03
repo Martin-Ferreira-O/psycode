@@ -8,6 +8,7 @@ Organización por responsabilidad dentro de un único backend Django:
 | [alerts](alerts/README.md) | Alertas y evaluaciones | Persistencia MongoDB; rutas HTTP pendientes (SCRUM-33 / 34) |
 | [dashboard](dashboard/README.md) | Resumen y estadísticas | Pendientes (SCRUM-36) |
 | [notifications](notifications/README.md) | Teams y contingencia | Sin API pública; implementación pendiente (SCRUM-41) |
+| [capture](capture/README.md) | Sesiones, órdenes al agente, secuencias y recuperación (SCRUM-71) | Interfaz interna; sin ingesta pública |
 
 Cada módulo tendrá presentación, aplicación, dominio e infraestructura solo donde sean necesarios. Nombres comunes previstos: `urls.py`, `views.py`, `serializers.py`, `services.py`, `domain.py`, `ports.py`, `repositories.py` y `clients.py`; no todos son obligatorios para todas las apps.
 

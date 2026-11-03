@@ -26,6 +26,7 @@ document.addEventListener("DOMContentLoaded", () => {
     nuevaPassInput.disabled = true;
     confirmPassInput.disabled = true;
     submitBtn.disabled = true;
+    document.querySelectorAll(".toggle-password-btn").forEach(btn => { btn.disabled = true; });
     return;
   }
 
@@ -35,6 +36,9 @@ document.addEventListener("DOMContentLoaded", () => {
       const input = document.getElementById(targetId);
       const isPassword = input.getAttribute("type") === "password";
       input.setAttribute("type", isPassword ? "text" : "password");
+      btn.setAttribute("aria-pressed", String(isPassword));
+      const campo = targetId === "nueva_password" ? "nueva contraseña" : "confirmación de contraseña";
+      btn.setAttribute("aria-label", `${isPassword ? "Ocultar" : "Mostrar"} ${campo}`);
     });
   });
 
@@ -43,7 +47,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const p2 = confirmPassInput.value;
 
     const validaciones = [
-      { el: chkLength, cumple: p1.length >= 8 },
+      { el: chkLength, cumple: p1.length >= 12 },
       { el: chkCase, cumple: /[a-z]/.test(p1) && /[A-Z]/.test(p1) },
       { el: chkNumber, cumple: /\d/.test(p1) },
       { el: chkSymbol, cumple: /[^a-zA-Z0-9]/.test(p1) },
@@ -71,8 +75,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const nuevaPassword = nuevaPassInput.value;
     const confirmPassword = confirmPassInput.value;
 
-    if (nuevaPassword.length < 8) {
-      mostrarEstado(alertBox, "error", "La contraseña debe tener al menos 8 caracteres.");
+    if (nuevaPassword.length < 12) {
+      mostrarEstado(alertBox, "error", "La contraseña debe tener al menos 12 caracteres.");
       return;
     }
 

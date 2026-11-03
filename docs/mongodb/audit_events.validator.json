@@ -17,11 +17,16 @@
         "motivo",
         "error_code",
         "duration_ms",
-        "intentos"
+        "intentos",
+        "actor",
+        "sesion_id",
+        "sequence"
       ],
       "additionalProperties": false,
       "properties": {
-        "_id": { "bsonType": "objectId" },
+        "_id": {
+          "bsonType": "objectId"
+        },
         "event_id": {
           "bsonType": "string",
           "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
@@ -32,16 +37,30 @@
           "description": "Instante UTC en que el backend registró el evento."
         },
         "action": {
-          "enum": ["alerts.register", "alerts.evaluate", "notifications.send"],
-          "description": "Solo eventos del dominio persistido en MongoDB. La autenticación permanece en el log de Django."
+          "enum": [
+            "alerts.register",
+            "alerts.evaluate",
+            "notifications.send",
+            "analysis.speechmatics",
+            "analysis.jev",
+            "alerts.flow",
+            "notifications.result"
+          ],
+          "description": "Eventos internos de alertas, notificación y fallos técnicos de análisis. Autenticación solo en log."
         },
         "outcome": {
-          "enum": ["success", "failure", "skipped"]
+          "enum": [
+            "success",
+            "failure",
+            "skipped"
+          ]
         },
         "actor_id": {
           "description": "UUID del profesional autenticado. null en registro interno o envío automático. Nunca correo ni nombre.",
           "oneOf": [
-            { "bsonType": "null" },
+            {
+              "bsonType": "null"
+            },
             {
               "bsonType": "string",
               "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
@@ -49,25 +68,42 @@
           ]
         },
         "alerta_id": {
-          "bsonType": "string",
+          "bsonType": [
+            "string",
+            "null"
+          ],
           "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-          "description": "Referencia lógica a alerts.alerta_id. No hay join ni transacción con SQLite."
+          "description": "UUID de alerta; null para eventos técnicos sin alerta persistida."
         },
         "channel": {
-          "enum": ["teams", "email", null],
-          "description": "Canal que aceptó el aviso; null si ninguno o si la acción no es un envío."
+          "enum": [
+            "teams",
+            "email",
+            null
+          ],
+          "description": "Canal del intento, aceptado o fallido; null fuera de envíos."
         },
         "contingencia": {
-          "bsonType": ["bool", "null"],
-          "description": "true si se intentó correo por fallo de Teams. null fuera de notifications.send."
+          "bsonType": [
+            "bool",
+            "null"
+          ],
+          "description": "true si se usa el correo de respaldo."
         },
         "motivo": {
-          "enum": ["sin_riesgo", "deshabilitada", "ningun_canal_acepto", null]
+          "enum": [
+            "sin_riesgo",
+            "deshabilitada",
+            "ningun_canal_acepto",
+            null
+          ]
         },
         "error_code": {
           "description": "Código estable. Nunca el cuerpo libre de error del proveedor ni secretos.",
           "oneOf": [
-            { "bsonType": "null" },
+            {
+              "bsonType": "null"
+            },
             {
               "bsonType": "string",
               "pattern": "^[A-Z][A-Z0-9_]{1,78}$"
@@ -75,25 +111,50 @@
           ]
         },
         "duration_ms": {
-          "description": "Duración total del envío en milisegundos. null fuera de notifications.send.",
+          "description": "Duración de este intento en milisegundos; null fuera de envíos.",
           "oneOf": [
-            { "bsonType": "null" },
-            { "bsonType": ["int", "long"], "minimum": 0 }
+            {
+              "bsonType": "null"
+            },
+            {
+              "bsonType": [
+                "int",
+                "long"
+              ],
+              "minimum": 0
+            }
           ]
         },
         "intentos": {
           "bsonType": "array",
-          "description": "Intentos de notificación en orden. Vacío si la acción no envía avisos.",
+          "description": "Campo histórico. Los eventos nuevos registran un intento por evento y dejan este arreglo vacío.",
           "items": {
             "bsonType": "object",
-            "required": ["canal", "resultado", "error_code", "duracion_ms"],
+            "required": [
+              "canal",
+              "resultado",
+              "error_code",
+              "duracion_ms"
+            ],
             "additionalProperties": false,
             "properties": {
-              "canal": { "enum": ["teams", "email"] },
-              "resultado": { "enum": ["aceptado", "fallido"] },
+              "canal": {
+                "enum": [
+                  "teams",
+                  "email"
+                ]
+              },
+              "resultado": {
+                "enum": [
+                  "aceptado",
+                  "fallido"
+                ]
+              },
               "error_code": {
                 "oneOf": [
-                  { "bsonType": "null" },
+                  {
+                    "bsonType": "null"
+                  },
                   {
                     "bsonType": "string",
                     "pattern": "^[A-Z][A-Z0-9_]{1,78}$"
@@ -101,13 +162,307 @@
                 ]
               },
               "duracion_ms": {
-                "bsonType": ["int", "long"],
+                "bsonType": [
+                  "int",
+                  "long"
+                ],
                 "minimum": 0
               }
             }
           }
+        },
+        "actor": {
+          "enum": [
+            "Sistema",
+            "Usuario"
+          ]
+        },
+        "sesion_id": {
+          "bsonType": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+          "description": "UUID de sesión para correlación cuando esté disponible."
+        },
+        "sequence": {
+          "bsonType": [
+            "int",
+            "long",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "notification": {
+          "bsonType": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "mode",
+            "phase",
+            "reason"
+          ],
+          "description": "Metadatos de notificación; ausentes en eventos históricos. Sin direcciones ni texto libre.",
+          "properties": {
+            "id": {
+              "bsonType": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+            },
+            "mode": {
+              "enum": [
+                "lista_distribucion",
+                "supervisores_activos",
+                null
+              ]
+            },
+            "phase": {
+              "enum": [
+                "principal",
+                "respaldo",
+                "resumen"
+              ]
+            },
+            "reason": {
+              "enum": [
+                "FALLO_PARCIAL",
+                "FALLO_TOTAL",
+                "SIN_DESTINATARIOS_VALIDOS",
+                null
+              ]
+            },
+            "attempt": {
+              "bsonType": [
+                "int",
+                "long"
+              ],
+              "minimum": 1
+            },
+            "status": {
+              "enum": [
+                "EXITO_TOTAL",
+                "FALLO_PARCIAL",
+                "FALLO_TOTAL",
+                "SIN_DESTINATARIOS_VALIDOS"
+              ]
+            },
+            "primary_successes": {
+              "bsonType": [
+                "int",
+                "long"
+              ],
+              "minimum": 0
+            },
+            "primary_failures": {
+              "bsonType": [
+                "int",
+                "long"
+              ],
+              "minimum": 0
+            },
+            "backup_successes": {
+              "bsonType": [
+                "int",
+                "long"
+              ],
+              "minimum": 0
+            },
+            "backup_failures": {
+              "bsonType": [
+                "int",
+                "long"
+              ],
+              "minimum": 0
+            }
+          },
+          "oneOf": [
+            {
+              "properties": {
+                "phase": {
+                  "enum": [
+                    "principal",
+                    "respaldo"
+                  ]
+                }
+              },
+              "required": [
+                "attempt"
+              ],
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "status"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "primary_successes"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "primary_failures"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "backup_successes"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "backup_failures"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "properties": {
+                "phase": {
+                  "enum": [
+                    "resumen"
+                  ]
+                }
+              },
+              "required": [
+                "status",
+                "primary_successes",
+                "primary_failures",
+                "backup_successes",
+                "backup_failures"
+              ],
+              "not": {
+                "required": [
+                  "attempt"
+                ]
+              }
+            }
+          ]
         }
-      }
+      },
+      "allOf": [
+        {
+          "oneOf": [
+            {
+              "properties": {
+                "actor": {
+                  "enum": [
+                    "Sistema"
+                  ]
+                },
+                "actor_id": {
+                  "bsonType": "null"
+                }
+              }
+            },
+            {
+              "properties": {
+                "actor": {
+                  "enum": [
+                    "Usuario"
+                  ]
+                },
+                "actor_id": {
+                  "bsonType": "string"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "oneOf": [
+            {
+              "properties": {
+                "action": {
+                  "enum": [
+                    "alerts.register",
+                    "alerts.evaluate",
+                    "notifications.send",
+                    "notifications.result"
+                  ]
+                },
+                "alerta_id": {
+                  "bsonType": "string"
+                }
+              }
+            },
+            {
+              "properties": {
+                "action": {
+                  "enum": [
+                    "analysis.speechmatics",
+                    "analysis.jev",
+                    "alerts.flow"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "oneOf": [
+            {
+              "properties": {
+                "action": {
+                  "enum": [
+                    "notifications.result"
+                  ]
+                },
+                "notification": {
+                  "properties": {
+                    "phase": {
+                      "enum": [
+                        "resumen"
+                      ]
+                    }
+                  }
+                }
+              },
+              "required": [
+                "notification"
+              ]
+            },
+            {
+              "properties": {
+                "action": {
+                  "enum": [
+                    "notifications.send"
+                  ]
+                },
+                "notification": {
+                  "properties": {
+                    "phase": {
+                      "enum": [
+                        "principal",
+                        "respaldo"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "properties": {
+                "action": {
+                  "enum": [
+                    "alerts.register",
+                    "alerts.evaluate",
+                    "analysis.speechmatics",
+                    "analysis.jev",
+                    "alerts.flow"
+                  ]
+                }
+              },
+              "not": {
+                "required": [
+                  "notification"
+                ]
+              }
+            }
+          ]
+        }
+      ]
     }
   }
 }

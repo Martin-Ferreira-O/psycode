@@ -1,5 +1,7 @@
 """Configuración compartida. El modo local debe habilitarse explícitamente."""
+import json
 import os
+import re
 import secrets
 from datetime import timedelta
 from pathlib import Path
@@ -59,16 +61,20 @@ if (not PASSWORD_RESET_PATH.startswith("/") or PASSWORD_RESET_PATH.startswith("/
     raise ImproperlyConfigured("PASSWORD_RESET_PATH debe ser una ruta absoluta sin consulta ni fragmento.")
 
 INSTALLED_APPS = [
+    "backend.apps.agenda",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "corsheaders",
     "rest_framework",
     "backend.apps.accounts.apps.AccountsConfig",
     "backend.apps.alerts.apps.AlertsConfig",
+    "backend.apps.analysis.apps.AnalysisConfig",
     "backend.apps.dashboard.apps.DashboardConfig",
     "backend.apps.notifications.apps.NotificationsConfig",
     "django.contrib.staticfiles",
     "backend.apps.web.apps.WebConfig",
+    "backend.apps.operational.apps.OperationalConfig",
+    "backend.apps.capture.apps.CaptureConfig",
 ]
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
@@ -89,7 +95,9 @@ TEMPLATES = [
     },
 ]
 
-STATIC_URL = "static/"
+STATIC_URL = "/static/"
+# Nginx sirve este directorio después de ejecutar collectstatic.
+STATIC_ROOT = local_path("STATIC_ROOT", "staticfiles")
 ROOT_URLCONF = "backend.config.urls"
 WSGI_APPLICATION = "backend.config.wsgi.application"
 ASGI_APPLICATION = "backend.config.asgi.application"
@@ -184,3 +192,53 @@ LOGGING = {
     "handlers": {"console": {"class": "logging.StreamHandler"}},
     "loggers": {"psycode.audit": {"handlers": ["console"], "level": "INFO", "propagate": False}},
 }
+
+# SCRUM-67: destinatarios, sin credenciales de las cuentas receptoras.
+NOTIFICATIONS_ENABLED = env_bool("NOTIFICATIONS_ENABLED", False)
+NOTIFICATION_EMAIL_TO = os.getenv("NOTIFICATION_EMAIL_TO", "").strip()
+NOTIFICATION_EMAIL_BACKUP_TO = os.getenv("NOTIFICATION_EMAIL_BACKUP_TO", "").strip()
+TEAMS_ENABLED = False  # Webhook y continuidad pendientes de decisión.
+
+# Ingesta interna: credenciales independientes del JWT de profesionales.
+CAPTURE_FRAGMENT_ROOT = local_path("CAPTURE_FRAGMENT_ROOT", ".local/capture-fragments")
+CAPTURE_FRAGMENT_MAX_BYTES = positive_int("CAPTURE_FRAGMENT_MAX_BYTES", 25 * 1024 * 1024)
+CAPTURE_ORPHAN_MAX_AGE_SECONDS = positive_int("CAPTURE_ORPHAN_MAX_AGE_SECONDS", 3600)
+try:
+    CAPTURE_AGENTS = json.loads(os.getenv("CAPTURE_AGENTS", "{}"))
+    if not isinstance(CAPTURE_AGENTS, dict):
+        raise ValueError
+    for agent_id, credential in CAPTURE_AGENTS.items():
+        if (not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", agent_id)
+                or not isinstance(credential, dict) or set(credential) != {"box", "token_sha256"}
+                or credential["box"] not in {f"box-{n}" for n in range(3, 8)}
+                or not isinstance(credential["token_sha256"], str)
+                or not re.fullmatch(r"[0-9a-f]{64}", credential["token_sha256"])):
+            raise ValueError
+except (TypeError, ValueError):
+    raise ImproperlyConfigured("CAPTURE_AGENTS debe contener identidades, boxes y hashes SHA-256 válidos.") from None
+
+# Los procesos se inician mediante comandos explícitos, nunca desde ASGI.
+CAPTURE_COMMAND_INTERVAL_SECONDS = positive_int("CAPTURE_COMMAND_INTERVAL_SECONDS", 1)
+CAPTURE_COORDINATOR_INTERVAL_SECONDS = positive_int("CAPTURE_COORDINATOR_INTERVAL_SECONDS", 5)
+CAPTURE_HEARTBEAT_SECONDS = positive_int("CAPTURE_HEARTBEAT_SECONDS", 30)
+CAPTURE_START_TIMEOUT_SECONDS = positive_int("CAPTURE_START_TIMEOUT_SECONDS", 120)
+CAPTURE_INACTIVITY_TIMEOUT_SECONDS = positive_int("CAPTURE_INACTIVITY_TIMEOUT_SECONDS", 120)
+CAPTURE_FINALIZATION_TIMEOUT_SECONDS = positive_int("CAPTURE_FINALIZATION_TIMEOUT_SECONDS", 300)
+
+# Colectores designados por el servidor; sin elección entre PCs.
+try:
+    CAPTURE_AGENDA_SOURCES = json.loads(os.getenv("CAPTURE_AGENDA_SOURCES", "{}"))
+    agenda_boxes = set()
+    if not isinstance(CAPTURE_AGENDA_SOURCES, dict):
+        raise ValueError()
+    for source, scope in CAPTURE_AGENDA_SOURCES.items():
+        if (not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", source) or not isinstance(scope, dict)
+                or set(scope) != {"collector_id", "boxes"} or scope["collector_id"] not in CAPTURE_AGENTS
+                or not isinstance(scope["boxes"], list) or not scope["boxes"]
+                or len(set(scope["boxes"])) != len(scope["boxes"])
+                or set(scope["boxes"]) - {f"box-{n}" for n in range(3, 8)}
+                or agenda_boxes.intersection(scope["boxes"])):
+            raise ValueError()
+        agenda_boxes.update(scope["boxes"])
+except (TypeError, ValueError):
+    raise ImproperlyConfigured("CAPTURE_AGENDA_SOURCES inválido o con fuentes superpuestas.") from None

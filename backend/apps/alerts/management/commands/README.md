@@ -6,7 +6,7 @@ Requiere MongoDB y `DJANGO_DEBUG=true`. Desde la raíz:
 uv run python manage.py seed_demo_alerts
 ```
 
-Crea cinco alertas sintéticas con boxes, tipos de riesgo, severidades y estados distintos. No incluye audio ni datos de pacientes. Si ya existen los mismos UUID, no las modifica. Para borrar esas cinco y volver a cargarlas:
+Crea cinco alertas sintéticas con boxes, tipos de riesgo, niveles 1–3 y estados distintos. No incluye alertas NULO/sin riesgo, audio ni datos de pacientes. Si ya existen los mismos UUID, no las modifica. Para borrar esas cinco y volver a cargarlas:
 
 ```sh
 uv run python manage.py seed_demo_alerts --reset

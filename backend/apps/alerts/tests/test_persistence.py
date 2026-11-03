@@ -135,16 +135,26 @@ class RepositoryTests(SimpleTestCase):
         self.service = AlertsService(self.store)
 
     def test_inserta_consulta_y_conserva_campos(self):
-        alerta = alta_pendiente(descripcion="Alerta sintética de prueba; sin datos de paciente.")
+        alerta = alta_pendiente(descripcion="No quiero seguir sintiéndome así.")#Prueba de almacenamiento
         self.store.insert_alert(alerta)
         leida = self.store.get_alert(alerta.alerta_id)
         self.assertEqual(leida.box, "box-3")
         self.assertEqual(leida.sesion_id, alerta.sesion_id)
-        self.assertEqual(leida.semaforo, Semaforo.BAJO)
+        self.assertEqual(leida.semaforo, Semaforo.MEDIO)
         self.assertEqual(leida.estado_evaluacion, EstadoEvaluacion.PENDIENTE)
         self.assertIsNone(leida.evaluacion)
         self.assertEqual(leida.trazabilidad.origen, ORIGEN)
 
+        
+        self.assertEqual(leida.descripcion,"No quiero seguir sintiéndome así.")
+
+    def test_descripcion_normalizada_se_conserva_en_persistencia(self):
+        alerta = alta_pendiente(descripcion="  No   quiero\nseguir\t sintiéndome   así.  ") 
+        self.store.insert_alert(alerta) 
+        leida = self.store.get_alert(alerta.alerta_id)
+
+        self.assertEqual(leida.descripcion,"No quiero seguir sintiéndome así.")
+       
     def test_duplicado_y_ausente(self):
         alerta = alta_pendiente()
         self.store.insert_alert(alerta)
@@ -160,7 +170,7 @@ class RepositoryTests(SimpleTestCase):
         leida = self.store.get_alert(alerta.alerta_id)
         self.assertEqual(leida.estado_evaluacion, EstadoEvaluacion.CORRECTA)
         self.assertEqual(leida.evaluacion.usuario_id, EVALUADOR_ID)
-        self.assertEqual(leida.semaforo, Semaforo.BAJO)
+        self.assertEqual(leida.semaforo, Semaforo.MEDIO)
         with self.assertRaises(EvaluationAlreadyRegistered):
             self.service.record_evaluation(alerta.alerta_id, "neutro", EVALUADOR_ID, EVALUADOR_USUARIO)
 
@@ -277,9 +287,17 @@ class MongoIntegrationTests(SimpleTestCase):
         self.assertEqual(lista.data["data"]["total"], 1)
         self.assertEqual(len(lista.data["data"]["items"]), 1)
 
-        response = client.post(
-            f"/api/v1/alerts/{spec['alerta_id']}/evaluacion",
-            {"evaluacion": "correcta"},
+        
+        self.assertNotIn("descripcion",lista.data["data"]["items"][0],)
+        detalle_alerta = client.get(f"/api/v1/alerts/{spec['alerta_id']}")
+        self.assertEqual(detalle_alerta.status_code,200,detalle_alerta.content,)
+        self.assertIn("descripcion",detalle_alerta.data["data"],)
+        self.assertEqual(detalle_alerta.data["data"]["descripcion"],spec["descripcion"],)
+
+        
+        
+
+        response = client.post(f"/api/v1/alerts/{spec['alerta_id']}/evaluacion",{"evaluacion": "correcta"},
             format="json",
         )
         self.assertEqual(response.status_code, 201, response.content)
@@ -293,3 +311,14 @@ class MongoIntegrationTests(SimpleTestCase):
         pendientes = client.get("/api/v1/alerts?revisadas=false&limit=50&offset=0")
         self.assertEqual(revisadas.data["data"]["total"], 1)
         self.assertEqual(pendientes.data["data"]["total"], 0)
+
+
+class AlertApiAccessTests(SimpleTestCase):
+    def test_detalle_alerta_requiere_autenticacion(self):
+        client = APIClient()
+
+        response = client.get(
+            "/api/v1/alerts/11111111-1111-4111-8111-111111111111")
+        
+        self.assertEqual(response.status_code,401,response.content,)
+        self.assertEqual(response.data["error"]["code"],"AUTH_REQUIRED",)

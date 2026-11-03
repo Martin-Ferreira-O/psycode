@@ -19,7 +19,7 @@ El nombre técnico de la base es `psycode`. `_id` es ObjectId interno de MongoDB
 
 1. **Una alerta, un documento.** Historial, detalle, dashboard y evaluación leen la misma colección. No hay proyección histórica del estado de evaluación: se muestra el estado actual.
 2. **Evaluación incrustada.** Una sola evaluación por alerta, objeto `evaluacion` o `null`. La escritura es atómica y condicionada a `estado_evaluacion=pendiente`, que es el mecanismo del 201/409 concurrente. Una colección aparte exigiría transacción multi-documento sin beneficio en v1.
-3. **Box y sesión no son entidades.** `box` es un atributo string; `sesion_id` es una referencia opaca al sistema clínico externo. El backlog no incluye CRUD de boxes ni de sesiones.
+3. **Box y sesión no son entidades de MongoDB.** `box` es un atributo string y `sesion_id` una referencia opaca. SCRUM-71 agrega [sesiones técnicas de captura en SQL](../backend/apps/capture/README.md), sin relaciones entre bases ni CRUD público de boxes/sesiones. Las alertas conservan su contrato de referencia UUID.
 4. **Semáforo derivado.** `semaforo` se calcula desde `nivel_severidad` (Anexo A). El documento lo materializa para filtrar y notificar, pero no es una segunda autoridad.
 5. **Bitácora aparte, no un arreglo en la alerta.** `audit_events` registra alta, evaluación e intentos de aviso sin inflar el documento clínico ni mezclar autenticación.
 6. **Identidad en SQLite, copia de trazabilidad en MongoDB.** `usuario_id` y `usuario` se copian al evaluar. Un cambio posterior de nombre en SQLite no reescribe evaluaciones ya guardadas.
@@ -84,13 +84,13 @@ Documento de negocio. Las fechas se guardan como BSON Date UTC y se serializan I
 | `alerta_id` | string UUID | Sí | Caso de uso interno | Índice único |
 | `box` | string 1–64 | Sí | Entrada interna | Se recortan extremos al persistir; el filtro público es exacto |
 | `tipo_riesgo` | string 1–100 | Sí | Entrada interna | Sin catálogo cerrado inventado |
-| `nivel_severidad` | int 0–7 | Sí | Entrada interna | No booleano; insertar Int32 |
+| `nivel_severidad` | int 1–3 | Sí | Entrada interna | No booleano; insertar Int32; NULO/sin riesgo no se persiste |
 | `semaforo` | enum | Sí | **Derivado** | Ver sección 5 |
 | `fecha_hora` | date UTC | Sí | Entrada interna | Detección, no evaluación |
 | `estado_evaluacion` | enum | Sí | Servidor | `pendiente` al alta |
 | `evaluacion` | objeto o null | Sí (null cuenta) | Servidor | `null` al alta |
 | `sesion_id` | string UUID | Sí | Entrada interna | No se expone en el listado, sí en el detalle |
-| `descripcion` | string ≤500 o null | Sí como campo; valor null permitido | Entrada interna opcional | Ausente o vacío → `null` |
+| `descripcion` | string ≤500 o null | Sí como campo; valor null permitido | Entrada interna opcional | Fragmento relevante de transcripción asociado a la alerta; se normalizan espacios y Unicode; ausente o vacío → `null` |
 | `trazabilidad.registrada_en` | date UTC | Sí | Reloj del servidor | |
 | `trazabilidad.actualizada_en` | date UTC | Sí | Reloj del servidor | Igual a `registrada_en` al alta; se actualiza al evaluar |
 | `trazabilidad.origen` | string 1–100 | Sí | Entrada interna | p. ej. `datos_sinteticos` |
@@ -114,6 +114,7 @@ No hay edición ni segunda evaluación en v1.
 
 ### Invariantes (dominio + validador)
 
+- `nivel_severidad` solo puede ser 1, 2 o 3.
 - `semaforo` = f(`nivel_severidad`) según la tabla de la sección 5.
 - `estado_evaluacion = pendiente` ⇔ `evaluacion is null`.
 - Si hay evaluación: `evaluacion.alerta_id = alerta_id` y `evaluacion.evaluacion = evaluacion.estado_evaluacion = estado_evaluacion`.
@@ -135,24 +136,59 @@ updateOne(
 
 ## 5. Estados y niveles de severidad
 
-### Gradiente clínico y semáforo
+### Escala operativa y semáforo
 
-Fuente: [Anexo A](../API_CONTRACTS.md#anexo-a--clasificación-del-insumo-clínico) e insumo del cliente. Es la organización del Excel, no una equivalencia exacta de C-SSRS ni un diagnóstico.
+| `nivel_severidad` | Categoría operativa | `semaforo` |
+|---|---|---|
+| 1 | Riesgo bajo | `BAJO` |
+| 2 | Riesgo medio | `MEDIO` |
+| 3 | Riesgo alto | `ALTO` |
 
-| `nivel_severidad` | Categoría del insumo | `semaforo` | ¿Notifica en el prototipo? |
-|---|---|---|---|
-| 0 | Sin ideación identificable | `NULO` | No |
-| 1 | Deseo pasivo de muerte | `BAJO` | Sí |
-| 2 | Ideación activa inespecífica | `BAJO` | Sí |
-| 3 | Consideración de método | `MEDIO` | Sí |
-| 4 | Alguna intención | `MEDIO` | Sí |
-| 5 | Plan específico e intención | `ALTO` | Sí |
-| 6 | Conducta preparatoria | `ALTO` | Sí |
-| 7 | Conducta suicida | `ALTO` | Sí |
+Implementación: `semaforo_desde_severidad` en [domain.py](../backend/apps/alerts/domain.py). Un resultado NULO/sin riesgo no se registra como alerta. El dashboard conserva la clave `nulo` en cero por compatibilidad; el documento persiste solo `BAJO`, `MEDIO` o `ALTO`. Un falso positivo **no** altera la severidad almacenada ni se excluye de los totales.
 
-Implementación: `semaforo_desde_severidad` en [domain.py](../backend/apps/alerts/domain.py). La política de aviso 1–7 es provisional y requiere validación clínica.
+### Actualización de la escala histórica
 
-El dashboard agrega con claves minúsculas (`nulo`, `bajo`, `medio`, `alto`); el documento persiste el enum en mayúsculas. Un falso positivo **no** altera la severidad almacenada ni se excluye de los totales.
+Ejecutar una sola vez antes de desplegar el backend con el validador 1–3. Detener temporalmente las escrituras a `alerts`; los eventos de auditoría se conservan. El modo `warn` permite convertir los documentos mientras el validador antiguo aún espera el semáforo anterior:
+
+```javascript
+db.runCommand({ collMod: "alerts", validationAction: "warn" })
+
+db.alerts.deleteMany({ nivel_severidad: 0 })
+
+db.alerts.updateMany(
+    { nivel_severidad: { $gte: 1, $lte: 7 } },
+    [{ $set: {
+        nivel_severidad: {
+            $switch: {
+                branches: [
+                    { case: { $lte: ["$nivel_severidad", 2] }, then: 1 },
+                    { case: { $lte: ["$nivel_severidad", 4] }, then: 2 }
+                ],
+                default: 3
+            }
+        },
+        semaforo: {
+            $switch: {
+                branches: [
+                    { case: { $lte: ["$nivel_severidad", 2] }, then: "BAJO" },
+                    { case: { $lte: ["$nivel_severidad", 4] }, then: "MEDIO" }
+                ],
+                default: "ALTO"
+            }
+        }
+    } }]
+)
+
+db.alerts.countDocuments({
+    $or: [
+        { nivel_severidad: { $lt: 1 } },
+        { nivel_severidad: { $gt: 3 } },
+        { semaforo: "NULO" }
+    ]
+})
+```
+
+La conversión conserva el semáforo anterior: 1–2 → 1/BAJO, 3–4 → 2/MEDIO y 5–7 → 3/ALTO. El nivel 0 se retira porque no representa una alerta de riesgo. Confirmar que la última consulta devuelve `0`; desplegar entonces el backend nuevo, cuyo `ensure_schema` aplica el validador estricto. No reanudar escrituras antes de esa aplicación. Después de migrar, recrear las alertas sintéticas con `seed_demo_alerts --reset`.
 
 ### Estado de evaluación
 
@@ -167,11 +203,17 @@ El dashboard agrega con claves minúsculas (`nulo`, `bajo`, `medio`, `alto`); el
 
 ## 6. Colección `audit_events` (bitácora)
 
-Eventos relevantes del **dominio persistido en MongoDB**: alta de alerta, registro de evaluación e intento de notificación. Es complementaria al logger `psycode.audit`.
+Las notificaciones registran `notifications.result` y el objeto `notification`
+para modalidad, correlación, fase, motivo y conteos por ejecución. El escritor lo
+restringe a metadatos técnicos; los eventos históricos siguen consultables sin
+reescritura. [Comportamiento del servicio](../backend/apps/notifications/README.md#trazabilidad-de-notificaciones).
+
+Eventos relevantes del **dominio persistido en MongoDB**: alta de alerta, registro de evaluación, intento de notificación y fallos técnicos de análisis. Es complementaria al logger `psycode.audit`.
 
 | Qué | Dónde |
 |---|---|
-| `alerts.register`, `alerts.evaluate`, `notifications.send` | MongoDB `audit_events` **y** logger |
+| `alerts.register`, `alerts.evaluate`, `notifications.send`, `notifications.result` | MongoDB `audit_events` **y** logger |
+| `analysis.speechmatics`, `analysis.jev`, `alerts.flow` | MongoDB `audit_events` **y** logger; solo códigos permitidos, sin conversaciones ni cuerpos de proveedor |
 | `auth.login`, `auth.refresh`, `auth.logout`, `auth.password_reset`, `api.error` | Solo logger Django (identidad en SQLite) |
 
 Un fallo al insertar en `audit_events` no revierte la alerta ni se presenta como prueba de entrega. El evento ya emitido al log permanece. La colección es de solo inserción: no se actualiza ni se borra en v1.
@@ -180,20 +222,66 @@ Un fallo al insertar en `audit_events` no revierte la alerta ni se presenta como
 
 | Campo | Tipo | Obligatorio | Null permitido | Uso |
 |---|---|---|---|---|
-| `event_id` | UUID | Sí | No | Identificador del evento |
+| `event_id` | UUID | Sí | No | Mismo UUID en logger y MongoDB |
 | `timestamp` | date UTC | Sí | No | Hora de registro |
-| `action` | enum de las tres acciones | Sí | No | Tipo de evento |
+| `action` | enum de las siete acciones anteriores | Sí | No | Tipo de evento |
 | `outcome` | `success` \| `failure` \| `skipped` | Sí | No | Resultado |
+| `actor` | `Sistema` \| `Usuario` | Sí | No | Actor automático o humano |
+| `sesion_id` | UUID | Sí como campo | Sí | Correlación con sesión cuando corresponde |
+| `sequence` | int ≥ 0 | Sí como campo | Sí | Secuencia del fragmento en fallos técnicos |
 | `actor_id` | UUID | Sí como campo | Sí | Profesional que evalúa; null en alta/envío |
-| `alerta_id` | UUID | Sí | No | Relación con `alerts` |
-| `channel` | `teams` \| `email` | Sí como campo | Sí | Canal que aceptó el aviso |
-| `contingencia` | bool | Sí como campo | Sí | Correo por fallo de Teams |
+| `alerta_id` | UUID o null | Sí | En fallos técnicos sin alerta | Relación con `alerts`; fallos previos a una alerta usan null |
+| `channel` | `teams` \| `email` | Sí como campo | Sí | Canal del intento, aceptado o fallido |
+| `contingencia` | bool | Sí como campo | Sí | Correo de respaldo por fallo del principal |
 | `motivo` | `sin_riesgo` \| `deshabilitada` \| `ningun_canal_acepto` | Sí como campo | Sí | Por qué se omitió o falló el envío |
 | `error_code` | string `A-Z0-9_` | Sí como campo | Sí | Código estable, no mensaje de proveedor |
-| `duration_ms` | int ≥ 0 | Sí como campo | Sí | Duración total del envío |
-| `intentos` | arreglo | Sí | No (vacío) | Detalle por canal; vacío si no hay envío |
+| `duration_ms` | int ≥ 0 | Sí como campo | Sí | Duración de este intento |
+| `intentos` | arreglo | Sí | No (vacío) | Campo histórico; vacío en eventos nuevos, un evento por intento |
+| `notification` | objeto | En resúmenes nuevos; opcional en históricos | Ausente en documentos previos | UUID de ejecución, modalidad, fase y motivo; ordinal en intentos, estado y conteos en resúmenes |
 
-Validador e índices: [audit_events.validator.json](mongodb/audit_events.validator.json), [audit_events.indexes.json](mongodb/audit_events.indexes.json). Ejemplos de alta, evaluación y contingencia Teams→correo en [mongodb/examples/](mongodb/examples/).
+Validador e índices: [audit_events.validator.json](mongodb/audit_events.validator.json), [audit_events.indexes.json](mongodb/audit_events.indexes.json). Ejemplos de alta, evaluación y intentos de correo principal y de respaldo en [mongodb/examples/](mongodb/examples/).
+
+### Metadatos de notificación
+
+`notification` comparte estos campos entre los intentos y su resumen:
+
+| Campo | Valores o regla |
+|---|---|
+| `id` | UUID de una ejecución; común a sus intentos y resumen, distinto si se vuelve a notificar la misma alerta |
+| `mode` | `lista_distribucion`, `supervisores_activos` o null sin configuración válida |
+| `phase` | `principal`, `respaldo` o `resumen` |
+| `reason` | `FALLO_PARCIAL`, `FALLO_TOTAL`, `SIN_DESTINATARIOS_VALIDOS` o null; describe el problema principal |
+
+En `notifications.send` se exige además `attempt`, entero desde 1. Su `outcome`
+registra la aceptación o el fallo de ese intento; `contingencia=true` identifica
+el respaldo. No se guardan direcciones ni identificadores de destinatarios.
+
+En `notifications.result` se exige `phase=resumen`, `status` (`EXITO_TOTAL`,
+`FALLO_PARCIAL`, `FALLO_TOTAL` o `SIN_DESTINATARIOS_VALIDOS`) y los enteros no
+negativos `primary_successes`, `primary_failures`, `backup_successes` y
+`backup_failures`. No incluye `attempt`. El resumen usa `outcome=success` para
+éxito total, `failure` si hubo un problema principal y algún intento, o `skipped`
+si no había destinatarios válidos ni se intentó el respaldo.
+
+Un fallo parcial con respaldo aceptado conserva el motivo y separa los conteos
+principales de los de respaldo. Sin principales válidos, sus conteos son cero
+aunque se intente el respaldo; `reason=SIN_DESTINATARIOS_VALIDOS` conserva esa
+ausencia. La aceptación SMTP no prueba entrega ni lectura.
+
+El validador exige este objeto para `notifications.result` y lo admite como
+opcional en eventos anteriores de envío; cuando existe rechaza propiedades
+ajenas, tipos incorrectos, enums desconocidos y conteos negativos. Se actualiza
+mediante el `collMod` existente de `ensure_schema()` junto con el servidor, sin
+migración de documentos. La API devuelve `notification=null` para eventos que
+no lo registraron, sin inventar conteos. Un proceso interrumpido puede dejar
+intentos sin resumen; esa ausencia no se interpreta como éxito global.
+
+`AlertAudit` emite primero el evento estructurado en el logger y después intenta persistirlo con el mismo `event_id` y timestamp. Si falla la bitácora, registra `AUDIT_UNAVAILABLE` y el UUID del evento original, sin detalle de excepción. Los eventos no contienen nombres, direcciones destinatarias, transcripciones ni cuerpos de proveedores. Los fallos técnicos del trabajador incluyen `sesion_id` y `sequence`; `alerts.flow` registra excepciones inesperadas e indisponibilidad al persistir alertas. Un corte abrupto del proceso requiere supervisión externa y no tiene recuperación automática.
+
+`GET /api/v1/audit-events` permite consulta protegida por rol, período, alerta, acción y resultado. [Contrato](../API_CONTRACTS.md#consulta-de-bitácora-scrum-65). Los índices cubren timestamp/event_id, alerta/fecha, acción/fecha y resultado/fecha. El orden por UUID desambigua timestamps iguales sin afirmar causalidad entre eventos simultáneos.
+
+`AlertsRepository.ensure_schema()` aplica el validador ampliado mediante collMod. Los documentos históricos permanecen sin reescribir: la API deriva actor a partir de actor_id y presenta sesión/secuencia ausentes como null. Las escrituras nuevas deben incluir esos campos. La integración real se comprueba con `PSYCODE_TEST_MONGODB_URI` en una base aislada `psycode_test`.
+
 
 ## 7. Índices y consultas cubiertas
 
@@ -218,7 +306,7 @@ Tres capas, con responsabilidades distintas:
 |---|---|---|
 | Trazabilidad de la alerta | `alerts.trazabilidad` | Cuándo se persistió, cuándo cambió (evaluación) y de qué origen |
 | Trazabilidad de la evaluación | `alerts.evaluacion` | Quién (UUID + username de entonces), qué resultado y cuándo |
-| Bitácora de eventos | `audit_events` + logger | Alta, evaluación, cada intento de Teams/correo, contingencia y códigos de error |
+| Bitácora de eventos | `audit_events` + logger | Alta, evaluación, cada intento de correo, contingencia y códigos de error |
 
 La evaluación no se reconstruye consultando SQLite. El profesional llega del contexto autenticado. Los intentos de notificación no forman parte del documento público de alerta: viven en la bitácora para no ampliar el contrato HTTP.
 
@@ -229,7 +317,7 @@ Prohibido en MongoDB, en logs y en notificaciones, salvo mención explícita:
 | Dato | Motivo |
 |---|---|
 | Grabaciones de audio o fragmentos | RF-11 / handoff; fuera de alcance |
-| Transcripciones o texto de la sesión | El sistema no clasifica voz; recibe datos ya clasificados |
+| Transcripción completa de la sesión | No se almacena la transcripción completa; únicamente puede persistirse en `descripcion` el fragmento relevante asociado a la alerta |
 | Nombre, RUT, ficha u otros datos personales del paciente | Minimización; las notificaciones solo llevan box, tipo, semáforo y fecha |
 | Detalles operativos de métodos suicidas | Reglas de uso del insumo clínico |
 | Frecuencias inventadas | Si no hay dato, no se fabrica; no hay campo de frecuencia |
@@ -242,7 +330,8 @@ Prohibido en MongoDB, en logs y en notificaciones, salvo mención explícita:
 | Roles, permisos o réplica del usuario Django | Identidad en SQLite |
 | Segunda evaluación, historial de ediciones o borrado lógico de alertas | Fuera de v1 |
 
-`descripcion` existe en el contrato (máximo 500, opcional) y **no** es un canal para transcripción, identidad de paciente ni instrucciones de método. El alta interna debe normalizar ausencia a `null` y rechazar contenido que viole estas reglas en la capa de aplicación.
+`descripcion` existe en el contrato como campo opcional de máximo 500 caracteres y representa únicamente el fragmento relevante de transcripción asociado a la alerta. No debe utilizarse para almacenar 
+la transcripción completa de la sesión, audio original, identidad del paciente ni otros datos ajenos al contexto mínimo de la alerta. El alta interna normaliza espacios y caracteres Unicode; la ausencia o un valor vacío se normalizan a `null`, y el contenido que supere el límite se rechaza.
 
 ## 10. Correspondencia con el contrato y las tareas
 
@@ -264,6 +353,6 @@ SCRUM-32 implementa conexión, variables `MONGODB_URI` / `MONGODB_DATABASE`, apl
 - Varias alertas pueden compartir `sesion_id` o `box`.
 - No hay caducidad (TTL) de `audit_events` en v1; la retención se define antes de uso clínico real.
 - No hay garantía de entrega de la bitácora si MongoDB cae después de persistir la alerta.
-- El mapeo 0–7 → semáforo sigue siendo provisional, como el Anexo A.
+- La escala persistida del proyecto es 1–3; NULO/sin riesgo queda fuera de `alerts`. Los valores 0–7 solo se usan para la migración histórica documentada arriba.
 
-Fuentes: contratos 1.1, arquitectura SCRUM-30, insumo clínico, `AuditWriter` y las descripciones de SCRUM-32/33/34/41 en el [handoff](../HANDOFF.md).
+Fuentes: contratos 1.2, arquitectura SCRUM-30, insumo clínico, `AuditWriter` y las descripciones de SCRUM-32/33/34/41 en el [handoff](../HANDOFF.md).

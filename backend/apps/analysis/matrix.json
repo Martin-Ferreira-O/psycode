@@ -1,0 +1,110 @@
+{
+  "schema_version": 1,
+  "sha256": "8abac3fc4671eedc92971722032e41beca4f80c2ddd2088bb4c9555bac01ed70",
+  "categories": [
+    {
+      "id": "matrix-0",
+      "level": 0,
+      "name": "Sin ideación identificable",
+      "description": "Malestar psicológico sin contenido explícito de muerte o suicidio.",
+      "examples": "“No puedo más”; “Estoy agotado/a”; “No doy más”; “Todo me supera”; “Estoy completamente perdido/a”; “No sé cómo seguir”",
+      "limitation": "No permite inferir suicidalidad por sí solo",
+      "source": {
+        "sheet": "Gradiente clínico",
+        "row": 2
+      }
+    },
+    {
+      "id": "matrix-1",
+      "level": 1,
+      "name": "Deseo pasivo de muerte",
+      "description": "Deseo de estar muerto/a o no despertar, sin ideación activa de suicidio.",
+      "examples": "“Ojalá no despertara”; “Preferiría no estar vivo/a”; “Quisiera desaparecer”; “Ojalá pudiera dormirme y no despertar”; “No me importaría morir”; “Estaría mejor si no existiera”; “Quisiera dejar de existir”",
+      "limitation": "Menor que ideación activa, pero clínicamente relevante",
+      "source": {
+        "sheet": "Gradiente clínico",
+        "row": 3
+      }
+    },
+    {
+      "id": "matrix-2",
+      "level": 2,
+      "name": "Ideación suicida activa inespecífica",
+      "description": "Pensamientos de suicidarse sin método, intención o plan específico.",
+      "examples": "“He pensado en suicidarme”; “Estoy pensando en quitarme la vida”; “Tengo pensamientos suicidas”; “A veces pienso en suicidarme”; “Pienso mucho en morir”; “He pensado que debería matarme”; “No dejo de pensar en suicidarme”",
+      "limitation": "Ideación activa",
+      "source": {
+        "sheet": "Gradiente clínico",
+        "row": 4
+      }
+    },
+    {
+      "id": "matrix-3",
+      "level": 3,
+      "name": "Ideación con consideración de método",
+      "description": "Pensamiento sobre una forma de suicidarse, sin plan específico ni intención de actuar.",
+      "examples": "“He pensado cómo podría hacerlo”; “He pensado en una manera de suicidarme”; “A veces pienso en cómo terminar con mi vida”; “He imaginado cómo sería hacerlo”; “Ya sé de qué forma podría hacerlo”",
+      "limitation": "Mayor especificidad; no equivale a plan",
+      "source": {
+        "sheet": "Gradiente clínico",
+        "row": 5
+      }
+    },
+    {
+      "id": "matrix-4",
+      "level": 4,
+      "name": "Ideación con alguna intención",
+      "description": "Pensamientos suicidas con alguna intención de actuar, sin plan específico.",
+      "examples": "“Siento que podría hacerlo”; “Creo que voy a terminar haciéndolo”; “No sé si voy a poder detenerme”; “Tengo intención de hacerlo”; “Cada vez estoy más decidido/a”; “No quiero seguir viviendo y siento que voy a actuar”",
+      "limitation": "Alta relevancia clínica",
+      "source": {
+        "sheet": "Gradiente clínico",
+        "row": 6
+      }
+    },
+    {
+      "id": "matrix-5",
+      "level": 5,
+      "name": "Plan específico e intención",
+      "description": "Plan suicida parcialmente o completamente elaborado con intención de llevarlo a cabo.",
+      "examples": "“Ya tengo un plan”; “He decidido cuándo hacerlo”; “Ya sé cómo voy a hacerlo”; “Lo tengo pensado”; “Ya está decidido”",
+      "limitation": "Alta gravedad/proximidad conductual",
+      "source": {
+        "sheet": "Gradiente clínico",
+        "row": 7
+      }
+    },
+    {
+      "id": "matrix-6",
+      "level": 6,
+      "name": "Conducta preparatoria",
+      "description": "Acciones de preparación para una conducta suicida.",
+      "examples": "“He empezado a preparar todo”; “Ya dejé algunas cosas arregladas”; “Me estoy despidiendo de algunas personas”; “Estoy poniendo mis asuntos en orden”; “He hecho preparativos”",
+      "limitation": "Conducta, no solo ideación",
+      "source": {
+        "sheet": "Gradiente clínico",
+        "row": 8
+      }
+    },
+    {
+      "id": "matrix-7",
+      "level": 7,
+      "name": "Conducta suicida",
+      "description": "Intento, intento interrumpido, abortado o conducta suicida según definición clínica.",
+      "examples": "“Intenté hacerlo”; “Empecé pero me detuve”; “Alguien me interrumpió”; “Lo intenté y no resultó”",
+      "limitation": "Conducta suicida",
+      "source": {
+        "sheet": "Gradiente clínico",
+        "row": 9
+      }
+    }
+  ],
+  "amendments": [
+    {
+      "cell": "'Gradiente clínico'!A4",
+      "original": null,
+      "interpreted": 2,
+      "reason": "Equivalencia explícita en Frases y lenguaje, fila 4, y Lenguaje profesional, fila 3."
+    }
+  ]
+}

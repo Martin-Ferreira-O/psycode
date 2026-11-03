@@ -1,12 +1,19 @@
 # Arquitectura — Psycode API
 
+> Separación implementada: el agente instalable está en el repositorio independiente
+> `psycode-agent`. El control remoto y la operación vigente se describen en
+> [OPERACION-SEPARADA.md](docs/OPERACION-SEPARADA.md) y
+> [CONTROL-Y-AUDIO.md](docs/CONTROL-Y-AUDIO.md). Las secciones históricas que
+> presentaban el transporte como pendiente quedan sustituidas por esos contratos.
+
+
 **Estado:** arquitectura SCRUM-30 conservada. Accounts (SCRUM-31) y persistencia MongoDB de alertas (SCRUM-32) están implementados. Consultas HTTP, evaluación pública y notificaciones siguen pendientes. Nombre técnico `psycode-api`; API pública `/api/v1/`. Ver [SCRUM-31](docs/SCRUM-31.md), [SCRUM-32](docs/SCRUM-32.md) y [esquema MongoDB](docs/MONGODB.md).
 
 ## 1. Decisión y alcance
 
 Un **monolito modular con capas ligeras** permite desplegar un solo backend y repartir trabajo por módulos. Los contratos separan el desarrollo de frontend, consultas, persistencia, evaluaciones y notificaciones. Las capas son responsabilidades dentro de cada módulo, no servicios distribuidos.
 
-No se incorporan microservicios, buses de eventos, CQRS, contenedores de inyección, repositorios genéricos, colas ni componentes de negocio preconstruidos. Tampoco se incorporan captura de audio, transcripción, clasificación automática, gestión de pacientes o CRUD de sesiones/boxes. `sesion_id` y `box` son referencias recibidas por el caso de uso interno de registro.
+No se incorporan microservicios, buses de eventos, CQRS, contenedores de inyección, repositorios genéricos ni componentes de negocio preconstruidos. SCRUM-71 incorpora [sesiones persistentes de captura y su bandeja de órdenes SQL](backend/apps/capture/README.md), integradas con la autorización de SCRUM-70. La ingesta interna agrega almacenamiento privado temporal y una cola SQL de fragmentos, sin broker externo ni consumidor automático. No incorpora ejecución de captura, gestión de pacientes ni CRUD público de sesiones/boxes. Para alertas, `sesion_id` y `box` siguen siendo referencias recibidas por el caso de uso interno de registro, sin relación entre bases de datos.
 
 ### Base tecnológica prevista
 
@@ -17,7 +24,7 @@ No se incorporan microservicios, buses de eventos, CQRS, contenedores de inyecci
 | Simple JWT | Emisión y validación de tokens; rotación y revocación de refresh |
 | ORM y autenticación de Django + SQLite | Usuarios, contraseñas, recuperación y estado de tokens |
 | PyMongo | Controlador oficial para alertas y evaluaciones; no usar el ORM relacional para MongoDB |
-| HTTPS a Teams Workflows y correo mediante Django | Adaptadores de notificación propios |
+| Correo SMTP mediante Django; adaptador Teams desacoplado | Adaptadores de notificación propios |
 
 La elección de librerías base fue confirmada por Martin. SCRUM-31 fija dependencias en pyproject.toml y uv.lock, con requirements.txt exportado para pip. Se agregan django-cors-headers y python-dotenv para el origen frontend y configuración local. Versiones efectivamente verificadas y comandos en [README](README.md).
 
@@ -31,10 +38,14 @@ backend/
     accounts/         autenticación y recuperación
     alerts/           persistencia, consulta y evaluación de alertas
     dashboard/        resumen y estadísticas sobre alertas
-    notifications/    envío por Teams y contingencia por correo
+    notifications/    correo principal según configuración operativa
+    agenda/           carga manual Excel y consulta temporal de ocupación
+    capture/          sesiones, órdenes, ingesta de archivos y cola persistente SQL
 ```
 
 Cada carpeta de código incluye su propio README. Accounts ya tiene capas implementadas, migraciones, comando y tests; las otras apps tienen archivos base sin comportamiento. Solo se crearán subcarpetas adicionales cuando su contenido lo justifique.
+
+El servicio interno [agenda](backend/apps/agenda/README.md) reúne lectura Excel, validación y consultas en memoria en `services.py`, con pruebas en `tests.py`.
 
 | Capa | Archivos previstos | Regla |
 |---|---|---|
@@ -80,6 +91,29 @@ Accounts tendrá un usuario propio basado en las capacidades de Django, con UUID
 
 Refresh y revocaciones se almacenan en SQLite. La sesión de autenticación no es la sesión clínica indicada por `sesion_id`. No se crean relaciones SQL con colecciones MongoDB.
 
+SCRUM-71 almacena además `CaptureSession`, `AgentCommand`, `AcceptedSequence` y
+`CaptureEvent` en SQL. La sesión y sus órdenes/eventos se confirman atómicamente.
+La bitácora técnica de captura se mantiene en SQL y el logger compartido; la
+consulta MongoDB de bitácora de alertas conserva su contrato. El agente consume
+una interfaz interna con DTO; su transporte y ejecución pertenecen al adaptador
+del box. La ingesta implementa `POST /api/v1/internal/fragments` con credenciales
+de agente vinculadas al box, separadas del JWT profesional. Guarda archivos
+temporales en un volumen local privado (Windows, macOS o Linux) y `FragmentJob` en SQL, relacionado uno
+a uno con la secuencia aceptada. La clave única sesión/secuencia y el bloqueo
+de sesión evitan duplicados entre procesos. Archivo validado y sincronizado a
+disco precede a la transacción que registra secuencia, trabajo pendiente y
+bitácora; la confirmación HTTP ocurre después del commit. Una caída puede dejar
+un archivo huérfano, pero no una aceptación confirmada sin trabajo.
+
+No hay transacción distribuida con archivos. La limpieza
+`cleanup_capture_uploads` recupera huérfanos antiguos sin referencias SQL y
+omite cargas en curso mediante locks de archivo. Ante un commit de resultado
+incierto conserva el archivo y permite resolver la aceptación con un reintento.
+No borra archivos de trabajos activos o terminados. El consumidor de esta cola
+y la eliminación de archivos aceptados después del procesamiento quedan para
+la integración del trabajador. No se inicia análisis desde la vista ni al
+importar Django. [Contrato de ingesta y límites](API_CONTRACTS.md#5-ingesta-interna-de-fragmentos).
+
 ### MongoDB
 
 Esquema, invariantes, índices y datos prohibidos: [docs/MONGODB.md](docs/MONGODB.md). Dos colecciones en la base `psycode`: `alerts` (negocio) y `audit_events` (bitácora de alta, evaluación y envío). No hay colecciones de sesiones, boxes, pacientes ni usuarios.
@@ -92,21 +126,34 @@ La actualización de `evaluacion`, `estado_evaluacion` y `trazabilidad.actualiza
 
 Índices previstos: unicidad de `alerta_id`; orden por `fecha_hora` y `alerta_id`; filtros por `box`/fecha y por `estado_evaluacion`/fecha. No se introduce un buscador externo para `q`.
 
+### Bitácora consultable (SCRUM-65)
+
+`GET /api/v1/audit-events` requiere JWT y un usuario activo con rol administrador o supervisor (también superusuario). Permite filtrar por período UTC, UUID de alerta, acción y resultado, con paginación y orden estable por timestamp/event_id. No hay interfaz visual de consulta ni escritura pública.
+
+`AlertAudit` genera una sola vez event_id y timestamp, emite el evento al logger y persiste el mismo evento en MongoDB. Los automáticos tienen actor `Sistema`; una evaluación registra `Usuario` y su UUID, sin nombre ni correo. Los fallos del trabajador incluyen sesión y secuencia; una excepción de flujo registra `FLOW_INTERRUPTED`. Una caída de MongoDB deja el mismo event_id en el logger para correlación; no hay cola de recuperación de auditoría.
+
 ### Registro y notificación
 
 ```text
 Entrada interna validada
   → guardar alerta en MongoDB
-  → si semáforo no es NULO: Teams
-      → si falla: correo
+  → si nivel BAJO/MEDIO/ALTO: consultar destinatarios operativos actuales
+      → un intento individual por destinatario, continuando ante fallos
+      → éxito total, fallo parcial, fallo total o sin destinatarios
   → registrar resultado de cada intento
 ```
 
-El contrato de registro se define para SCRUM-32/41; no implica crear un productor de alertas. Los datos de prueba invocarán el registro con envío deshabilitado por defecto. No habrá `POST /alerts` público en esta fase.
+El trabajador de análisis usa `composition.alerts_service()` para persistir y después notificar. `AlertsService` admite un notificador inyectado; los datos sintéticos usan el servicio sin notificador. Los datos de prueba invocarán el registro con envío deshabilitado por defecto. No habrá `POST /alerts` público en esta fase.
 
-Los fallos de MongoDB impiden el registro y el envío. Los fallos de notificación no revierten una alerta guardada. La auditoría técnica se emite en el logger `psycode.audit`. Los eventos `alerts.register`, `alerts.evaluate` y `notifications.send` se persisten además en `audit_events`; los de autenticación permanecen solo en el log. Un fallo al escribir la bitácora no revierte la alerta y se dirige al log de error local, nunca como prueba de entrega.
+Los fallos de MongoDB impiden el registro y el envío. Los fallos de notificación no revierten una alerta guardada. La auditoría técnica se emite en el logger `psycode.audit`. Los eventos `alerts.register`, `alerts.evaluate`, cada intento `notifications.send` y los fallos `analysis.speechmatics`/`analysis.jev`/`alerts.flow` se persisten además en `audit_events`; los de autenticación permanecen solo en el log. Los fallos de análisis previos a una alerta usan `alerta_id=null` y códigos permitidos sin texto ni respuestas de proveedor. Un fallo al escribir la bitácora no revierte la alerta y se dirige al log de error local, nunca como prueba de entrega.
 
-La secuencia es síncrona y acotada según el contrato. No hay transacción entre MongoDB, SQLite, Teams y correo, ni garantía de entrega exactamente una vez. Una caída entre persistir y notificar puede dejar una alerta sin aviso; la recuperación automática duradera queda fuera del backlog actual. Esta limitación debe revisarse antes de uso clínico real.
+El módulo interno de [análisis Speechmatics + JEV](docs/INTEGRACION-SPEECHMATICS-JEV.md) se compone para un trabajador secuencial, mediante puertos y salida tipada [1.0](docs/analysis/OUTPUT-1.0.md). No inicia procesos al importar Django ni añade rutas públicas de ingesta.
+
+El correo principal utiliza la configuración operativa: `primary_email` en lista de distribución o los correos registrados de todos los supervisores habilitados. Cada mensaje lleva un único destinatario. No se usan destinatarios antiguos del entorno ni se ejecuta respaldo. Solo el remitente/relay usa credenciales SMTP. El proceso SMTP se cancela al superar `EMAIL_TIMEOUT_SECONDS`, que limita cada intento completo; no queda un hilo enviando después del timeout. La aceptación SMTP no prueba entrega ni lectura, y un timeout puede dejar incierta la aceptación previa por el relay.
+
+Teams queda deshabilitado (`TEAMS_ENABLED=False`) y no participa del flujo, aunque exista una URL en el entorno. Se conserva su adaptador desacoplado hasta decidir webhook y responsables. `NOTIFICATIONS_ENABLED=false` mantiene todos los envíos desactivados por defecto.
+
+La secuencia es síncrona y acotada según el contrato. No hay transacción entre MongoDB, SQLite y correo, ni garantía de entrega exactamente una vez. Una caída entre persistir y notificar puede dejar una alerta sin aviso; la recuperación automática duradera queda fuera del backlog actual. Esta limitación debe revisarse antes de uso clínico real.
 
 ## 4. Capa de frontend — dashboard e historial de alertas
 

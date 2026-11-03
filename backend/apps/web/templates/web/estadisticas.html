@@ -8,20 +8,26 @@
 
     <title>Estadísticas de alertas</title>
 
-    <link rel="stylesheet" href="{% static 'web/css/styles.css' %}">
+    <link rel="stylesheet" href="{% static 'web/css/styles.css' %}?v=4">
 </head>
 
 <body>
     <main class="pagina">
-        <a href="/dashboard" class="boton-regresar">
-             Atrás
-        </a>
-
-        <header class="encabezado">
-            <div>
-                <span class="subtitulo">Resumen estadístico</span>
-                <h1>Alertas registradas</h1>
-            </div>
+        <div class="barra-superior-estadisticas">
+            <a
+                href="/dashboard"
+                class="boton-regresar"
+                aria-label="Volver al dashboard"
+                title="Volver al dashboard"
+            >
+                <svg
+                    class="icono-regresar"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                >
+                    <path d="M15 18L9 12L15 6"></path>
+                </svg>
+            </a>
 
             <div class="selector-periodo">
                 <button
@@ -40,17 +46,18 @@
                     Mes
                 </button>
             </div>
+        </div>
+
+        <header class="encabezado-estadisticas">
+            <h1>Alertas registradas</h1>
         </header>
 
         <section class="cuadricula">
             <article class="tarjeta tarjeta-grafico">
                 <div class="tarjeta-encabezado">
-                    <div>
-                        <h2 id="tituloGrafico">Comportamiento semanal</h2>
-                        <p>Cantidad de alertas registradas por período</p>
-                    </div>
-
-                    <span class="icono-grafico">▥</span>
+                    <h2 id="tituloGrafico">
+                        Comportamiento semanal
+                    </h2>
                 </div>
 
                 <div
@@ -60,12 +67,9 @@
                 ></div>
             </article>
 
-            <article class="tarjeta">
+            <article class="tarjeta tarjeta-registro">
                 <div class="tarjeta-encabezado">
-                    <div>
-                        <h2>Registro histórico</h2>
-                        <p>Últimos movimientos del período seleccionado</p>
-                    </div>
+                    <h2>Registro histórico</h2>
                 </div>
 
                 <button
@@ -73,14 +77,29 @@
                     id="botonDescargar"
                     class="boton-descargar"
                 >
-                     Obtener registro de semana
+                    <svg
+                        class="icono-descarga"
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                    >
+                        <path d="M12 4V15"></path>
+                        <path d="M7.5 10.5L12 15L16.5 10.5"></path>
+                        <path d="M5 20H19"></path>
+                    </svg>
+
+                    <span id="textoDescarga">
+                        Obtener registro de semana
+                    </span>
                 </button>
 
-                <div id="registroHistorico" class="registro-historico"></div>
+                <div
+                    id="registroHistorico"
+                    class="registro-historico"
+                ></div>
             </article>
         </section>
     </main>
 
-    <script src="{% static 'web/js/estadisticas.js' %}"></script>
+    <script src="{% static 'web/js/estadisticas.js' %}?v=3"></script>
 </body>
 </html>

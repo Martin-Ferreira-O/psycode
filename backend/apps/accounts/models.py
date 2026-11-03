@@ -7,6 +7,11 @@ from django.db import models
 from django.db.models.functions import Lower
 
 
+class Role(models.TextChoices):
+    ADMIN = "admin", "Administrador"
+    SUPERVISOR = "supervisor", "Supervisor"
+
+
 class AccountsUserManager(UserManager):
     @classmethod
     def normalize_email(cls, email):
@@ -16,6 +21,13 @@ class AccountsUserManager(UserManager):
 class User(AbstractUser):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     email = models.EmailField(unique=True)
+    role = models.CharField(
+        max_length=20,
+        choices=Role.choices,
+        default=Role.SUPERVISOR,
+        help_text="Rol del usuario en el sistema",
+    )
+
     objects = AccountsUserManager()
 
     class Meta:
@@ -23,6 +35,10 @@ class User(AbstractUser):
             models.UniqueConstraint(Lower("email"), name="accounts_email_case_insensitive"),
             models.CheckConstraint(condition=~models.Q(username__contains="@"), name="accounts_username_without_at"),
         ]
+
+    @property
+    def is_admin(self):
+        return self.role == Role.ADMIN or self.is_superuser
 
     def clean(self):
         super().clean()

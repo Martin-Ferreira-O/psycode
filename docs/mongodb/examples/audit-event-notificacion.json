@@ -1,6 +1,8 @@
 {
   "event_id": "66666666-6666-4666-8666-666666666666",
-  "timestamp": { "$date": "2026-09-12T14:05:33.000Z" },
+  "timestamp": {
+    "$date": "2026-09-12T14:05:33.000Z"
+  },
   "action": "notifications.send",
   "outcome": "success",
   "actor_id": null,
@@ -9,19 +11,16 @@
   "contingencia": true,
   "motivo": null,
   "error_code": null,
-  "duration_ms": 10250,
-  "intentos": [
-    {
-      "canal": "teams",
-      "resultado": "fallido",
-      "error_code": "NOTIFICATION_TIMEOUT",
-      "duracion_ms": 10000
-    },
-    {
-      "canal": "email",
-      "resultado": "aceptado",
-      "error_code": null,
-      "duracion_ms": 250
-    }
-  ]
+  "duration_ms": 250,
+  "intentos": [],
+  "actor": "Sistema",
+  "sesion_id": "33333333-3333-4333-8333-333333333333",
+  "sequence": null,
+  "notification": {
+    "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    "mode": "supervisores_activos",
+    "phase": "respaldo",
+    "attempt": 4,
+    "reason": "FALLO_PARCIAL"
+  }
 }

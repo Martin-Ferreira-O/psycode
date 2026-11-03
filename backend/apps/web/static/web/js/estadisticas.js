@@ -8,7 +8,6 @@ const datos = {
         { etiqueta: "Sáb", total: 2 },
         { etiqueta: "Dom", total: 1 },
     ],
-
     mes: [
         { etiqueta: "Sem 1", total: 15 },
         { etiqueta: "Sem 2", total: 22 },
@@ -54,6 +53,7 @@ const grafico = document.querySelector("#graficoBarras");
 const registroHistorico = document.querySelector("#registroHistorico");
 const tituloGrafico = document.querySelector("#tituloGrafico");
 const botonDescargar = document.querySelector("#botonDescargar");
+const textoDescarga = document.querySelector("#textoDescarga");
 const botonesPeriodo = document.querySelectorAll(".boton-periodo");
 
 function dibujarGrafico() {
@@ -62,17 +62,21 @@ function dibujarGrafico() {
 
     grafico.innerHTML = valores
         .map((item) => {
-            const altura = (item.total / maximo) * 215;
+            const altura = (item.total / maximo) * 245;
 
             return `
                 <div class="grupo-barra">
                     <span class="valor-barra">${item.total}</span>
+
                     <div
                         class="barra"
                         style="height: ${altura}px"
                         title="${item.etiqueta}: ${item.total} alertas"
                     ></div>
-                    <span class="etiqueta-barra">${item.etiqueta}</span>
+
+                    <span class="etiqueta-barra">
+                        ${item.etiqueta}
+                    </span>
                 </div>
             `;
         })
@@ -83,23 +87,62 @@ function mostrarRegistros() {
     registroHistorico.innerHTML = registros
         .map((alerta) => {
             const claseEstado =
-                alerta.estado === "Revisada" ? "estado revisada" : "estado";
+                alerta.estado === "Revisada"
+                    ? "estado revisada"
+                    : "estado";
 
             return `
                 <article class="registro">
                     <div class="registro-contenido">
-                        <span class="registro-icono">!</span>
+                        <span class="registro-icono" aria-hidden="true">
+                            <svg
+                                viewBox="0 0 24 24"
+                                width="18"
+                                height="18"
+                                class="icono-registro-svg"
+                                style="width:18px;height:18px;display:block;fill:none;stroke:#c74b5b;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;"
+                            >
+                                <circle
+                                    cx="12"
+                                    cy="12"
+                                    r="9"
+                                    fill="none"
+                                    stroke="#c74b5b"
+                                ></circle>
+
+                                <path
+                                    d="M12 7.5v6"
+                                    fill="none"
+                                    stroke="#c74b5b"
+                                ></path>
+
+                                <path
+                                    d="M12 16.8h.01"
+                                    fill="none"
+                                    stroke="#c74b5b"
+                                    stroke-width="3"
+                                ></path>
+                            </svg>
+                        </span>
 
                         <div>
-                            <span class="registro-id">${alerta.id}</span>
-                            <span class="registro-tipo">${alerta.tipo}</span>
+                            <span class="registro-id">
+                                ${alerta.id}
+                            </span>
+
+                            <span class="registro-tipo">
+                                ${alerta.tipo}
+                            </span>
+
                             <span class="registro-fecha">
                                 ${alerta.fecha} · ${alerta.hora}
                             </span>
                         </div>
                     </div>
 
-                    <span class="${claseEstado}">${alerta.estado}</span>
+                    <span class="${claseEstado}">
+                        ${alerta.estado}
+                    </span>
                 </article>
             `;
         })
@@ -121,10 +164,10 @@ function cambiarPeriodo(nuevoPeriodo) {
             ? "Comportamiento semanal"
             : "Comportamiento mensual";
 
-    botonDescargar.textContent =
+    textoDescarga.textContent =
         periodoActual === "semana"
-            ? " Obtener registro de semana"
-            : " Obtener registro de mes";
+            ? "Obtener registro de semana"
+            : "Obtener registro de mes";
 
     dibujarGrafico();
 }
@@ -143,13 +186,21 @@ function descargarRegistro() {
     );
 
     const contenido = [encabezado, ...filas].join("\n");
-    const archivo = new Blob(["\uFEFF" + contenido], {
-        type: "text/csv;charset=utf-8",
-    });
+
+    const archivo = new Blob(
+        ["\uFEFF" + contenido],
+        {
+            type: "text/csv;charset=utf-8",
+        }
+    );
 
     const enlace = document.createElement("a");
+
     enlace.href = URL.createObjectURL(archivo);
-    enlace.download = `registro-alertas-${periodoActual}.csv`;
+
+    enlace.download =
+        `registro-alertas-${periodoActual}.csv`;
+
     enlace.click();
 
     URL.revokeObjectURL(enlace.href);
@@ -161,7 +212,10 @@ botonesPeriodo.forEach((boton) => {
     });
 });
 
-botonDescargar.addEventListener("click", descargarRegistro);
+botonDescargar.addEventListener(
+    "click",
+    descargarRegistro
+);
 
 mostrarRegistros();
 dibujarGrafico();

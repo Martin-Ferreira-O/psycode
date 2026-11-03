@@ -1,6 +1,7 @@
 """Tipos y reglas de alerts; sin dependencias de infraestructura."""
 
 from __future__ import annotations
+import unicodedata 
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -14,9 +15,8 @@ class DomainError(ValueError):
 
 
 class Semaforo(StrEnum):
-    """Semáforo operativo derivado del nivel 0–7 del Anexo A. No es una escala diagnóstica."""
+    """Semáforo operativo derivado del nivel 1–3. No es una escala diagnóstica."""
 
-    NULO = "NULO"
     BAJO = "BAJO"
     MEDIO = "MEDIO"
     ALTO = "ALTO"
@@ -39,35 +39,30 @@ EVALUACIONES_REGISTRABLES: Final[frozenset[EstadoEvaluacion]] = frozenset(
     }
 )
 
-SEVERIDAD_MIN: Final[int] = 0
-SEVERIDAD_MAX: Final[int] = 7
+SEVERIDAD_MIN: Final[int] = 1
+SEVERIDAD_MAX: Final[int] = 3
 BOX_LONGITUD: Final[tuple[int, int]] = (1, 64)
 TIPO_RIESGO_LONGITUD: Final[tuple[int, int]] = (1, 100)
 DESCRIPCION_MAX: Final[int] = 500
 ORIGEN_LONGITUD: Final[tuple[int, int]] = (1, 100)
 USUARIO_LONGITUD: Final[tuple[int, int]] = (1, 150)
 
-# Anexo A de API_CONTRACTS.md: 0 NULO; 1–2 BAJO; 3–4 MEDIO; 5–7 ALTO.
+# Escala operativa del proyecto: un nivel por cada semáforo.
 _SEMAFORO_POR_SEVERIDAD: Final[dict[int, Semaforo]] = {
-    0: Semaforo.NULO,
     1: Semaforo.BAJO,
-    2: Semaforo.BAJO,
-    3: Semaforo.MEDIO,
-    4: Semaforo.MEDIO,
-    5: Semaforo.ALTO,
-    6: Semaforo.ALTO,
-    7: Semaforo.ALTO,
+    2: Semaforo.MEDIO,
+    3: Semaforo.ALTO,
 }
 
 
 def semaforo_desde_severidad(nivel_severidad: int) -> Semaforo:
     """Única fuente del semáforo. Un valor enviado por el llamador no es autoridad."""
     if isinstance(nivel_severidad, bool) or not isinstance(nivel_severidad, int):
-        raise DomainError("nivel_severidad debe ser un entero 0–7, no un booleano ni otro tipo.")
+        raise DomainError("nivel_severidad debe ser un entero 1–3, no un booleano ni otro tipo.")
     try:
         return _SEMAFORO_POR_SEVERIDAD[nivel_severidad]
     except KeyError as exc:
-        raise DomainError("nivel_severidad debe estar entre 0 y 7 inclusive.") from exc
+        raise DomainError("nivel_severidad debe estar entre 1 y 3 inclusive.") from exc
 
 
 def es_revisada(estado: EstadoEvaluacion) -> bool:
@@ -101,7 +96,8 @@ def _descripcion(valor: object) -> str | None:
         return None
     if not isinstance(valor, str):
         raise DomainError("descripcion debe ser una cadena o null.")
-    texto = valor.strip()
+    texto = unicodedata.normalize("NFC", valor)
+    texto = " ".join(texto.split())
     if not texto:
         return None
     if len(texto) > DESCRIPCION_MAX:
@@ -317,15 +313,15 @@ def validar_alerta(alerta: Alerta) -> None:
 
 def _severidad(valor: object) -> int:
     if isinstance(valor, bool) or isinstance(valor, float):
-        raise DomainError("nivel_severidad debe ser un entero 0–7, no un booleano ni otro tipo.")
+        raise DomainError("nivel_severidad debe ser un entero 1–3, no un booleano ni otro tipo.")
     if isinstance(valor, int):
         numero = valor
     elif type(valor).__name__ in {"Int32", "Int64"}:
         numero = int(valor)
     else:
-        raise DomainError("nivel_severidad debe ser un entero 0–7, no un booleano ni otro tipo.")
+        raise DomainError("nivel_severidad debe ser un entero 1–3, no un booleano ni otro tipo.")
     if not SEVERIDAD_MIN <= numero <= SEVERIDAD_MAX:
-        raise DomainError("nivel_severidad debe estar entre 0 y 7 inclusive.")
+        raise DomainError("nivel_severidad debe estar entre 1 y 3 inclusive.")
     return numero
 
 

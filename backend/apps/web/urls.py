@@ -10,5 +10,12 @@ urlpatterns = [
     path("estadisticas", views.estadisticas, name="estadisticas"),
     path("alertas", views.alertas, name="alertas"),
     path("evaluaciones", views.evaluaciones, name="evaluaciones"),
-    path("password-reset/confirm", views.password_reset_confirm, name="password_reset_confirm"),
+    path("usuarios", views.usuarios, name="usuarios"),
+    path("bitacora", views.bitacora, name="bitacora"),
+    path("configuracion-operativa", views.configuracion_operativa, name="configuracion_operativa"),
+    path(
+        "password-reset/confirm",
+        views.password_reset_confirm,
+        name="password_reset_confirm",
+    ),
 ]

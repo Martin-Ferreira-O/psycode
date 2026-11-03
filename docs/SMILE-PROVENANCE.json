@@ -1,0 +1,16 @@
+{
+  "source": "/Users/martin/Downloads/smile_scraper",
+  "source_file": "smile_scraper.py",
+  "sha256": "80d94a2dcda0e2bf48e57ebdee2f3b97d81198e4a52230dfa2d193f6a4055fb5",
+  "integration": "vendored unchanged; subprocess CLI and native JSON transport",
+  "fields": [
+    "smile_cita_id",
+    "box",
+    "smile_box_id",
+    "fecha",
+    "hora_inicio",
+    "duracion_minutos",
+    "estado",
+    "codigo_estado"
+  ]
+}

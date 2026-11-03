@@ -1,0 +1,258 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:psycode:analysis:output:1.0",
+  "title": "Psycode AnalysisResult 1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "questions_version",
+    "session_id",
+    "sequence",
+    "state",
+    "transcription",
+    "signals",
+    "decisions",
+    "error_codes"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "1.0"
+    },
+    "questions_version": {
+      "const": "habla-signals-1"
+    },
+    "session_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "state": {
+      "enum": [
+        "senal",
+        "sin_riesgo",
+        "indeterminado"
+      ]
+    },
+    "transcription": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "text",
+            "words",
+            "cleanup"
+          ],
+          "properties": {
+            "text": {
+              "type": "string"
+            },
+            "words": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "text",
+                  "start",
+                  "end",
+                  "speaker"
+                ],
+                "properties": {
+                  "text": {
+                    "type": "string"
+                  },
+                  "start": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "end": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "speaker": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              }
+            },
+            "cleanup": {
+              "enum": [
+                "deleted",
+                "delete_pending"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "signals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "category_id",
+          "matrix_level",
+          "severity",
+          "excerpt",
+          "start",
+          "end",
+          "speaker"
+        ],
+        "properties": {
+          "category_id": {
+            "type": "string"
+          },
+          "matrix_level": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 7
+          },
+          "severity": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3
+          },
+          "excerpt": {
+            "type": "string"
+          },
+          "start": {
+            "type": "number",
+            "minimum": 0
+          },
+          "end": {
+            "type": "number",
+            "minimum": 0
+          },
+          "speaker": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "decisions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "model",
+          "context",
+          "values",
+          "input_tokens",
+          "output_tokens"
+        ],
+        "properties": {
+          "model": {
+            "type": "string"
+          },
+          "context": {
+            "enum": [
+              "afirmacion_propia",
+              "pregunta",
+              "cita",
+              "negacion",
+              "referencia_a_terceros",
+              "incierto"
+            ]
+          },
+          "values": {
+            "type": "array",
+            "minItems": 8,
+            "maxItems": 8,
+            "items": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          },
+          "input_tokens": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "output_tokens": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    },
+    "error_codes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Z][A-Z0-9_]+$"
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "state": {
+            "const": "senal"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "signals": {
+            "minItems": 1
+          },
+          "error_codes": {
+            "maxItems": 0
+          },
+          "transcription": {
+            "type": "object",
+            "properties": {
+              "cleanup": {
+                "const": "deleted"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "state": {
+            "const": "sin_riesgo"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "signals": {
+            "maxItems": 0
+          },
+          "error_codes": {
+            "maxItems": 0
+          },
+          "transcription": {
+            "type": "object",
+            "properties": {
+              "cleanup": {
+                "const": "deleted"
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

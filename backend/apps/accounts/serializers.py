@@ -1,5 +1,7 @@
 from rest_framework import serializers
 
+from .models import Role
+
 
 class StrictStringField(serializers.CharField):
     def to_internal_value(self, data):
@@ -37,3 +39,26 @@ class PasswordResetSerializer(StrictSerializer):
 class PasswordResetConfirmSerializer(StrictSerializer):
     token = StrictStringField(trim_whitespace=False, write_only=True)
     nueva_password = StrictStringField(trim_whitespace=False, write_only=True)
+
+
+
+class AdminUserCreateSerializer(StrictSerializer):
+    usuario = StrictStringField(max_length=150)
+    nombre = StrictStringField(max_length=150)
+    correo = StrictStringField(max_length=254)
+    password = StrictStringField(trim_whitespace=False, write_only=True)
+    rol = serializers.ChoiceField(choices=Role.choices, default=Role.SUPERVISOR)
+    activo = serializers.BooleanField(default=True)
+
+    def validate_correo(self, value):
+        return serializers.EmailField().run_validation(value).lower()
+
+
+class AdminUserUpdateSerializer(StrictSerializer):
+    nombre = StrictStringField(max_length=150, required=False)
+    correo = StrictStringField(max_length=254, required=False)
+    rol = serializers.ChoiceField(choices=Role.choices, required=False)
+    activo = serializers.BooleanField(required=False)
+
+    def validate_correo(self, value):
+        return serializers.EmailField().run_validation(value).lower()

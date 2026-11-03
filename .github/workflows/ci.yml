@@ -1,0 +1,17 @@
+name: Central server
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ['3.12', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: ${{ matrix.python }}
+      - run: uv sync --locked --no-dev
+      - run: uv run --no-sync python scripts/check_boundaries.py
+      - run: uv run --no-sync python manage.py test --settings=backend.config.test_settings --noinput
+      - run: uv run --no-sync python manage.py makemigrations --check --dry-run --settings=backend.config.test_settings

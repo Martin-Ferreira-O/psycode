@@ -16,4 +16,9 @@ class AuditWriter:
             event["alerta_id"] = str(alerta_id)
         if error_code:
             event["error_code"] = error_code
-        logging.getLogger("psycode.audit").info(json.dumps(event))
+        AuditWriter.emit(event)
+        return event
+
+    @staticmethod
+    def emit(event):
+        logging.getLogger("psycode.audit").info(json.dumps(event, default=lambda value: value.isoformat()))

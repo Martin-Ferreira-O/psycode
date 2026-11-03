@@ -1,0 +1,14 @@
+[Unit]
+Description=Psycode authorization coordinator
+After=network.target
+[Service]
+User=psycode
+WorkingDirectory=/opt/psycode/server
+EnvironmentFile=/etc/psycode/server.env
+ExecStart=/opt/psycode/server/.venv/bin/python manage.py coordinate_capture
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=90
+UMask=0077
+[Install]
+WantedBy=multi-user.target

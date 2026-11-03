@@ -1,0 +1,274 @@
+{
+  "source_branch": "sprint/6",
+  "source_revision": "59b250812459c0bafd775f1edd76e522215f85fa",
+  "agent_repository": "/Users/martin/Desktop/psycode-agent",
+  "local_data": {
+    "audio_files": 0,
+    "fragment_manifests": 0,
+    "agent_env_files": 0,
+    "existing_journal": "~/.psycode/capture-agent-state/<box> (se conserva)"
+  },
+  "files": [
+    {
+      "origin": "backend/apps/capture/agent/README.md",
+      "destination": "README.md (runbook nuevo; antecedente conservado en Git)",
+      "source_sha256": "28a32f16dea9a652f31995aaf6d3480246dfdf6ec6b7cf19a8398eaf1001856b"
+    },
+    {
+      "origin": "backend/apps/capture/agent/__init__.py",
+      "destination": "src/psycode_agent/__init__.py",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "origin": "backend/apps/capture/agent/agent_loop.py",
+      "destination": "src/psycode_agent/agent_loop.py",
+      "source_sha256": "93b12af4ed272953a705bac3d15df2f1a1e95e41a4b27f1e95f0484982b6ff0d"
+    },
+    {
+      "origin": "backend/apps/capture/agent/audio_chunker.py",
+      "destination": "src/psycode_agent/audio_chunker.py",
+      "source_sha256": "a588aa6bbf05d89b8af2bc3c8ed8d6ae705ccfc2d5755ed04c31d71dda714afa"
+    },
+    {
+      "origin": "backend/apps/capture/agent/backend_client.py",
+      "destination": "src/psycode_agent/backend_client.py",
+      "source_sha256": "2916d9bc922aed33a374605b969e044d016345e3be773ce6ea7bb0a7a6bc080a"
+    },
+    {
+      "origin": "backend/apps/capture/agent/capture_runner.py",
+      "destination": "src/psycode_agent/capture_runner.py",
+      "source_sha256": "a31c1bf2315770d02372e5790fb02603a91beb2f1d647830722c74249c0dfb1c"
+    },
+    {
+      "origin": "backend/apps/capture/agent/command_journal.py",
+      "destination": "src/psycode_agent/command_journal.py",
+      "source_sha256": "882e68d74e4eae2bee3221ca3759cba6a79a495237b7fd751f2f39175bca0289"
+    },
+    {
+      "origin": "backend/apps/capture/agent/config.py",
+      "destination": "src/psycode_agent/config.py",
+      "source_sha256": "7469473ca69c1f1a67ae0ca3ad1b74f07ff10afdbd516ba8e81438951dd66a6d"
+    },
+    {
+      "origin": "backend/apps/capture/agent/fragment_store.py",
+      "destination": "src/psycode_agent/fragment_store.py",
+      "source_sha256": "2a4e0d5f7b357ac29728a13fe35092b7775cf6a3e195df8e24dc3fb3a9791aa9"
+    },
+    {
+      "origin": "backend/apps/capture/agent/main.py",
+      "destination": "src/psycode_agent/__main__.py (entrada aut\u00f3noma)",
+      "source_sha256": "e1ebc4d8f4d1a1d42aac38b8e1fe122c16fd6bfb28a769f81d8c0d35aa6b9cad"
+    },
+    {
+      "origin": "backend/apps/capture/agent/obs_controller.py",
+      "destination": "src/psycode_agent/obs_controller.py",
+      "source_sha256": "25fd05d8a40662607085523b36195a01045c604100462516422ae71fd99c118c"
+    },
+    {
+      "origin": "backend/apps/capture/agent/session_coordinator.py",
+      "destination": "src/psycode_agent/session_coordinator.py",
+      "source_sha256": "d502fd66b5e8b010840a6f5fdd927cda1046399613e2f0d2e2561e9f4983b46c"
+    },
+    {
+      "origin": "backend/apps/capture/agent/test_agent_journal_setup.py",
+      "destination": "tests/unit/test_agent_journal_setup.py",
+      "source_sha256": "c7edad528f034c8c2d8d3013acdf38d32612ccd5c934efe85639b7741f9e1149"
+    },
+    {
+      "origin": "backend/apps/capture/agent/test_agent_loop.py",
+      "destination": "tests/unit/test_agent_loop.py",
+      "source_sha256": "5a780b364ce55e69c6797875ab9102c4c79d70cf52f39b19677eb7c61537b1c7"
+    },
+    {
+      "origin": "backend/apps/capture/agent/test_agent_loop_recovery.py",
+      "destination": "tests/unit/test_agent_loop_recovery.py",
+      "source_sha256": "2717f40268455bde8aefd5dde7f7b2a53756013c10e4bc64b35eee33949903de"
+    },
+    {
+      "origin": "backend/apps/capture/agent/test_audio_chunker.py",
+      "destination": "tests/unit/test_audio_chunker.py",
+      "source_sha256": "02043f5908908305eb944dac293da10274ac037ba489bf5b77f6ca425c21cce5"
+    },
+    {
+      "origin": "backend/apps/capture/agent/test_auto_stop_recovery.py",
+      "destination": "tests/unit/test_auto_stop_recovery.py",
+      "source_sha256": "4d72966db680db2acff8366b7a2823ff807b99521a01a836815e9c035dc6b23c"
+    },
+    {
+      "origin": "backend/apps/capture/agent/test_backend_client.py",
+      "destination": "tests/unit/test_backend_client.py",
+      "source_sha256": "81d3493602e6ef0363c5926c77751935bc52996a0c15bc9a5bc93fd31c62ccd3"
+    },
+    {
+      "origin": "backend/apps/capture/agent/test_capture_pipeline.py",
+      "destination": "tests/unit/test_capture_pipeline.py",
+      "source_sha256": "2bfe2ad2103b0d504cf688d535f683e117380d99a6524a25ebf884d6b078e9c2"
+    },
+    {
+      "origin": "backend/apps/capture/agent/test_capture_runner.py",
+      "destination": "tests/unit/test_capture_runner.py",
+      "source_sha256": "c2659e2f962c55813a46f46e51dc58deb7a3efdd0733dfd8028a674e61f89772"
+    },
+    {
+      "origin": "backend/apps/capture/agent/test_capture_stop.py",
+      "destination": "tests/unit/test_capture_stop.py",
+      "source_sha256": "26815cff6ee3b68487c9f86bc531523289f3b70d0a01b51ca3bf6adee8c07fd7"
+    },
+    {
+      "origin": "backend/apps/capture/agent/test_command_journal.py",
+      "destination": "tests/unit/test_command_journal.py",
+      "source_sha256": "6c93a9526241919809ed133882466d8bf92c8750d7bcb8ece2dbaf8d26c41f22"
+    },
+    {
+      "origin": "backend/apps/capture/agent/test_control_ack_integration.py",
+      "destination": "[servidor] tests/cross/test_control_ack_integration.py",
+      "source_sha256": "59fc8c870a5a3231f8654e75c8d4a4025dad6c0a82b41ca0f358678a41d6f1ff"
+    },
+    {
+      "origin": "backend/apps/capture/agent/test_ffmpeg_continuo_real.py",
+      "destination": "tests/hardware/test_ffmpeg_continuo_real.py",
+      "source_sha256": "33e2a5aa15b2c77e57eaa9a675c3d1a00a8bc1724eb2864f236c07bec1182090"
+    },
+    {
+      "origin": "backend/apps/capture/agent/test_ffmpeg_real.py",
+      "destination": "tests/hardware/test_ffmpeg_real.py",
+      "source_sha256": "c9bd91a0ddce883b579e34397a213c1efa898647720b8e60d10db3341aea2aeb"
+    },
+    {
+      "origin": "backend/apps/capture/agent/test_ffmpeg_upload_integration.py",
+      "destination": "tests/hardware/test_ffmpeg_upload_integration.py",
+      "source_sha256": "08f41e23dc51cddb72a0d77e6e76f0ec61327da1894134b4cfaea64c0c1563ea"
+    },
+    {
+      "origin": "backend/apps/capture/agent/test_fragment_store.py",
+      "destination": "tests/unit/test_fragment_store.py",
+      "source_sha256": "2ffeee5d39ff06da61b75dc8ffe68b43ab3142cbcf53fb7f70f1af9dab6e0785"
+    },
+    {
+      "origin": "backend/apps/capture/agent/test_http_integration.py",
+      "destination": "[servidor] tests/cross/test_http_integration.py",
+      "source_sha256": "3dbe3e386f458de54e08594f2da08eeead080dff089474fce7d31617e9e062b7"
+    },
+    {
+      "origin": "backend/apps/capture/agent/test_last_sequence.py",
+      "destination": "tests/unit/test_last_sequence.py",
+      "source_sha256": "998639783cce040ff3a3d214966f529d8f45bea280335b1fbca1582701320260"
+    },
+    {
+      "origin": "backend/apps/capture/agent/test_obs_controller.py",
+      "destination": "tests/unit/test_obs_controller.py",
+      "source_sha256": "6251e5c022fe6b2fac8ddf3b00a12cecbed4ba2f9cde640f5d77a3b0515ad6db"
+    },
+    {
+      "origin": "backend/apps/capture/agent/test_recovery_inspection.py",
+      "destination": "tests/unit/test_recovery_inspection.py",
+      "source_sha256": "1392a44f523653a08e158f96ec1baeb478a9e334da5272453967e612a3e185e1"
+    },
+    {
+      "origin": "backend/apps/capture/agent/test_restart_recovery.py",
+      "destination": "tests/unit/test_restart_recovery.py",
+      "source_sha256": "71ecbc4f8626080c2e84ac60aa4cfd54d2be9bc7ca93d23b71ee158e9998e43d"
+    },
+    {
+      "origin": "backend/apps/capture/agent/test_safe_shutdown.py",
+      "destination": "tests/unit/test_safe_shutdown.py",
+      "source_sha256": "19a9a8584a6ed136cdf102f7ce216a797f2f32efa3c4a836d971fd58ef067a42"
+    },
+    {
+      "origin": "backend/apps/capture/agent/test_session_coordinator.py",
+      "destination": "tests/unit/test_session_coordinator.py",
+      "source_sha256": "d170f24bdb9947044bd894ee210edb364bdc9eefd5d5fbc3882b2b99e1ada802"
+    },
+    {
+      "origin": "backend/apps/capture/agent/test_session_coordinator_failures.py",
+      "destination": "tests/unit/test_session_coordinator_failures.py",
+      "source_sha256": "ebbc2c38b736b4e9e59ab2cdb59276ad8883f0d4c39b916974c1e03fda452eed"
+    },
+    {
+      "origin": "backend/apps/capture/agent/test_session_coordinator_journal.py",
+      "destination": "tests/unit/test_session_coordinator_journal.py",
+      "source_sha256": "6e7f9907961ca70ef3a3f43a5f40fc61e73eb73a27cd4aa207057409ca23b1aa"
+    },
+    {
+      "origin": "backend/apps/capture/agent/test_start_ack_recovery.py",
+      "destination": "tests/unit/test_start_ack_recovery.py",
+      "source_sha256": "c7e0ed799b457481b5dbb5bbb4aa5d316529570d5fe2d708ca60b95f258ea70a"
+    },
+    {
+      "origin": "backend/apps/capture/agent/test_start_recovery.py",
+      "destination": "tests/unit/test_start_recovery.py",
+      "source_sha256": "70f5f556a32c16cd3d2c1c599ee85b813ec5999fce098398b4c838fea6a946c3"
+    },
+    {
+      "origin": "backend/apps/capture/agent/test_startup_obs_guard.py",
+      "destination": "tests/unit/test_startup_obs_guard.py",
+      "source_sha256": "ce391b78cd104898a206cef02b4f2fc768d3456c12839f5a7a4c8be437a98bd8"
+    },
+    {
+      "origin": "backend/apps/capture/agent/test_startup_recovery.py",
+      "destination": "tests/unit/test_startup_recovery.py",
+      "source_sha256": "5345933c0d66b28073c15d80bcd30a97c3099b961f057cbd2eb909a3314344a6"
+    },
+    {
+      "origin": "backend/apps/capture/agent/test_stop_drain.py",
+      "destination": "tests/unit/test_stop_drain.py",
+      "source_sha256": "23114ea93ae9b13a05afde40e6c0cfac072e9f03da6b4458035cb2936807dc0f"
+    },
+    {
+      "origin": "backend/apps/capture/agent/test_stop_journal.py",
+      "destination": "tests/unit/test_stop_journal.py",
+      "source_sha256": "2ccbd6e88084076e99ad5f28daf163e6762fbb8264aff27409345abd633ce7ff"
+    },
+    {
+      "origin": "backend/apps/capture/agent/test_stop_recovery.py",
+      "destination": "tests/unit/test_stop_recovery.py",
+      "source_sha256": "d52b2d065b8ee5037ff12fcc712202e17f56ec0f97d52f5b8a9088de0b47d09b"
+    },
+    {
+      "origin": "backend/apps/capture/agent/test_stream_readiness.py",
+      "destination": "tests/unit/test_stream_readiness.py",
+      "source_sha256": "395126f0ef99a6cab9c0ccd21181703b8c9d852909ada0ed475d7cb81203a0be"
+    },
+    {
+      "origin": "backend/apps/capture/agent/test_upload_queue.py",
+      "destination": "tests/unit/test_upload_queue.py",
+      "source_sha256": "fd50e61fc5120ebd241b09ccb19e3791de6878eeb4b730a7c36dccf35e22bf0d"
+    },
+    {
+      "origin": "backend/apps/capture/agent/test_upload_worker.py",
+      "destination": "tests/unit/test_upload_worker.py",
+      "source_sha256": "3319f456584a73b28e2019493bb6c4f8507bb1bbba8a03c4caf86f9fb14cffd8"
+    },
+    {
+      "origin": "backend/apps/capture/agent/upload_queue.py",
+      "destination": "src/psycode_agent/upload_queue.py",
+      "source_sha256": "3136ea68f4af332f6bd42ee01a7b2c059c1d4058fca6ec59b0ed432b22179838"
+    },
+    {
+      "origin": "backend/apps/capture/agent/upload_worker.py",
+      "destination": "src/psycode_agent/upload_worker.py",
+      "source_sha256": "43e9273ad7ea071d53003d9eeaef0178bfed33c949774793dbc3e4c2c89b17ef"
+    }
+  ],
+  "external_sources": [
+    {
+      "source": "/Users/martin/Downloads/smile_scraper",
+      "source_file": "smile_scraper.py",
+      "sha256": "80d94a2dcda0e2bf48e57ebdee2f3b97d81198e4a52230dfa2d193f6a4055fb5",
+      "integration": "vendored unchanged; subprocess CLI and native JSON transport",
+      "fields": [
+        "smile_cita_id",
+        "box",
+        "smile_box_id",
+        "fecha",
+        "hora_inicio",
+        "duracion_minutos",
+        "estado",
+        "codigo_estado"
+      ],
+      "destination": "src/psycode_agent/smile_scraper.py",
+      "dependencies": "optional extra smile: playwright, tzdata",
+      "tests": "tests/unit/test_smile.py; central native JSON contract and durable agenda tests"
+    }
+  ]
+}

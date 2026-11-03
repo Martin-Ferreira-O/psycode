@@ -1,0 +1,26 @@
+{
+  "event_id": "77777777-7777-4777-8777-777777777777",
+  "timestamp": {
+    "$date": "2026-09-12T14:05:32.000Z"
+  },
+  "action": "notifications.send",
+  "outcome": "failure",
+  "actor_id": null,
+  "alerta_id": "11111111-1111-4111-8111-111111111111",
+  "channel": "email",
+  "contingencia": false,
+  "motivo": null,
+  "error_code": "NOTIFICATION_TIMEOUT",
+  "duration_ms": 10000,
+  "intentos": [],
+  "actor": "Sistema",
+  "sesion_id": "33333333-3333-4333-8333-333333333333",
+  "sequence": null,
+  "notification": {
+    "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    "mode": "supervisores_activos",
+    "phase": "principal",
+    "attempt": 3,
+    "reason": null
+  }
+}

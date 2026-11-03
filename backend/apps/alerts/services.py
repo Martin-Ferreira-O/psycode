@@ -9,8 +9,9 @@ from .exceptions import AlertAlreadyExists, AlertNotFound, EvaluationAlreadyRegi
 
 
 class AlertsService:
-    def __init__(self, store):
+    def __init__(self, store, notifier=None):
         self.store = store
+        self.notifier = notifier
 
     def register_alert(
         self,
@@ -39,11 +40,22 @@ class AlertsService:
         except DomainError as exc:
             raise ServiceError("VALIDATION_ERROR", str(exc), 400) from exc
         try:
-            return self.store.insert_alert(alerta)
+            stored = self.store.insert_alert(alerta)
         except AlertAlreadyExists:
             raise
         except PersistenceUnavailable:
             raise
+
+        if self.notifier is not None:
+            from backend.apps.notifications.domain import NotificationPayload
+            try:
+                self.notifier.notify_alert(stored.alerta_id, NotificationPayload(
+                    str(stored.semaforo), "riesgo_suicida", stored.box, stored.fecha_hora.isoformat()))
+            except Exception:
+                # La persistencia ya tuvo éxito: no indicar al productor que falló el alta.
+                self.store._audit("alerts.flow", "failure", alerta_id=stored.alerta_id,
+                                  sesion_id=stored.sesion_id, error_code="NOTIFICATION_INTERNAL_ERROR")
+        return stored
 
     def get_alert(self, alerta_id):
         try:

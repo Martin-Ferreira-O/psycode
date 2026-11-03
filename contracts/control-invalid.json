@@ -1,0 +1,9 @@
+{
+  "protocol_version": "9",
+  "message_id": "bad",
+  "type": "command",
+  "sent_at": "2026-10-27",
+  "payload": {
+    "kind": "agenda_collect"
+  }
+}

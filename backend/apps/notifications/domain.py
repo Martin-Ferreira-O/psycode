@@ -1,6 +1,5 @@
 """Tipos y reglas de notifications; sin dependencias de infraestructura."""
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Dict, List, Optional
 from django.template.loader import render_to_string
 
@@ -35,7 +34,7 @@ class NotificationPayload:
         return self.nivel_riesgo.strip().upper()
 
     def debe_notificar(self) -> bool:
-        return self.nivel_normalizado not in NIVELES_SIN_NOTIFICACION
+        return self.nivel_normalizado in INDICADORES_RIESGO
 
     @property
     def indicador_visual(self) -> str:
@@ -71,14 +70,7 @@ class NotificationPayload:
             "color_hex": self.color_hex,
             "fecha_hora": self.fecha_hora,
         }
-        try:
-            return render_to_string("notifications/alerta_correo.html", context)
-        except Exception:
-            template_path = Path(__file__).resolve().parent / "templates" / "notifications" / "alerta_correo.html"
-            content = template_path.read_text(encoding="utf-8")
-            for k, v in context.items():
-                content = content.replace(f"{{{{ {k} }}}}", str(v))
-            return content
+        return render_to_string("notifications/alerta_correo.html", context)
 
 
 @dataclass
@@ -96,4 +88,5 @@ class NotificationResult:
     canal_exitoso: Optional[str] = None
     intentos: List[AttemptResult] = field(default_factory=list)
     motivo_omision: Optional[str] = None
+    estado: str = "OMITIDA"
     

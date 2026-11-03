@@ -1,0 +1,34 @@
+{
+  "source_repository": "psycode-alterno (copia local: prueba)",
+  "source_branch": "feat/speechmatics-jev",
+  "source_commit": "c3c6278da7e6bbe547f809f50308756f1e4305d3",
+  "source_tag": "psycode-integration-source-1.0",
+  "contract_version": "1.0",
+  "approval_status": "No hay referencia propuesta-api ni evidencia de aprobación en la copia local; confirmar con el equipo.",
+  "source_files": [
+    {
+      "path": "whisper_compare/providers/http.py",
+      "sha256": "d8e3c9410016a0061dbf6e5dbfce3add24290193d42b1a3e6736d8ac994e5467"
+    },
+    {
+      "path": "whisper_compare/providers/settings.py",
+      "sha256": "399a8966033fedf2563b58f6f44d2c8c8f3e6dbf269aa9aee85a258c0a8e1485"
+    },
+    {
+      "path": "whisper_compare/providers/speechmatics.py",
+      "sha256": "765be612f8de3090c98439de62d98ba24a7e24cf65c98cfc116d9138f2e67467"
+    },
+    {
+      "path": "whisper_compare/providers/jev.py",
+      "sha256": "5a9318381084118e48cc72866451d995602e18a3a0a98fc1f065542811c2096b"
+    },
+    {
+      "path": "whisper_compare/clinical.py",
+      "sha256": "9f94638c4599f7e03bd2964e161ad4a2583c0dbc8998227775f3b284ba3fef8a"
+    },
+    {
+      "path": "config/clinical_matrix.json",
+      "sha256": "f53ee9ca10b6e5da9ca550c663739738978493d8417fe48a633b0a7f6c45c11e"
+    }
+  ]
+}

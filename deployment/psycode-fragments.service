@@ -1,0 +1,17 @@
+[Unit]
+Description=Psycode sequential fragment worker
+After=network.target
+[Service]
+User=psycode
+WorkingDirectory=/opt/psycode/server
+EnvironmentFile=/etc/psycode/server.env
+ExecStart=/opt/psycode/server/.venv/bin/python manage.py process_fragment_jobs --continuous
+Restart=on-failure
+RestartSec=10
+# SIGTERM drena el fragmento actual, que puede requerir varias llamadas JEV.
+# 300 s por proveedor no es un límite total por fragmento. Evitar un SIGKILL
+# automático durante una entrega externa cuyo resultado puede ser incierto.
+TimeoutStopSec=infinity
+UMask=0077
+[Install]
+WantedBy=multi-user.target

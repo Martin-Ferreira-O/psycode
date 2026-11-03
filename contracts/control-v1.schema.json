@@ -1,0 +1,507 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:psycode:control:1.0",
+  "type": "object",
+  "properties": {
+    "protocol_version": {
+      "const": "1.0"
+    },
+    "message_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "type": {
+      "enum": [
+        "hello",
+        "ready",
+        "sync",
+        "state",
+        "command",
+        "command_ack",
+        "command_receipt",
+        "heartbeat",
+        "heartbeat_receipt",
+        "interrupted",
+        "interruption_receipt",
+        "status",
+        "error"
+      ]
+    },
+    "sent_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "payload": {
+      "type": "object"
+    },
+    "correlation_id": {
+      "type": "string",
+      "format": "uuid"
+    }
+  },
+  "required": [
+    "protocol_version",
+    "message_id",
+    "type",
+    "sent_at",
+    "payload"
+  ],
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "hello"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "agent_version": {
+                "type": "string",
+                "maxLength": 64
+              },
+              "capabilities": {
+                "type": "array",
+                "maxItems": 16,
+                "items": {
+                  "type": "string",
+                  "maxLength": 64
+                }
+              }
+            },
+            "required": [
+              "agent_version",
+              "capabilities"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "ready"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "box": {
+                "type": "string"
+              },
+              "server_time": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "capabilities": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "heartbeat_interval": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              }
+            },
+            "required": [
+              "box",
+              "server_time",
+              "capabilities",
+              "heartbeat_interval"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "sync"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "state"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "command"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "command_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "session_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "box": {
+                "enum": [
+                  "box-3",
+                  "box-4",
+                  "box-5",
+                  "box-6",
+                  "box-7"
+                ]
+              },
+              "kind": {
+                "enum": [
+                  "inicio",
+                  "detencion"
+                ]
+              },
+              "scheduled_start": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "scheduled_end": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "required": [
+              "command_id",
+              "session_id",
+              "box",
+              "kind",
+              "scheduled_start",
+              "scheduled_end"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "command_ack"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "command_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "session_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "success": {
+                "type": "boolean"
+              },
+              "occurred_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "last_sequence": {
+                "type": "integer",
+                "minimum": -1
+              },
+              "error_code": {
+                "enum": [
+                  "AGENT_START_FAILED",
+                  "AGENT_STOP_FAILED",
+                  "AGENT_INTERRUPTED",
+                  "AGENT_UNAVAILABLE",
+                  "SESSION_ABANDONED",
+                  "FINAL_SEQUENCE_TIMEOUT"
+                ]
+              }
+            },
+            "required": [
+              "command_id",
+              "session_id",
+              "success",
+              "occurred_at"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "command_receipt"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "command_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "session": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "command_id",
+              "session"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "heartbeat"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "session_id": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            "required": [
+              "session_id"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "heartbeat_receipt"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "session": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "session"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "interrupted"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "session_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "error_code": {
+                "enum": [
+                  "AGENT_START_FAILED",
+                  "AGENT_STOP_FAILED",
+                  "AGENT_INTERRUPTED",
+                  "AGENT_UNAVAILABLE",
+                  "SESSION_ABANDONED",
+                  "FINAL_SEQUENCE_TIMEOUT"
+                ]
+              }
+            },
+            "required": [
+              "session_id"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "interruption_receipt"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "session": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "session"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "status"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "obs": {
+                "enum": [
+                  "unknown",
+                  "ready",
+                  "busy",
+                  "unavailable"
+                ]
+              },
+              "capturing": {
+                "type": "boolean"
+              },
+              "pending": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "free_bytes": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "smile_last_sync": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "operational_code": {
+                "enum": [
+                  "",
+                  "RECOVERY_REQUIRED",
+                  "DISK_LOW",
+                  "UPLOAD_INTERVENTION",
+                  "SMILE_UNAVAILABLE"
+                ]
+              }
+            },
+            "required": [],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "error"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "pattern": "^[A-Z][A-Z0-9_]{1,63}$"
+              },
+              "recoverable": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "recoverable"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    }
+  ]
+}

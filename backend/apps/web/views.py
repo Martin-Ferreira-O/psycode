@@ -21,5 +21,17 @@ def evaluaciones(request):
     return render(request, "web/evaluaciones.html")
 
 
+def usuarios(request):
+    return render(request, "web/usuarios.html")
+
+
+def bitacora(request):
+    return render(request, "web/bitacora.html")
+
+
+def configuracion_operativa(request):
+    return render(request, "web/configuracion_operativa.html")
+
+
 def password_reset_confirm(request):
     return render(request, "web/password_reset_confirm.html")

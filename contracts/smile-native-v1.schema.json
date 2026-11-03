@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:psycode:smile-json:1",
+  "type": "array",
+  "maxItems": 100000,
+  "items": {
+    "type": "object",
+    "required": [
+      "smile_cita_id",
+      "box",
+      "smile_box_id",
+      "fecha",
+      "hora_inicio",
+      "duracion_minutos",
+      "estado",
+      "codigo_estado"
+    ],
+    "properties": {
+      "smile_cita_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256
+      },
+      "box": {
+        "type": "integer",
+        "minimum": 3,
+        "maximum": 7
+      },
+      "smile_box_id": {
+        "enum": [
+          "8",
+          "9",
+          "10",
+          "11",
+          "12"
+        ]
+      },
+      "fecha": {
+        "type": "string",
+        "format": "date"
+      },
+      "hora_inicio": {
+        "type": "string",
+        "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+      },
+      "duracion_minutos": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 59999
+      },
+      "estado": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256
+      },
+      "codigo_estado": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256
+      }
+    },
+    "additionalProperties": false
+  }
+}
