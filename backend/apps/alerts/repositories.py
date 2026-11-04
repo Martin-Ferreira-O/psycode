@@ -86,6 +86,16 @@ class AlertsRepository(AlertWritePort, AlertQueryPort):
         self._audit("alerts.register", "success", alerta_id=alert.alerta_id, sesion_id=alert.sesion_id)
         return alert
 
+    def has_alert_event(self, alerta_id, action):
+        try:
+            return self._events().find_one({"alerta_id": alerta_id, "action": action}, {"_id": 1}) is not None
+        except PyMongoError:
+            raise PersistenceUnavailable() from None
+
+    def ensure_registration_audit(self, alert):
+        if not self.has_alert_event(alert.alerta_id, "alerts.register"):
+            self._audit("alerts.register", "success", alerta_id=alert.alerta_id, sesion_id=alert.sesion_id)
+
     def get_alert(self, alerta_id: str) -> Alerta:
         ident = normalizar_uuid(alerta_id, "alerta_id")
         try:

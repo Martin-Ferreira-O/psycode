@@ -110,6 +110,7 @@ class FragmentJob(models.Model):
         PROCESSING = "procesando"
         COMPLETED = "completado"
         FAILED = "fallido"
+        REVIEW = "revision"
 
     class Result(models.TextChoices):
         RISK_DETECTED = "riesgo_detectado"
@@ -119,6 +120,8 @@ class FragmentJob(models.Model):
     job_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     sequence = models.OneToOneField(AcceptedSequence, on_delete=models.PROTECT, related_name="fragment_job")
     temporal = models.JSONField(default=dict)
+    checkpoint = models.JSONField(default=dict)
+    retry_at = models.DateTimeField(null=True)
     storage_key = models.CharField(max_length=37, unique=True)
     checksum = models.CharField(max_length=64)
     format = models.CharField(max_length=8, default="wav")
@@ -138,7 +141,7 @@ class FragmentJob(models.Model):
         ]
         constraints = [
             models.CheckConstraint(
-                condition=models.Q(state__in=["pendiente", "procesando", "completado", "fallido"]),
+                condition=models.Q(state__in=["pendiente", "procesando", "completado", "fallido", "revision"]),
                 name="capture_valid_job_state",
             ),
             models.CheckConstraint(

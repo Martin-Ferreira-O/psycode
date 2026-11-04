@@ -20,8 +20,8 @@ def request(client, method, url, *, attempts=3, safe=True, sleep=time.sleep,
             kwargs["timeout"] = min(30., remaining)
         try:
             response = client.request(method, url, **kwargs)
-        except httpx.TransportError:
-            if not safe:
+        except httpx.TransportError as exc:
+            if not safe and not isinstance(exc, (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)):
                 raise SubmissionUncertain("Envío incierto; requiere reconciliación antes de repetir") from None
             if attempt == attempts - 1:
                 raise ProviderError("Proveedor sin conexión") from None
@@ -31,7 +31,7 @@ def request(client, method, url, *, attempts=3, safe=True, sleep=time.sleep,
                 return response
             # A rate-limit refusal did not create a job. Ambiguous 5xx POSTs
             # must not be retried, because Batch has no idempotency guarantee.
-            if not safe and response.status_code >= 500:
+            if not safe and (response.status_code == 408 or response.status_code >= 500):
                 raise SubmissionUncertain("Envío incierto; requiere reconciliación antes de repetir")
             if response.status_code not in {429, 500, 502, 503, 504, 529} or attempt == attempts - 1:
                 raise ProviderError(f"Proveedor respondió HTTP {response.status_code}")

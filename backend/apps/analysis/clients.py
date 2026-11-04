@@ -1,6 +1,7 @@
 """Adaptadores HTTP. No instancian procesos ni cargan archivos de entorno."""
 import time
 import httpx
+from .errors import ProviderError, SubmissionUncertain
 from .domain import JevDecision, Transcription, Word
 from .providers.http import json_body, request
 from .providers.jev_contract import questions, validate_response
@@ -11,8 +12,11 @@ class SpeechmaticsTranscriptor:
     def __init__(self, settings, journal_dir, client=None, sleep=time.sleep):
         self.batch = BatchClient(settings, journal_dir, client, sleep)
 
-    def transcribe(self, fragment):
-        result = self.batch.transcribe(fragment.path, fragment)
+    def transcribe(self, fragment, *, checkpoint=None, prepare=None):
+        if checkpoint is None:
+            result = self.batch.transcribe(fragment.path, fragment)
+        else:
+            result = self.batch.transcribe(fragment.path, fragment, checkpoint=checkpoint, prepare=prepare)
         return Transcription(result["text"], tuple(
             Word(w["text"], w["start"], w["end"], w["speaker"])
             for w in result["words"]), result["provider_cleanup"])
@@ -22,7 +26,7 @@ class JevAnalizador:
     def __init__(self, settings, client=None, sleep=time.sleep):
         self.settings, self.client, self.sleep = settings, client, sleep
 
-    def evaluate(self, current, history):
+    def evaluate(self, current, history, *, request_id=None):
         self.settings.validate("jev")
         own = self.client is None
         client = self.client or httpx.Client(
@@ -32,13 +36,17 @@ class JevAnalizador:
             # Solo contenido redactado y etiquetas técnicas locales. Sin metadatos de sesión.
             response = request(client, "POST", self.settings.analysis_endpoint,
                                safe=False, sleep=self.sleep,
+                               headers={"X-Request-Id": request_id} if request_id else None,
                                deadline=time.monotonic() + self.settings.timeout,
                                json={"model": self.settings.analysis_model,
                                      "state": {"current": current, "history": history},
                                      "questions": questions()})
-            data = json_body(response)
-            values, context, usage = validate_response(data, self.settings.analysis_model,
-                                                       self.settings.analysis_provider)
+            try:
+                data = json_body(response)
+                values, context, usage = validate_response(data, self.settings.analysis_model,
+                                                           self.settings.analysis_provider)
+            except ProviderError:
+                raise SubmissionUncertain("Respuesta JEV no recuperable; requiere revisión") from None
             return JevDecision(data["model"], context["choice"], tuple(values),
                                usage["input_tokens"], usage["output_tokens"])
         finally:

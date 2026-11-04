@@ -20,8 +20,8 @@ al agente y restringe la consulta a su box. Expone:
 | --- | --- |
 | `capture` | `start_unconfirmed`, `active`, `stop_unconfirmed` o `finished`: evidencia física de captura y detención. |
 | `reception` | `pending`, `intervention_required` o `complete`: faltan datos o el manifiesto final, se necesita intervención o ya están todas las secuencias. |
-| `processing` | `pending`, `failed` o `complete`: estado agregado de los trabajos centrales; permanece pendiente mientras falte recibir datos. |
-| `job_counts` | Conteos por estado de `FragmentJob`: pendiente, procesando, completado y fallido. |
+| `processing` | `pending`, `failed` o `complete`: estado agregado de los trabajos centrales. Si un trabajo requiere revisión, se informa `intervention_required`. La recepción conserva su propio estado. |
+| `job_counts` | Conteos por estado de `FragmentJob`: pendiente, procesando, completado, fallido y revision. |
 | `diagnostic_code` | Diagnóstico operativo separado de un fallo real de captura. |
 | `error_code` | Fallo real de la sesión, si existe. No se reemplaza por un corte de red. |
 | `backlog_alert` | `notice` desde 15 min, `warning` desde 24 h y `critical` desde 72 h de recepción incompleta después del corte; vacío antes. |
@@ -154,10 +154,28 @@ metadatos técnicos. La inspección evalúa los plazos centrales; nunca inicia
 captura. `recover_capture_sessions` solicita detención cuando vence la
 autorización y actualiza diagnósticos, sin cerrar por mera ausencia de red.
 
+## Recuperación del procesamiento
+
+El trabajador guarda el avance en SQL y reintenta fallos transitorios con el
+audio original. Los trabajos en revisión aparecen en `capture_health` y en
+el informe de procesamiento. Este último mide desde el término físico de la
+captura y marca retrasos desde las dos horas.
+
+```sh
+uv run python manage.py process_fragment_jobs --report-processing
+uv run python manage.py process_fragment_jobs --resume-job <UUID>
+```
+
+Antes de reanudar un envío incierto, compruebe con el proveedor si lo aceptó.
+Use `--confirm-provider-not-accepted` únicamente si confirmó que no fue
+aceptado. Para un correo incierto, revise su entrega antes de usar
+`--confirm-notification-reviewed`. Si un tramo histórico confirmado carece
+de contexto, `--accept-missing-context` permite continuar con contexto vacío.
+
 ## Despliegue y compatibilidad
 
 1. Desplegar primero el servidor central y ejecutar sus migraciones `0007` y
-   `0008`. Conservan las filas previas; no reabren automáticamente sesiones
+   `0008` y `0009`. Conservan las filas previas; no reabren automáticamente sesiones
    históricas fallidas.
 2. Reiniciar los procesos centrales para cargar las capacidades y la nueva
    política. Comprobar `capture_health` y el acceso autenticado de un agente.

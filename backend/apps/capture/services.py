@@ -495,7 +495,9 @@ class CaptureSessionService:
                 "session_id": str(session.pk), "box": session.box, "state": session.state,
                 "capture": "finished" if session.actual_end is not None else "stop_unconfirmed" if session.state in (SessionState.STOPPING, SessionState.FAILED) else "active" if session.actual_start else "start_unconfirmed",
                 "reception": "complete" if received else "intervention_required" if session.reception_intervention_at else "pending",
-                "processing": "pending" if pending or not received else "failed" if counts[FragmentJob.State.FAILED] else "complete",
+                "processing": ("intervention_required" if counts[FragmentJob.State.REVIEW]
+                               else "pending" if pending or not received
+                               else "failed" if counts[FragmentJob.State.FAILED] else "complete"),
                 "next_sequence": session.next_sequence, "final_sequence": session.final_sequence,
                 "actual_start": session.actual_start.isoformat() if session.actual_start else None,
                 "actual_end": session.actual_end.isoformat() if session.actual_end else None,

@@ -24,6 +24,7 @@ class AlertsService:
         sesion_id,
         origen,
         descripcion=None,
+        before_notify=None,
     ):
         try:
             alerta = alerta_nueva(
@@ -42,19 +43,25 @@ class AlertsService:
         try:
             stored = self.store.insert_alert(alerta)
         except AlertAlreadyExists:
-            raise
-        except PersistenceUnavailable:
-            raise
+            if before_notify is None:
+                raise
+            stored = self.store.get_alert(alerta_id)
+            self.store.ensure_registration_audit(stored)
 
-        if self.notifier is not None:
+        if self.notifier is not None and (before_notify is None or before_notify(stored.alerta_id)):
             from backend.apps.notifications.domain import NotificationPayload
             try:
-                self.notifier.notify_alert(stored.alerta_id, NotificationPayload(
+                notification = self.notifier.notify_alert(stored.alerta_id, NotificationPayload(
                     str(stored.semaforo), "riesgo_suicida", stored.box, stored.fecha_hora.isoformat()))
             except Exception:
+                if before_notify is not None:
+                    raise
                 # La persistencia ya tuvo éxito: no indicar al productor que falló el alta.
                 self.store._audit("alerts.flow", "failure", alerta_id=stored.alerta_id,
                                   sesion_id=stored.sesion_id, error_code="NOTIFICATION_INTERNAL_ERROR")
+            else:
+                if before_notify is not None and notification.motivo_omision == "ALERTA_NO_ALMACENADA":
+                    raise PersistenceUnavailable()
         return stored
 
     def get_alert(self, alerta_id):
