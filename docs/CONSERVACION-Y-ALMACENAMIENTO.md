@@ -57,8 +57,11 @@ uv run python manage.py cleanup_sensitive_storage --continuous
 
 La consulta de vista previa no borra. El proceso continuo ejecuta la política cada
 15 minutos desde la última ejecución registrada (incluidas las manuales), respeta
-los reinicios y reintenta los fallos. Ejecutarlo en un servicio separado; `runserver`
-no lo inicia. El panel informa ejecución, resultado, próxima ejecución, retraso y
+los reinicios y reintenta los fallos. Si no alcanza a consultar SQL, el disco o el
+bloqueo antes de registrar la pasada, espera 30 segundos y vuelve a intentar. Una
+pasada ya registrada, aunque falle, mantiene el intervalo de 15 minutos.
+Ejecutarlo en un servicio separado; `runserver` no lo inicia. El servicio atiende
+SIGTERM entre pasadas y deja terminar la pasada en curso. El panel informa ejecución, resultado, próxima ejecución, retraso y
 outbox pendiente. La próxima ejecución es una previsión: si el servicio está
 apagado, el retraso crece. Cada pasada elimina hasta 1000 archivos; los protegidos
 no consumen ese cupo.

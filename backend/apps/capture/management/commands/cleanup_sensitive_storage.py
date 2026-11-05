@@ -1,6 +1,5 @@
 import json
 import threading
-from datetime import timedelta
 
 from django.core.management.base import BaseCommand, CommandError
 from django.db import DatabaseError
@@ -46,10 +45,15 @@ class Command(BaseCommand):
                 self.stdout.write(json.dumps(report))
             except BlockingIOError:
                 self.stdout.write("CLEANUP_BUSY")
+                if options["continuous"]:
+                    stop.wait(30)
+                    continue
             except (DatabaseError, OSError):
                 if not options["continuous"]:
                     raise CommandError("STORAGE_CLEANUP_UNAVAILABLE") from None
                 self.stderr.write("STORAGE_CLEANUP_UNAVAILABLE")
+                stop.wait(30)
+                continue
             if not options["continuous"]:
                 break
             # Reconsultar SQL permite respetar una limpieza manual y los reinicios.

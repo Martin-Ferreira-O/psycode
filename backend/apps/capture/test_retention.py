@@ -1,6 +1,9 @@
 import errno
 import os
+import signal
+import threading
 from datetime import timedelta
+from io import StringIO
 from unittest.mock import patch
 
 from django.core.management import call_command
@@ -192,3 +195,21 @@ class RetentionTests(IngestionFixtures, TestCase):
         self.assertEqual(first['event_id'], second['event_id'])
         self.assertEqual(second['event_id'], str(run.pk))
         self.assertEqual(flush_storage_audit(collection), 0)
+
+    def test_continuous_cleanup_waits_when_sql_is_unavailable(self):
+        waits = []
+
+        def wait(self, timeout=None):
+            waits.append(timeout)
+            self.set()
+            return True
+
+        previous = {sig: signal.getsignal(sig) for sig in (signal.SIGTERM, signal.SIGINT)}
+        try:
+            with patch.object(StorageCleanupRun.objects, 'order_by', side_effect=OperationalError('private')):
+                with patch.object(threading.Event, 'wait', wait):
+                    call_command('cleanup_sensitive_storage', '--continuous', stdout=StringIO(), stderr=StringIO())
+        finally:
+            for sig, handler in previous.items():
+                signal.signal(sig, handler)
+        self.assertEqual(waits, [30])
