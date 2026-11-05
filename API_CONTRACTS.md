@@ -594,7 +594,7 @@ Total cuenta coincidencias antes de paginar. Orden fijo: fecha_hora descendente,
 
 | Parámetro | Tipo / predeterminado | Semántica |
 |---|---|---|
-| `q` | string 1–100; omitido | Subcadena literal sin distinguir mayúsculas sobre alerta_id, box o tipo_riesgo; OR entre esos campos |
+| `q` | string 1–100; omitido | Búsqueda por subcadena sin distinguir mayúsculas en alerta_id, box o tipo_riesgo. Para box y riesgo, espacios, guiones y guiones bajos son equivalentes. También admite el número de box con ceros iniciales y las etiquetas visibles de riesgo. |
 | `fecha_desde` | YYYY-MM-DD; sin límite inferior | Día inicial inclusivo en Santiago |
 | `fecha_hasta` | YYYY-MM-DD; sin límite superior | Día final inclusivo en Santiago |
 | `box` | string 1–64; omitido | Coincidencia exacta, sensible a mayúsculas |

@@ -1,5 +1,6 @@
 """Contrato HTTP de alertas: fechas UTC y filtros de consulta."""
 
+import re
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -155,7 +156,38 @@ class AlertFilterTests(SimpleTestCase):
             {"alerta_id": {"$regex": "riesgo", "$options": "i"}},
             {"box": {"$regex": "riesgo", "$options": "i"}},
             {"tipo_riesgo": {"$regex": "riesgo", "$options": "i"}},
+            {"tipo_riesgo": {"$regex": (
+                "^(?:conducta_suicida|consideracion_de_metodo|deseo_pasivo_de_muerte"
+                "|ideacion_activa|sin_ideacion_identificable)$"
+            ), "$options": "i"}},
         ])
+
+    def test_busqueda_acepta_texto_visible_y_codigos_guardados(self):
+        cases = (
+            ("BOX 03", "box", "box-3", True),
+            ("box_3", "box", "BOX-03", True),
+            ("box-3", "box", "box-4", False),
+            ("Ideacion  ACTIVA", "tipo_riesgo", "ideacion_activa", True),
+            ("IDEACION_ACTIVA", "tipo_riesgo", "Ideacion activa", True),
+            ("Riesgo Suicida", "tipo_riesgo", "DESEO_PASIVO_DE_MUERTE", True),
+            ("VULNERACIÓN DE DERECHOS", "tipo_riesgo", "vulneracion_derechos", True),
+            ("vulneracion de derechos", "tipo_riesgo", "vulneracion_derechos", True),
+            ("riesgo.*", "tipo_riesgo", "riesgo_suicida", False),
+            ("ABC-DEF", "alerta_id", "123abc-def456", True),
+            ("ABC DEF", "alerta_id", "123abc-def456", False),
+        )
+        store = AlertsRepository()
+        for text, field, value, expected in cases:
+            with self.subTest(text=text, value=value), patch.object(store, "_alerts") as alerts:
+                alerts.return_value.find.return_value.sort.return_value.skip.return_value.limit.return_value = []
+                store.list_alerts(AlertQueryFilters(q=text))
+                query = alerts.return_value.count_documents.call_args.args[0]
+                conditions = [clause[field] for clause in query["$or"] if field in clause]
+                found = any(
+                    re.search(condition["$regex"], value, re.IGNORECASE if condition["$options"] == "i" else 0)
+                    for condition in conditions
+                )
+                self.assertEqual(found, expected)
 
 
 class AlertEvaluationApiTests(SimpleTestCase):
