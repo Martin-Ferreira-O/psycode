@@ -24,3 +24,8 @@ LOGGING = {"version": 1, "disable_existing_loggers": False,
 NOTIFICATIONS_ENABLED = False
 NOTIFICATION_EMAIL_TO = "primary@example.test"
 NOTIFICATION_EMAIL_BACKUP_TO = "backup@example.test"
+
+# Las suites usan exclusivamente fixtures sintéticos y directorios temporales.
+SENSITIVE_STORAGE_ENCRYPTION_REQUIRED = False
+SENSITIVE_STORAGE_EXTRA_ROOTS = []
+SENSITIVE_STORAGE_KEY_FILES = []

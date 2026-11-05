@@ -133,6 +133,8 @@ class FragmentStorage:
 
     def incoming(self):
         """El parser cierra y elimina este archivo, incluso si interrumpe la carga."""
+        from .encryption import require_encrypted_storage
+        require_encrypted_storage()
         with self.allocation_lock():
             stream = tempfile.NamedTemporaryFile(
                 dir=self.root,
@@ -150,6 +152,8 @@ class FragmentStorage:
 
     @contextmanager
     def stage(self, upload, checksum):
+        from .encryption import require_encrypted_storage
+        require_encrypted_storage()
         key = uuid4().hex + ".blob"
         path = self.root / ("incoming-" + uuid4().hex + ".part")
         with self.allocation_lock():

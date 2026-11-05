@@ -258,3 +258,15 @@ try:
         agenda_boxes.update(scope["boxes"])
 except (TypeError, ValueError):
     raise ImproperlyConfigured("CAPTURE_AGENDA_SOURCES inválido o con fuentes superpuestas.") from None
+
+# Audio, checkpoints SQL y journals deben residir en volúmenes cifrados.
+ANALYSIS_STATE_ROOT = local_path("ANALYSIS_STATE_ROOT", ".local/analysis")
+SENSITIVE_STORAGE_ENCRYPTION_REQUIRED = env_bool("SENSITIVE_STORAGE_ENCRYPTION_REQUIRED", not DEBUG)
+try:
+    SENSITIVE_STORAGE_EXTRA_ROOTS = json.loads(os.getenv("SENSITIVE_STORAGE_EXTRA_ROOTS", "[]"))
+    SENSITIVE_STORAGE_KEY_FILES = json.loads(os.getenv("SENSITIVE_STORAGE_KEY_FILES", "[]"))
+    for paths in (SENSITIVE_STORAGE_EXTRA_ROOTS, SENSITIVE_STORAGE_KEY_FILES):
+        if not isinstance(paths, list) or not all(isinstance(p, str) and Path(p).is_absolute() for p in paths):
+            raise ValueError
+except (ValueError, TypeError):
+    raise ImproperlyConfigured("Las rutas de cifrado deben ser listas JSON de rutas absolutas.") from None

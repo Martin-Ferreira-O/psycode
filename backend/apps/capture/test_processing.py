@@ -69,7 +69,7 @@ class FragmentJobProcessorTests(IngestionFixtures, TestCase):
         )
         return processor, analysis, audit
 
-    def test_signal_completes_job_with_risk_and_deletes_fragment(self):
+    def test_signal_completes_job_with_risk_and_retains_audio_for_policy(self):
         self.receive()
         processor, analysis, _ = self.processor(state=AnalysisState.SIGNAL)
 
@@ -82,7 +82,7 @@ class FragmentJobProcessorTests(IngestionFixtures, TestCase):
         self.assertEqual(job.attempts, 1)
         self.assertIsNotNone(job.finished_at)
         self.assertEqual(job.last_error_code, "")
-        self.assertFalse(self.blobs())
+        self.assertTrue(self.blobs())
         self.assertEqual(len(analysis.calls), 1)
         self.assertEqual(
             analysis.calls[0][1],
@@ -98,7 +98,7 @@ class FragmentJobProcessorTests(IngestionFixtures, TestCase):
         job = FragmentJob.objects.get()
         self.assertEqual(state, FragmentJob.State.COMPLETED)
         self.assertEqual(job.result, FragmentJob.Result.NO_RISK_DETECTED)
-        self.assertFalse(self.blobs())
+        self.assertTrue(self.blobs())
         self.assertEqual(len(analysis.calls), 1)
 
     def test_analytical_indeterminate_is_completed_not_failed(self):
@@ -116,7 +116,7 @@ class FragmentJobProcessorTests(IngestionFixtures, TestCase):
         self.assertEqual(job.result, FragmentJob.Result.INDETERMINATE)
         self.assertEqual(job.last_error_code, "")
         self.assertEqual(audit.failures, [])
-        self.assertFalse(self.blobs())
+        self.assertTrue(self.blobs())
 
     def test_technical_indeterminate_marks_job_failed(self):
         self.receive()
@@ -133,7 +133,7 @@ class FragmentJobProcessorTests(IngestionFixtures, TestCase):
         self.assertEqual(job.result, "")
         self.assertEqual(job.last_error_code, "JEV_FAILED")
         self.assertEqual(audit.failures, [])
-        self.assertFalse(self.blobs())
+        self.assertTrue(self.blobs())
 
     def test_local_processing_exception_marks_job_failed(self):
         self.receive()
@@ -145,7 +145,7 @@ class FragmentJobProcessorTests(IngestionFixtures, TestCase):
         self.assertEqual(state, FragmentJob.State.FAILED)
         self.assertEqual(job.last_error_code, "FLOW_INTERRUPTED")
         self.assertEqual(audit.failures, [])
-        self.assertFalse(self.blobs())
+        self.assertTrue(self.blobs())
 
     def test_stuck_job_is_recovered_before_retry_limit(self):
         self.receive()
@@ -212,7 +212,7 @@ class FragmentJobProcessorTests(IngestionFixtures, TestCase):
             audit.failures,
             [("FLOW_INTERRUPTED", str(self.session.session_id), 0)],
         )
-        self.assertFalse(self.blobs())
+        self.assertTrue(self.blobs())
 
     def test_later_sequence_waits_while_previous_job_is_not_completed(self):
         self.receive()
@@ -247,13 +247,13 @@ class FragmentJobProcessorTests(IngestionFixtures, TestCase):
         self.assertEqual(second.state, FragmentJob.State.PENDING)
         self.assertEqual(analysis.calls, [])
 
-    def test_previous_failure_finalizes_following_jobs_and_removes_their_audio(self):
+    def test_previous_failure_finalizes_following_jobs_and_retains_their_audio(self):
         self.receive()
         self.receive(number=1, captured_at=NOW + timedelta(seconds=11),
                      now=NOW + timedelta(seconds=21))
         processor, analysis, audit = self.processor(error=RuntimeError('synthetic'))
         self.assertEqual(processor.process_next(), FragmentJob.State.FAILED)
-        self.assertEqual(len(self.blobs()), 1)
+        self.assertEqual(len(self.blobs()), 2)
 
         self.assertEqual(processor.process_next(), FragmentJob.State.FAILED)
 
@@ -262,7 +262,7 @@ class FragmentJobProcessorTests(IngestionFixtures, TestCase):
         self.assertIsNotNone(following.finished_at)
         self.assertEqual(len(analysis.calls), 1)
         self.assertIn(('PREVIOUS_FRAGMENT_FAILED', str(self.session.session_id), 1), audit.failures)
-        self.assertFalse(self.blobs())
+        self.assertTrue(self.blobs())
 
     def test_completed_job_is_not_processed_twice(self):
         self.receive()

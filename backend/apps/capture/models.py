@@ -121,6 +121,7 @@ class FragmentJob(models.Model):
     sequence = models.OneToOneField(AcceptedSequence, on_delete=models.PROTECT, related_name="fragment_job")
     temporal = models.JSONField(default=dict)
     checkpoint = models.JSONField(default=dict)
+    sensitive_expired_at = models.DateTimeField(null=True)
     retry_at = models.DateTimeField(null=True)
     storage_key = models.CharField(max_length=37, unique=True)
     checksum = models.CharField(max_length=64)
@@ -182,3 +183,33 @@ class AgentConnectivityEvent(models.Model):
     class Meta:
         constraints = [models.UniqueConstraint(fields=["agent_id", "event_id"], name="capture_unique_agent_event")]
         indexes = [models.Index(fields=["box", "occurred_at"], name="capture_agent_event_time")]
+
+
+class StorageDeletion(models.Model):
+    """Intención durable antes de unlink; reintentos sobreviven a caídas."""
+    key = models.CharField(max_length=100, unique=True)
+    state = models.CharField(max_length=12, default="pending")
+    attempts = models.PositiveIntegerField(default=0)
+    retry_at = models.DateTimeField(null=True)
+    error_code = models.CharField(max_length=40, blank=True)
+    removed_at = models.DateTimeField(null=True)
+    size = models.PositiveBigIntegerField(default=0)
+
+
+class StorageCleanupRun(models.Model):
+    """Bitácora SQL y outbox hacia la bitácora común, sin texto clínico."""
+    run_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    started_at = models.DateTimeField()
+    finished_at = models.DateTimeField(null=True)
+    source = models.CharField(max_length=12)
+    actor_id = models.UUIDField(null=True)
+    outcome = models.CharField(max_length=12, default="running")
+    freed_bytes = models.PositiveBigIntegerField(default=0)
+    removed = models.PositiveIntegerField(default=0)
+    failures = models.PositiveIntegerField(default=0)
+    protected = models.PositiveIntegerField(default=0)
+    checkpoints = models.PositiveIntegerField(default=0)
+    provider_deleted = models.PositiveIntegerField(default=0)
+    provider_failures = models.PositiveIntegerField(default=0)
+    error_code = models.CharField(max_length=40, blank=True)
+    audit_sent_at = models.DateTimeField(null=True)

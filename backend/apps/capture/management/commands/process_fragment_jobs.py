@@ -59,7 +59,7 @@ class Command(BaseCommand):
     @transaction.atomic
     def resume_job(self, options):
         job = FragmentJob.objects.select_for_update().filter(
-            pk=options["resume_job"], state=FragmentJob.State.REVIEW,
+            pk=options["resume_job"], state=FragmentJob.State.REVIEW, sensitive_expired_at__isnull=True,
         ).first()
         if job is None:
             raise CommandError("El trabajo no está en revisión.")

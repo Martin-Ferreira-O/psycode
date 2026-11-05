@@ -85,6 +85,8 @@ class FragmentJobProcessor:
         self.stuck_after = stuck_after
 
     def process_next(self, *, now=None):
+        from .encryption import require_encrypted_storage
+        require_encrypted_storage()
         now = now or timezone.now()
         self.recover_stuck(now=now)
 
@@ -573,16 +575,8 @@ class FragmentJobProcessor:
         return FragmentJob.State.FAILED
 
     def _delete_final(self, storage_key):
-        try:
-            self.storage.delete(storage_key)
-
-        except FragmentError as exc:
-            if exc.code != "FRAGMENT_NOT_FOUND":
-                return False
-
-        except (BlockingIOError, OSError):
-            return False
-
+        # La retención durable elimina el WAV después de 24 h desde accepted_at.
+        # No borrar aquí: un fallo se recupera independientemente del análisis.
         return True
 
     def _close_session_if_finished(self, session_id):
