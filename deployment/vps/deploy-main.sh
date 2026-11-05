@@ -22,6 +22,10 @@ if [[ -n "${SSH_ORIGINAL_COMMAND:-}" ]]; then
 fi
 release="$HOME/releases/$revision"
 previous=$(readlink -f "$HOME/current" || true)
+storage_service_available=0
+if systemctl cat psycode-storage.service >/dev/null 2>&1; then
+  storage_service_available=1
+fi
 if [[ "$previous" == "$release" && -f "$HOME/shared/deployed-revision" ]]; then
   echo "Already deployed: $revision"
   exit 0
@@ -49,10 +53,16 @@ sudo /usr/bin/systemctl stop psycode-coordinator.service
 resume_on_error() {
   echo 'Deployment failed; retaining the previous release and database backup.' >&2
   if [[ -n "$previous" && -d "$previous" ]]; then
+    if [[ "$storage_service_available" == 1 ]]; then
+      sudo /usr/bin/systemctl stop psycode-storage.service || true
+    fi
     sudo /usr/bin/systemctl stop psycode-coordinator.service psycode-fragments.service psycode-web.service || true
     ln -sfn "$previous" "$HOME/current.next"
     mv -Tf "$HOME/current.next" "$HOME/current"
     sudo /usr/bin/systemctl start psycode-web.service psycode-fragments.service psycode-coordinator.service || true
+    if [[ "$storage_service_available" == 1 ]]; then
+      sudo /usr/bin/systemctl start psycode-storage.service || true
+    fi
   fi
 }
 trap resume_on_error ERR
@@ -68,6 +78,9 @@ if [[ -n "$previous" && -f "$HOME/shared/db.sqlite3" ]]; then
     echo 'Capture sessions are still open; postponing deployment.' >&2
     false
   fi
+fi
+if [[ "$storage_service_available" == 1 ]]; then
+  sudo /usr/bin/systemctl stop psycode-storage.service
 fi
 sudo /usr/bin/systemctl stop psycode-fragments.service
 sudo /usr/bin/systemctl stop psycode-web.service
@@ -89,6 +102,9 @@ fi
 ln -sfn "$release" "$HOME/current.next"
 mv -Tf "$HOME/current.next" "$HOME/current"
 sudo /usr/bin/systemctl start psycode-web.service psycode-fragments.service psycode-coordinator.service
+if [[ "$storage_service_available" == 1 ]]; then
+  sudo /usr/bin/systemctl start psycode-storage.service
+fi
 healthy=0
 for ((attempt=0; attempt<30; attempt++)); do
   if curl --fail --silent --output /dev/null --max-time 5 \
@@ -100,6 +116,9 @@ for ((attempt=0; attempt<30; attempt++)); do
 done
 [[ "$healthy" == 1 ]]
 sudo /usr/bin/systemctl is-active psycode-web.service psycode-fragments.service psycode-coordinator.service
+if [[ "$storage_service_available" == 1 ]]; then
+  sudo /usr/bin/systemctl is-active psycode-storage.service
+fi
 printf '%s\n' "$revision" > "$HOME/shared/deployed-revision"
 trap - ERR
 echo "Deployed successfully: $revision"

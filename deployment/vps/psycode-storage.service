@@ -1,0 +1,27 @@
+[Unit]
+Description=Psycode sensitive storage retention and durable deletion retries
+After=network.target mongod.service psycode-web.service
+RequiresMountsFor=/srv/psycode/shared /var/lib/mongodb /srv/psycode/backups
+
+[Service]
+User=psycode
+Group=psycode
+WorkingDirectory=/srv/psycode/current
+EnvironmentFile=/srv/psycode/shared/server.env
+ExecStart=/srv/psycode/current/.venv/bin/python manage.py cleanup_sensitive_storage --continuous
+Restart=on-failure
+RestartSec=10
+# SIGTERM se atiende entre pasadas. Una pasada confirma la intención SQL;
+# no cortarla con SIGKILL a mitad de un unlink.
+TimeoutStopSec=infinity
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/psycode/shared
+LimitCORE=0
+MemorySwapMax=0
+
+[Install]
+WantedBy=multi-user.target

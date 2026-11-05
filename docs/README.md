@@ -38,3 +38,5 @@ El [README de notificaciones](../backend/apps/notifications/README.md#trazabilid
 describe modalidad, intentos principales y de respaldo, resúmenes y conteos.
 El [formato de eventos](MONGODB.md#6-colección-audit_events-bitácora) detalla los
 campos y la validación, incluida la compatibilidad con eventos anteriores.
+
+- [Conservación y almacenamiento sensible](CONSERVACION-Y-ALMACENAMIENTO.md): política, API administrativa, servicio y verificación de cifrado.

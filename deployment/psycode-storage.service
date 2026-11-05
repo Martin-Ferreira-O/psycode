@@ -1,0 +1,18 @@
+[Unit]
+Description=Psycode sensitive storage retention and durable deletion retries
+After=network.target
+[Service]
+User=psycode
+WorkingDirectory=/opt/psycode/server
+EnvironmentFile=/etc/psycode/server.env
+ExecStart=/opt/psycode/server/.venv/bin/python manage.py cleanup_sensitive_storage --continuous
+Restart=on-failure
+RestartSec=10
+# SIGTERM se atiende entre pasadas. Una pasada confirma la intención SQL;
+# no cortarla con SIGKILL a mitad de un unlink.
+TimeoutStopSec=infinity
+UMask=0077
+LimitCORE=0
+MemorySwapMax=0
+[Install]
+WantedBy=multi-user.target

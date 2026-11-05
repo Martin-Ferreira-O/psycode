@@ -24,16 +24,19 @@ de migraciones y chequeos de producción, y recopila estáticos. Después detien
 el coordinador, espera hasta cinco minutos por las sesiones abiertas y drena
 el trabajador. Si siguen abiertas, cancela el despliegue y reanuda los servicios.
 Con los procesos detenidos, crea un respaldo SQLite, ejecuta las migraciones y
-apunta `/srv/psycode/current` a la nueva versión. Reinicia y verifica los tres
-servicios, incluyendo una petición HTTP al ASGI. El SHA instalado queda en
+apunta `/srv/psycode/current` a la nueva versión. Reinicia y verifica web,
+fragmentos y coordinador, incluyendo una petición HTTP al ASGI. Si
+`psycode-storage.service` está instalado, también lo drena antes de migrar y
+lo vuelve a comprobar. El SHA instalado queda en
 `/srv/psycode/shared/deployed-revision`.
 
 Un fallo previo al cambio conserva la versión en ejecución. Si falla durante el
 cambio, se intenta reactivar el código anterior. Las migraciones y las llamadas
 externas no se revierten automáticamente: revisar el respaldo y los logs antes
 de restaurar una base. El trabajador puede esperar a que finalice una entrega
-externa; no se lo mata con un timeout de systemd. Los despliegues no prometen
-cero interrupción: reinician HTTP y las conexiones WebSocket.
+externa; no se lo mata con un timeout de systemd. La limpieza periódica, si está
+instalada, también termina la pasada en curso antes de detenerse. Los despliegues
+no prometen cero interrupción: reinician HTTP y las conexiones WebSocket.
 
 Los archivos operativos en `/usr/local/sbin`, `/etc/systemd/system` y
 `/etc/nginx` son de root. Cambiar sus ejemplos en Git no los reinstala: requieren
@@ -96,7 +99,9 @@ sudo cat /srv/psycode/shared/deployed-revision
 sudo -u psycode -H bash -c 'cd /srv/psycode && /usr/local/sbin/psycode-deploy-main'
 ```
 
-Los tres procesos se habilitan al arrancar la VPS y systemd los recupera si fallan.
+Web, coordinador y fragmentos se habilitan al arrancar la VPS y systemd los
+recupera si fallan. La limpieza de almacenamiento se habilita aparte, cuando la
+unidad está instalada.
 Los despliegues manuales y automáticos ejecutan el mismo script. No actualizar
 el checkout ni editar una versión directamente.
 
@@ -104,3 +109,47 @@ Esta VPS caduca al mes. Antes de eliminarla, exportar SQL, MongoDB, configuraci�
 privada y cualquier audio pendiente por un canal privado. Los respaldos en el
 disco de la VPS no sobreviven a su eliminación. Al retirarla, eliminar en GitHub
 la deploy key y los secretos de esta VPS y desactivar el workflow.
+
+
+## Conservación y almacenamiento sensible
+
+El nuevo servicio `psycode-storage.service` aplica conservación y recupera borrados
+cada 15 minutos, incluso tras reinicios. Antes de habilitar material real, seguir
+[la política y verificación de cifrado](../../docs/CONSERVACION-Y-ALMACENAMIENTO.md).
+La actualización incorpora migraciones SQL; el check de despliegue falla si no se
+acreditan volúmenes cifrados y archivos de clave protegidos. No deshabilitar ese
+control para desbloquear un despliegue.
+
+Instalar la unidad, tras revisar las rutas y con los volúmenes ya montados:
+
+```sh
+sudo install -m 644 deployment/vps/psycode-storage.service /etc/systemd/system/psycode-storage.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now psycode-storage.service
+sudo systemctl status psycode-storage.service
+```
+
+Configurar las raíces, claves y directorios de Mongo/respaldos en `server.env`.
+La unidad incluye `RequiresMountsFor`, impide core dumps y deshabilita swap para su
+cgroup. `LimitCORE=0` y `MemorySwapMax=0` también quedan en web, fragmentos y
+coordinador: un volcado o el swap no deben conservar material sensible ni el
+entorno. Si se usa swap fuera de esos servicios, debe estar cifrado. No guardar
+respaldos que contengan contexto/transcripción más allá de su plazo de recuperación.
+
+Cuando la unidad esté instalada, el despliegue la drena y la reinicia junto a los
+trabajadores. El usuario `psycode` necesita los mismos permisos de systemctl que
+ya tiene para los otros servicios, sobre estos comandos:
+
+```sh
+/usr/bin/systemctl stop psycode-storage.service
+/usr/bin/systemctl start psycode-storage.service
+/usr/bin/systemctl is-active psycode-storage.service
+```
+
+`systemctl cat` se consulta sin sudo para saber si la unidad existe. No ejecutar
+el servicio contra una base con migraciones pendientes. El panel administrativo
+muestra retrasos si el proceso no está activo y conserva fallos/outbox de bitácora.
+La instalación de esta unidad y el cifrado real son acciones de operaciones.
+Versionar los archivos no ejecuta ni acredita un despliegue: en un equipo sin
+volúmenes dm-crypt ni archivos de clave protegidos, `verify_sensitive_storage`
+termina en `ENCRYPTION_UNVERIFIED`.
