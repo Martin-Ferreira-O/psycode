@@ -6,7 +6,8 @@ const LIMITE_DESCARGA = 100;
 const ACCIONES_TECNICAS = [
     "analysis.speechmatics",
     "analysis.jev",
-    "alerts.flow"
+    "alerts.flow",
+    "storage.cleanup"
 ];
 
 const DESCRIPCIONES_EVENTO = {
@@ -17,7 +18,8 @@ const DESCRIPCIONES_EVENTO = {
     "notifications.result": "Resultado general del proceso de notificación, incluidos sus envíos de respaldo.",
     "analysis.speechmatics": "Evento técnico del proceso de transcripción de audio con Speechmatics.",
     "analysis.jev": "Evento técnico del análisis del contenido procesado por JEV.",
-    "alerts.flow": "Registro de una etapa del procesamiento de una alerta."
+    "alerts.flow": "Registro de una etapa del procesamiento de una alerta.",
+    "storage.cleanup": "Limpieza de material de procesamiento, espacio liberado y fallos."
 };
 
 const elementosBitacora = {
@@ -208,7 +210,8 @@ function textoAccion(accion) {
         "notifications.result": "Resumen de notificación",
         "analysis.speechmatics": "Speechmatics",
         "analysis.jev": "JEV",
-        "alerts.flow": "Flujo de alerta"
+        "alerts.flow": "Flujo de alerta",
+        "storage.cleanup": "Limpieza de almacenamiento"
     };
 
     return etiquetas[accion] || accion || "—";
@@ -790,6 +793,12 @@ function abrirDetalle(evento, elementoOrigen) {
     elementosBitacora.detalleContingencia.textContent = evento.contingencia === true
         ? "Sí" : evento.contingencia === false ? "No" : "No registrado";
     mostrarDetalleNotificacion(evento.notification);
+    const seccionStorage = document.querySelector('#seccionAlmacenamiento');
+    if (seccionStorage) {
+        seccionStorage.hidden = !evento.storage;
+        const contenido = document.querySelector('#detalleAlmacenamiento');
+        contenido.textContent = evento.storage ? `${evento.storage.source === 'manual' ? 'Manual' : 'Automática'} · ${evento.storage.freed_bytes} bytes liberados · ${evento.storage.removed} archivos eliminados · ${evento.storage.failures} fallos · ${evento.storage.protected} protegidos · ${evento.storage.checkpoints} contextos retirados` : '';
+    }
 
     elementosBitacora.verEventosAlerta.hidden =
         !evento.alerta_id;

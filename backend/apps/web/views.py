@@ -37,3 +37,8 @@ def configuracion_operativa(request):
 
 def password_reset_confirm(request):
     return render(request, "web/password_reset_confirm.html")
+
+
+def almacenamiento_entrada(request):
+    # El JWT HttpOnly tiene Path=/api/v1/: el HTML protegido vive en ese ámbito.
+    return redirect("web:almacenamiento")

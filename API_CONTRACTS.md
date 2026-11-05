@@ -1145,3 +1145,28 @@ Los schemas `contracts/agent-events-v1.schema.json` y
 `contracts/capture-ended-v1.schema.json`, incluidos en `manifest.json`, son la
 referencia para solicitudes. El `ready` anuncia `agent.events.v1` y
 `sessions.capture-ended.v1`. Desplegar/migrar primero central y después agentes.
+
+
+## Almacenamiento del servidor
+
+Solo administrador activo, con la autenticación vigente y CSRF al usar cookies.
+Todas las respuestas son privadas y `no-store`.
+
+| Método y ruta | Función |
+|---|---|
+| `GET /api/v1/almacenamiento/panel` | Panel HTML protegido en servidor. |
+| `GET /api/v1/almacenamiento` | Bytes ocupados/disponibles del volumen, material gestionado, liberable, protegido por motivo; última/próxima ejecución, retraso, deudas, revisión, vencimientos, cifrado y outbox. |
+| `POST /api/v1/almacenamiento/vista-previa` | Sin borrar: entrega `preview_token`, `preview_bytes`, `preview_files`, `expires_in_seconds=300` y métricas. Máximo 1000 archivos por vista previa. |
+| `POST /api/v1/almacenamiento/liberar` | JSON `{ "preview_token": "…" }`. Revalida identidad, tamaño/mtime, SQL, conservación y locks antes de cada borrado. Devuelve bytes liberados, archivos, fallos, protecciones y contexto retirado. |
+
+La entrada `/configuracion-operativa/almacenamiento` redirige al panel protegido dentro del ámbito de la cookie HttpOnly `/api/v1/`.
+
+El token está firmado y vinculado al administrador; no autoriza archivos nuevos ni
+reemplazados. Sin token: `400 STORAGE_PREVIEW_REQUIRED`; vencido/manipulado/otro
+actor: `409 STORAGE_PREVIEW_EXPIRED`; limpieza concurrente: `409 STORAGE_CLEANUP_BUSY`.
+La pérdida de una respuesta no autoriza repetir envíos de audio. Consultar estado
+y generar una vista previa nueva. La política es idéntica a la automática y no
+puede editarse por API. El evento `storage.cleanup` comparte bitácora/exportación,
+con subdocumento técnico `storage` y outbox SQL para reintentar si Mongo cae.
+
+[Política, plazos, claves y pruebas](docs/CONSERVACION-Y-ALMACENAMIENTO.md).

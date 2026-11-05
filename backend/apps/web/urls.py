@@ -1,10 +1,13 @@
 from django.urls import path
 
 from . import views
+from backend.apps.capture.storage_views import StoragePanelView
 
 app_name = "web"
 
 urlpatterns = [
+    path("api/v1/almacenamiento/panel", StoragePanelView.as_view(), name="almacenamiento"),
+    path("configuracion-operativa/almacenamiento", views.almacenamiento_entrada),
     path("", views.inicio, name="inicio"),
     path("dashboard", views.dashboard, name="dashboard"),
     path("estadisticas", views.estadisticas, name="estadisticas"),

@@ -229,3 +229,32 @@ class FragmentRecoveryTests(IngestionFixtures, TestCase):
         call_command("process_fragment_jobs", "--report-processing", stdout=report)
         self.assertIn(f"OBJETIVO_1_A_2_HORAS sesión={sid} segundos=5400", report.getvalue())
 
+
+    def test_retention_keeps_excerpt_evaluation_and_web_detail_after_purging_processing(self):
+        from copy import deepcopy
+        from rest_framework.test import APIClient
+        from backend.apps.accounts.models import User
+        from .retention import cleanup
+        self.queue()
+        worker = self.worker()
+        self.assertEqual(worker.process_next(now=self.now), FragmentJob.State.COMPLETED)
+        alert = self.db['alerts'].docs[0]
+        user = User.objects.create_user(username='review-retention', email='review@retention.test', password='Synthetic-2026!')
+        worker.analysis.alerts.record_evaluation(alert['alerta_id'], 'correcta', str(user.pk), user.username)
+        retained = deepcopy(self.db['alerts'].docs)
+        events = deepcopy(self.db['audit_events'].docs)
+        CaptureSession.objects.update(actual_end=self.now, final_sequence=0, state='completada')
+        run = cleanup(self.storage, now=self.now + timedelta(hours=25))
+        self.assertEqual(run.removed, 1)
+        self.assertEqual(FragmentJob.objects.get().checkpoint, {})
+        self.assertEqual(self.db['alerts'].docs, retained)
+        self.assertEqual(self.db['audit_events'].docs, events)
+        api = APIClient()
+        api.force_authenticate(user=user)
+        with patch('backend.apps.alerts.views.get_service', return_value=worker.analysis.alerts):
+            detail = api.get('/api/v1/alerts/' + alert['alerta_id'])
+            evaluation = api.get('/api/v1/alerts/' + alert['alerta_id'] + '/evaluacion')
+        self.assertEqual(detail.status_code, 200, detail.data)
+        self.assertIn('Ojalá no despertar', str(detail.data))
+        self.assertEqual(evaluation.status_code, 200, evaluation.data)
+        self.assertIn('correcta', str(evaluation.data))
