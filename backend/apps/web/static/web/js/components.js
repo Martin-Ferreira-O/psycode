@@ -81,4 +81,46 @@ async function mostrarUsuarioSesion() {
     }
 }
 
+function crearControlFocoModal(dialogo) {
+    const fondo = document.querySelector(".aplicacion");
+    let focoAnterior = null;
+    dialogo.tabIndex = -1;
+
+    function mantenerFoco(evento) {
+        if (evento.key !== "Tab") return;
+
+        const controles = [...dialogo.querySelectorAll("a[href], button, input, select, textarea, summary, [tabindex]")]
+            .filter(control => control.tabIndex >= 0 && !control.matches(":disabled")
+                && control.getClientRects().length && getComputedStyle(control).visibility === "visible");
+        const primero = controles[0];
+        const ultimo = controles.at(-1);
+        const foco = document.activeElement;
+
+        if (!primero || foco === dialogo || !dialogo.contains(foco)
+            || (evento.shiftKey ? foco === primero : foco === ultimo)) {
+            evento.preventDefault();
+            ((evento.shiftKey ? ultimo : primero) ?? dialogo).focus();
+        }
+    }
+
+    return {
+        abrir(focoInicial, origen = document.activeElement) {
+            if (!focoAnterior) {
+                focoAnterior = origen ?? document.body;
+                fondo.inert = true;
+                document.addEventListener("keydown", mantenerFoco);
+            }
+            focoInicial.focus();
+        },
+        cerrar(respaldo) {
+            if (!focoAnterior) return;
+            document.removeEventListener("keydown", mantenerFoco);
+            fondo.inert = false;
+            focoAnterior.focus();
+            if (document.activeElement !== focoAnterior) respaldo?.focus();
+            focoAnterior = null;
+        },
+    };
+}
+
 mostrarUsuarioSesion();

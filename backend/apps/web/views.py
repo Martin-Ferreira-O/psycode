@@ -11,10 +11,6 @@ def dashboard(request):
     return render(request, "web/dashboard.html")
 
 
-def estadisticas(request):
-    return render(request, "web/estadisticas.html")
-
-
 def alertas(request):
     return redirect("/dashboard#historial-alertas")
 

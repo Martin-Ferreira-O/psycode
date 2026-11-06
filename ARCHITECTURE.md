@@ -211,14 +211,13 @@ Las rutas web son propuestas de navegación, distintas de los endpoints. Todos l
 |---|---|---|
 | Autenticación `/login`, `/recuperar-password`, `/reset-password` | Inicio, recuperación y entrada al dashboard | Operaciones `/auth/*` del contrato |
 | Dashboard `/dashboard` | Total, pendientes, revisadas, conteos por semáforo y acceso visible al historial; selector semanal/mensual y fecha de referencia | `GET /dashboard/resumen` |
-| Estadísticas `/estadisticas` | Conteos diarios, total, historial del período y regreso al dashboard | `GET /dashboard/estadisticas` |
 | Historial `/alertas` | Tabla paginada, búsqueda, filtros combinables y apertura de detalle | `GET /alerts` |
 | Detalle, modal desde historial | Datos de la alerta, evaluación existente y formulario para pendientes | `GET /alerts/{alerta_id}`, `GET` y `POST /alerts/{alerta_id}/evaluacion` |
 | Registro `/evaluaciones` | Alertas revisadas, resultado, autor, fecha/hora de evaluación y acceso al detalle | `GET /alerts?revisadas=true`; evaluación incluida en cada fila |
 
 ### Flujo del dashboard al historial
 
-1. Tras autenticar, cargar el resumen del período seleccionado. Las estadísticas usan el mismo `periodo` y `fecha_referencia`.
+1. Tras autenticar, cargar el resumen del período seleccionado.
 2. «Ver historial del período» pasa `fecha_desde` y `fecha_hasta` inclusivas devueltas por el backend a `GET /alerts`. «Ver todo el historial» abre la consulta sin restricción de fechas.
 3. Cada fila muestra identificador, box, tipo de riesgo, severidad/semáforo, fecha, hora y estado de evaluación. Se respeta el orden del servidor: fecha/hora descendente y UUID ascendente en empates.
 4. Buscar con `q` por identificador, box o tipo de riesgo; combinar fechas, box y `estado_evaluacion`. Paginar en servidor con `limit`, `offset` y `total`. Al cambiar o limpiar filtros, volver a `offset=0`.

@@ -10,7 +10,6 @@ urlpatterns = [
     path("configuracion-operativa/almacenamiento", views.almacenamiento_entrada),
     path("", views.inicio, name="inicio"),
     path("dashboard", views.dashboard, name="dashboard"),
-    path("estadisticas", views.estadisticas, name="estadisticas"),
     path("alertas", views.alertas, name="alertas"),
     path("evaluaciones", views.evaluaciones, name="evaluaciones"),
     path("usuarios", views.usuarios, name="usuarios"),
