@@ -1,18 +1,15 @@
 """Tipos y reglas de notifications; sin dependencias de infraestructura."""
+import re
 from dataclasses import dataclass, field
+from datetime import datetime, time
 from typing import Dict, List, Optional
 from django.template.loader import render_to_string
+from django.utils.timezone import get_default_timezone
 
-INDICADORES_RIESGO: Dict[str, str] = {
-    "BAJO": "🟢 BAJO",
-    "MEDIO": "🟡 MEDIO",
-    "ALTO": "🔴 ALTO",
-}
-
-COLORES_RIESGO: Dict[str, str] = {
-    "BAJO": "#16a34a",
-    "MEDIO": "#d97706",
-    "ALTO": "#dc2626",
+CIRCULOS_RIESGO: Dict[str, str] = {
+    "BAJO": "🟢",
+    "MEDIO": "🟡",
+    "ALTO": "🔴",
 }
 
 NIVELES_SIN_NOTIFICACION = {"NULO", "SIN RIESGO", "NINGUNO", ""}
@@ -34,41 +31,66 @@ class NotificationPayload:
         return self.nivel_riesgo.strip().upper()
 
     def debe_notificar(self) -> bool:
-        return self.nivel_normalizado in INDICADORES_RIESGO
+        return self.nivel_normalizado in CIRCULOS_RIESGO
+
+    @property
+    def circulo_riesgo(self) -> str:
+        return CIRCULOS_RIESGO.get(self.nivel_normalizado, "⚪")
 
     @property
     def indicador_visual(self) -> str:
-        return INDICADORES_RIESGO.get(self.nivel_normalizado, f"⚪ {self.nivel_normalizado}")
-
-    @property
-    def color_hex(self) -> str:
-        return COLORES_RIESGO.get(self.nivel_normalizado, "#dc2626")
+        return f"{self.circulo_riesgo} {self.nivel_normalizado}"
 
     def formatear_resumen_teams(self) -> str:
         return f"{self.indicador_visual} · {self.tipo_riesgo} · {self.box} · {self.fecha_hora}"
 
+    @property
+    def box_correo(self) -> str:
+        codigo = re.fullmatch(r"box-([0-9]+)", self.box, re.IGNORECASE)
+        return f"Box {codigo[1].zfill(2)}" if codigo else self.box
+
+    @property
+    def tipo_riesgo_correo(self) -> str:
+        texto = self.tipo_riesgo.replace("_", " ")
+        return texto[:1].upper() + texto[1:]
+
+    def fecha_y_hora_correo(self) -> tuple[str, str]:
+        try:
+            instante = datetime.fromisoformat(self.fecha_hora)
+        except ValueError:
+            try:
+                return "", time.fromisoformat(self.fecha_hora).strftime("%H:%M:%S")
+            except ValueError:
+                return "", "—"
+        if instante.tzinfo is not None:
+            instante = instante.astimezone(get_default_timezone())
+        return instante.strftime("%d/%m/%Y"), instante.strftime("%H:%M:%S")
+
     def formatear_asunto_correo(self) -> str:
-        return f"Alerta del sistema - {self.box}"
+        return f"{self.circulo_riesgo} [RIESGO {self.nivel_normalizado}] Alerta del sistema - {self.box_correo}"
 
     def formatear_cuerpo_correo(self) -> str:
+        fecha, hora = self.fecha_y_hora_correo()
+        linea_fecha = f"Fecha: {fecha}\n" if fecha else ""
         return (
             "ALERTA DEL SISTEMA\n\n"
-            f"Box: {self.box}\n"
-            f"Tipo: {self.tipo_riesgo}\n"
+            f"Box: {self.box_correo}\n"
+            f"Tipo: {self.tipo_riesgo_correo}\n"
             f"Nivel: {self.indicador_visual}\n"
-            f"Hora: {self.fecha_hora}\n\n"
+            f"{linea_fecha}Hora: {hora}\n\n"
             "Se requiere revisión profesional.\n\n"
             "Sin datos personales del paciente"
         )
 
     def formatear_html_correo(self) -> str:
+        fecha, hora = self.fecha_y_hora_correo()
         context = {
-            "box": self.box,
-            "tipo_riesgo": self.tipo_riesgo,
-            "nivel_riesgo": self.nivel_normalizado,
+            "box": self.box_correo,
+            "tipo_riesgo": self.tipo_riesgo_correo,
             "indicador_visual": self.indicador_visual,
-            "color_hex": self.color_hex,
-            "fecha_hora": self.fecha_hora,
+            "nivel_css": self.nivel_normalizado.lower() if self.debe_notificar() else "alto",
+            "fecha": fecha,
+            "hora": hora,
         }
         return render_to_string("notifications/alerta_correo.html", context)
 

@@ -1,4 +1,5 @@
 ﻿import subprocess
+from datetime import datetime, timezone
 from unittest.mock import Mock, patch
 
 from django.core import mail
@@ -216,19 +217,34 @@ class NotificationsTestCase(TestCase):
 
     def test_alert_levels_and_confirmed_content_are_preserved(self):
         self.service.email_client = EmailClient()
-        for level, expected in ((1, 'BAJO'), (2, 'MEDIO'), (3, 'ALTO')):
+        captured_at = datetime(2026, 1, 17, 1, 2, 3, 456789, tzinfo=timezone.utc)
+        for level, expected, circle in ((1, 'BAJO', '🟢'), (2, 'MEDIO', '🟡'), (3, 'ALTO', '🔴')):
             with self.subTest(level=level):
                 from dataclasses import replace
                 from backend.apps.alerts.domain import semaforo_desde_severidad
                 self.alert = replace(self.alert, nivel_severidad=level,
-                                     semaforo=semaforo_desde_severidad(level))
+                                     semaforo=semaforo_desde_severidad(level), fecha_hora=captured_at)
                 # La fuente de verdad es la alerta confirmada en el repositorio.
                 with patch.object(self.store, 'get_alert', return_value=self.alert):
                     self.assertTrue(self.notify().enviado)
-                body = mail.outbox[-1].body
-                self.assertIn(expected, body)
-                self.assertIn(self.alert.box, body)
-                self.assertNotIn('confidencial', body)
+                message = mail.outbox[-1]
+                self.assertEqual(message.subject, f'{circle} [RIESGO {expected}] Alerta del sistema - Box 03')
+                self.assertEqual(message.to, ['primary@example.test'])
+                html = message.alternatives[0][0]
+                self.assertIn(f'<tr class="riesgo-{expected.lower()}">', html)
+                self.assertNotIn(message.subject, html)
+                self.assertNotIn('<strong>Asunto:</strong>', html)
+                self.assertNotIn('<strong>De:</strong>', html)
+                self.assertNotIn('<strong>Para:</strong>', html)
+                self.assertIn(expected, message.body)
+                for label, value in (
+                    ('Box', 'Box 03'), ('Tipo', 'Riesgo suicida'),
+                    ('Fecha', '16/01/2026'), ('Hora', '22:02:03'),
+                ):
+                    self.assertIn(f'{label}: {value}', message.body.splitlines())
+                    self.assertIn(f'<strong>{label}:</strong> {value}</div>', html)
+                for private_or_technical in ('confidencial', 'box-3', 'riesgo_suicida', captured_at.isoformat()):
+                    self.assertNotIn(private_or_technical, message.body + html)
 
 
 class EmailClientTests(SimpleTestCase):
