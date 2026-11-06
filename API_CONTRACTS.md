@@ -26,9 +26,9 @@ Endpoints sin barra final; el prefijo sí se escribe `/api/v1/`. No depender de 
 | GET | `/api/v1/auth/me` | `accounts:me` | Protegido |
 | POST | `/api/v1/auth/password-reset` | `accounts:password_reset` | Público |
 | POST | `/api/v1/auth/password-reset/confirm` | `accounts:password_reset_confirm` | Token de recuperación |
-| GET | `/api/v1/auth/admin/users` | `accounts:admin_user_list` | Protegido (solo rol admin) |
-| POST | `/api/v1/auth/admin/users` | `accounts:admin_user_create` | Protegido (solo rol admin) |
-| PATCH | `/api/v1/auth/admin/users/{user_id}` | `accounts:admin_user_update` | Protegido (solo rol admin) |
+| GET | `/api/v1/auth/admin/users` | `accounts:admin_users` | Protegido (solo rol admin) |
+| POST | `/api/v1/auth/admin/users` | `accounts:admin_users` | Protegido (solo rol admin) |
+| PATCH | `/api/v1/auth/admin/users/{user_id}` | `accounts:admin_user_detail` | Protegido (solo rol admin) |
 | PATCH | `/api/v1/auth/admin/users/{user_id}/toggle-active` | `accounts:admin_user_toggle_active` | Protegido (solo rol admin) |
 | GET | `/api/v1/audit-events` | `alerts:audit-list` | Protegido (solo rol admin) |
 | GET, PUT | `/api/v1/configuracion-operativa` | `operational:configuracion_operativa` | Protegido (solo rol admin) |
@@ -624,7 +624,7 @@ Respuesta 200:
         "box": "box-3",
         "tipo_riesgo": "riesgo_suicida",
         "nivel_severidad": 2,
-        "semaforo": "BAJO",
+        "semaforo": "MEDIO",
         "fecha_hora": "2026-09-12T14:05:22Z",
         "estado_evaluacion": "correcta",
         "evaluacion": {
@@ -657,7 +657,7 @@ Sin parámetros ni cuerpo. Ejemplo pendiente, respuesta 200:
     "box": "box-3",
     "tipo_riesgo": "riesgo_suicida",
     "nivel_severidad": 2,
-    "semaforo": "BAJO",
+    "semaforo": "MEDIO",
     "fecha_hora": "2026-09-12T14:05:22Z",
     "estado_evaluacion": "pendiente",
     "evaluacion": null,
