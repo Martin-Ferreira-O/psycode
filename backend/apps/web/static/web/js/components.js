@@ -92,15 +92,16 @@ function crearControlFocoModal(dialogo) {
         const controles = [...dialogo.querySelectorAll("a[href], button, input, select, textarea, summary, [tabindex]")]
             .filter(control => control.tabIndex >= 0 && !control.matches(":disabled")
                 && control.getClientRects().length && getComputedStyle(control).visibility === "visible");
-        const primero = controles[0];
-        const ultimo = controles.at(-1);
         const foco = document.activeElement;
+        const indice = controles.indexOf(foco);
+        const paso = evento.shiftKey ? -1 : 1;
+        const siguiente = indice >= 0 ? controles[indice + paso] : undefined;
+        const radio = 'input[type="radio"]';
+        if (siguiente && !foco.matches(radio) && !siguiente.matches(radio)) return;
 
-        if (!primero || foco === dialogo || !dialogo.contains(foco)
-            || (evento.shiftKey ? foco === primero : foco === ultimo)) {
-            evento.preventDefault();
-            ((evento.shiftKey ? ultimo : primero) ?? dialogo).focus();
-        }
+        evento.preventDefault();
+        const extremo = evento.shiftKey ? controles.at(-1) : controles[0];
+        (siguiente ?? extremo ?? dialogo).focus();
     }
 
     return {
