@@ -12,11 +12,15 @@ from .authentication import AgentIdentity, authenticate_agent_header
 from .test_api import AGENTS, TOKEN
 from .test_ingestion import IngestionFixtures, wav_bytes
 from .tests import NOW, CaptureFixtures
-from .models import FragmentJob, CaptureSession
+from .models import FragmentJob, CaptureSession, AgentStatus
 from .storage import FragmentError
 from .protocol import decode, envelope
 from .websocket import RemoteControl, agent_websocket
 from . import leases
+from rest_framework.exceptions import AuthenticationFailed
+
+from backend.common.errors import ServiceError
+from .agent_registry import create_agent, revoke_agent
 
 class AudioTimelineTests(IngestionFixtures, TestCase):
     def timeline(self, start=0, end=160000, new=0):
@@ -93,6 +97,144 @@ class ControlTests(CaptureFixtures, TestCase):
             m=envelope('sync',{});m.update(changes)
             with self.assertRaises(ValueError):decode(json.dumps(m))
 
+    def test_status_acepta_autonomia_y_alertas_de_almacenamiento(self):
+        control = RemoteControl(
+            AgentIdentity("test", "box-3"),
+            uuid4(),
+        )
+        control.open()
+
+        response = control.dispatch(
+            envelope(
+                "status",
+                {
+                    "obs": "ready",
+                    "capturing": False,
+                    "pending": 2,
+                    "free_bytes": 20 * 1024**3,
+                    "remaining_seconds": 7200,
+                    "smile_last_sync": None,
+                    "operational_code": "STORAGE_WARNING",
+                },
+            )
+        )
+
+        self.assertIsNotNone(response)
+
+        status_row = AgentStatus.objects.get(
+            box="box-3",
+        )
+
+        self.assertEqual(
+            status_row.diagnostics["free_bytes"],
+            20 * 1024**3,
+        )
+
+        self.assertEqual(
+            status_row.diagnostics["remaining_seconds"],
+            7200,
+        )
+
+        self.assertEqual(
+            status_row.diagnostics["operational_code"],
+            "STORAGE_WARNING",
+        )
+
+    @override_settings(
+        CAPTURE_AGENT_AUTH_ID_LIMIT=2,
+        CAPTURE_AGENT_AUTH_IP_LIMIT=100,
+        CAPTURE_AGENT_AUTH_WINDOW_SECONDS=60,
+    )
+    def test_agent_auth_limita_intentos_repetidos_por_identidad(self):
+        header = (
+            "Agent abusive-agent." + "x" * 43
+        ).encode()
+
+        for _ in range(2):
+            with self.assertRaises(AuthenticationFailed):
+                authenticate_agent_header(
+                    header,
+                    source_ip="192.0.2.10",
+                )
+
+        with self.assertRaises(ServiceError) as limited:
+            authenticate_agent_header(
+                header,
+                source_ip="192.0.2.10",
+            )
+
+        self.assertEqual(
+            limited.exception.code,
+            "AUTH_RATE_LIMITED",
+        )
+        self.assertEqual(
+            limited.exception.status,
+            429,
+        )
+
+    @override_settings(
+        CAPTURE_AGENT_AUTH_ID_LIMIT=100,
+        CAPTURE_AGENT_AUTH_IP_LIMIT=2,
+        CAPTURE_AGENT_AUTH_WINDOW_SECONDS=60,
+    )
+    def test_agent_auth_limita_intentos_abusivos_por_ip(self):
+        for index in range(2):
+            header = (
+                f"Agent unknown-{index}." + "x" * 43
+            ).encode()
+
+            with self.assertRaises(AuthenticationFailed):
+                authenticate_agent_header(
+                    header,
+                    source_ip="192.0.2.20",
+                )
+
+        third_header = (
+            "Agent unknown-3." + "x" * 43
+        ).encode()
+
+        with self.assertRaises(ServiceError) as limited:
+            authenticate_agent_header(
+                third_header,
+                source_ip="192.0.2.20",
+            )
+
+        self.assertEqual(
+            limited.exception.code,
+            "AUTH_RATE_LIMITED",
+        )
+        self.assertEqual(
+            limited.exception.status,
+            429,
+        )
+    def test_revocacion_invalida_conexion_activa_de_pc_administrado(self):
+        agent, token = create_agent(
+            name="PC Box 3",
+            box="box-3",
+        )
+
+        identity = authenticate_agent_header(
+            ("Agent " + token).encode(),
+        )
+
+        control = RemoteControl(
+            identity,
+            uuid4(),
+        )
+        control.open()
+
+        # Antes de revocar, la conexión funciona.
+        self.assertEqual(
+            control.poll(),
+            [],
+        )
+
+        revoke_agent(agent)
+
+        # La misma conexión ya autenticada debe quedar inválida.
+        with self.assertRaises(AuthenticationFailed):
+            control.poll()
+            
 class HandshakeTests(TransactionTestCase):
     @override_settings(CAPTURE_AGENTS=AGENTS)
     def test_incompatible_version_and_invalid_identity_have_no_domain_effect(self):

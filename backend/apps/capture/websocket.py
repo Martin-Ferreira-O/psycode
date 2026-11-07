@@ -10,12 +10,18 @@ from django.conf import settings
 from django.db import close_old_connections, transaction
 from django.utils import timezone
 from rest_framework.exceptions import AuthenticationFailed
-from .authentication import authenticate_agent_header
+from .authentication import (authenticate_agent_header,ensure_agent_identity_current,)
 from .domain import CaptureError, TECHNICAL_ERRORS
 from .models import AgentCommand, AgentStatus, CaptureSession, OPEN_STATES, RuntimeLease
 from .services import CaptureSessionService, _snapshot
 from .protocol import MAX_BYTES, decode, envelope, identifier, instant
 from . import leases
+from .server_connectivity import (
+    register_server_disconnect,
+    register_server_reconnect,
+)
+from functools import partial
+from backend.common.errors import ServiceError
 
 
 def serial(value):
@@ -47,9 +53,40 @@ class RemoteControl:
         self.service = CaptureSessionService()
 
     def open(self):
-        return leases.acquire(self.name, self.owner, replace=True)
+        ensure_agent_identity_current(self.identity)
+
+        return leases.acquire(self.name,self.owner,replace=True,)
+
+    def register_hello(self, agent_version):
+        """
+        Guarda información estable anunciada por el agente
+        durante el handshake WebSocket.
+        """
+        now = timezone.now()
+
+        status, _ = AgentStatus.objects.get_or_create(
+            box=self.identity.box,
+            defaults={
+                "seen_at": now,
+                "diagnostics": {},
+            },
+        )
+
+        diagnostics = dict(status.diagnostics or {})
+        diagnostics["agent_version"] = agent_version
+
+        status.seen_at = now
+        status.diagnostics = diagnostics
+
+        status.save(
+            update_fields=[
+                "seen_at",
+                "diagnostics",
+            ]
+        )
 
     def dispatch(self, message):
+        ensure_agent_identity_current(self.identity)
         with transaction.atomic():
             # Bloquear el lease también durante el commit del dominio. Una conexión
             # sustituida nunca confirma ni obtiene órdenes tras perder su propiedad.
@@ -89,25 +126,36 @@ class RemoteControl:
                     raise ValueError("INVALID_TECHNICAL_ERROR")
                 return "interruption_receipt", {"session": payload(self.service.interrupted(box, sid, error_code=code))}
             if kind == "status":
-                allowed = {"obs", "capturing", "pending", "free_bytes", "smile_last_sync", "operational_code"}
+                allowed = {"obs", "capturing", "pending", "free_bytes","remaining_seconds", "smile_last_sync", "operational_code"}
                 if p.keys() - allowed or len(json.dumps(p)) > 2048:
                     raise ValueError("INVALID_MESSAGE")
-                for key in ("pending", "free_bytes"):
+                for key in ("pending", "free_bytes", "remaining_seconds"):
                     if key in p and (type(p[key]) is not int or p[key] < 0):
                         raise ValueError("INVALID_MESSAGE")
                 if p.get("obs", "unknown") not in {"unknown", "ready", "busy", "unavailable"}:
                     raise ValueError("INVALID_MESSAGE")
                 if "capturing" in p and type(p["capturing"]) is not bool:
                     raise ValueError("INVALID_MESSAGE")
-                if p.get("operational_code", "") not in {"", "RECOVERY_REQUIRED", "DISK_LOW", "UPLOAD_INTERVENTION", "SMILE_UNAVAILABLE"}:
+                if p.get("operational_code", "") not in {"", "RECOVERY_REQUIRED", "DISK_LOW","STORAGE_WARNING","STORAGE_CRITICAL", "UPLOAD_INTERVENTION", "SMILE_UNAVAILABLE"}:
                     raise ValueError("INVALID_MESSAGE")
                 if p.get("smile_last_sync") is not None:
                     instant(p["smile_last_sync"])
-                AgentStatus.objects.update_or_create(box=box, defaults={"seen_at": timezone.now(), "diagnostics": p})
+                #AgentStatus.objects.update_or_create(box=box, defaults={"seen_at": timezone.now(), "diagnostics": p})
+                status, _ = AgentStatus.objects.get_or_create(box=box,defaults={"seen_at": timezone.now(),"diagnostics": {},},)
+
+                diagnostics = dict(status.diagnostics or {})
+                diagnostics.update(p)
+
+                status.seen_at = timezone.now()
+                status.diagnostics = diagnostics
+
+                status.save(update_fields=["seen_at","diagnostics",])
                 return "state", {"status_persisted": True}
             raise ValueError("INVALID_MESSAGE")
 
     def poll(self):
+        ensure_agent_identity_current(self.identity)
+
         with transaction.atomic():
             RuntimeLease.objects.select_for_update().get(name=self.name)
             if not leases.owned(self.name, self.owner):
@@ -124,10 +172,28 @@ async def agent_websocket(scope, receive, send):
     try:
         if len(headers) != 1 or scope.get("query_string"):
             raise AuthenticationFailed()
-        identity = authenticate_agent_header(headers[0])
+        client = scope.get("client")
+        source_ip = client[0] if client else ""
+
+        identity = await db(
+            partial(
+                authenticate_agent_header,
+                headers[0],
+                source_ip=source_ip,
+            )
+        )
     except AuthenticationFailed:
         await send({"type": "websocket.close", "code": 4401})
         return
+    except ServiceError as exc:
+        if exc.code == "AUTH_RATE_LIMITED":
+            await send({
+                "type": "websocket.close",
+                "code": 4429,
+            })
+            return
+        raise
+    
     if scope["path"] != "/ws/v1/agents":
         await send({"type": "websocket.close", "code": 4404})
         return
@@ -147,7 +213,14 @@ async def agent_websocket(scope, receive, send):
                 or any(not isinstance(x, str) or len(x) > 64 for x in p["capabilities"])):
             raise ValueError("INVALID_MESSAGE")
         await db(control.open)
+        await db(control.register_hello,p["agent_version"],)
+        # Si existía una caída inferida abierta,
+# esta nueva conexión marca su recuperación.
+        await db(register_server_reconnect,identity,)
+
+
         opened = True
+        #opened = True
         await emit("ready", {"box": identity.box, "server_time": timezone.now().isoformat(),
             "capabilities": ["audio.v1", "audio.v2", "agenda.excel.v1", "agenda.smile-json.v1",
                              "agent.events.v1", "sessions.capture-ended.v1"],
@@ -164,7 +237,9 @@ async def agent_websocket(scope, receive, send):
                 continue
             event = pending.result()
             if event["type"] == "websocket.disconnect":
-                break
+                await db(register_server_disconnect,identity,)
+            break
+        
             pending = asyncio.create_task(receive())
             message = decode(event.get("text"))
             try:
@@ -172,6 +247,8 @@ async def agent_websocket(scope, receive, send):
                 await emit(kind, data, message["message_id"])
             except CaptureError as exc:
                 await emit("error", {"code": exc.code, "recoverable": False}, message["message_id"])
+
+            except AuthenticationFailed:await send({"type": "websocket.close","code": 4401,})
     except (ValueError, KeyError, TypeError, TimeoutError) as exc:
         code = "PROTOCOL_INCOMPATIBLE" if str(exc) == "PROTOCOL_INCOMPATIBLE" else (
             "CONNECTION_REPLACED" if str(exc) == "CONNECTION_REPLACED" else "INVALID_MESSAGE")

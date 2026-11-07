@@ -160,6 +160,120 @@ class RuntimeLease(models.Model):
     owner = models.UUIDField()
     expires_at = models.DateTimeField()
 
+class AgentRegistration(models.Model):
+    """PC autorizado para operar como agente de captura."""
+
+    agent_id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+    name = models.CharField(max_length=100)
+    box = models.CharField(
+        max_length=16,
+        choices=[(f"box-{n}", f"Box {n}") for n in range(3, 8)],
+    )
+    token_sha256 = models.CharField(max_length=64)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+
+    @property
+    def is_active(self):
+        return self.revoked_at is None
+
+    def __str__(self):
+        return f"{self.name} ({self.box})"
+
+class ServerConnectivityOutage(models.Model):
+    """
+    Caída de conectividad inferida por el servidor.
+
+    Se mantiene separada de AgentConnectivityEvent porque
+    ese modelo representa eventos informados por el propio PC.
+    """
+
+    class TimeQuality(models.TextChoices):
+        ESTIMATED = "estimated", "Estimado"
+        UNKNOWN = "unknown", "Desconocido"
+
+    outage_id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+
+    agent = models.ForeignKey(
+        AgentRegistration,
+        on_delete=models.PROTECT,
+        related_name="server_connectivity_outages",
+    )
+
+    # Se guarda también el box como fotografía histórica.
+    # Así el historial no cambia si posteriormente el PC
+    # es reasignado a otro box.
+    box = models.CharField(
+        max_length=16,
+    )
+
+    # Momento estimado en que comenzó la caída.
+    # Puede ser desconocido.
+    started_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
+    # Momento en que el servidor detectó el problema.
+    detected_at = models.DateTimeField(
+        auto_now_add=True,
+    )
+
+    # Se completa cuando el servidor observa
+    # que el PC vuelve a conectarse.
+    recovered_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
+    recovery_detected_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
+    start_time_quality = models.CharField(
+        max_length=16,
+        choices=TimeQuality.choices,
+        default=TimeQuality.UNKNOWN,
+    )
+
+    recovery_time_quality = models.CharField(
+        max_length=16,
+        choices=TimeQuality.choices,
+        default=TimeQuality.UNKNOWN,
+    )
+
+    cause = models.CharField(
+        max_length=40,
+        default="UNKNOWN",
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+    )
+
+    updated_at = models.DateTimeField(
+        auto_now=True,
+    )
+
+    @property
+    def is_active(self):
+        return self.recovered_at is None
+
+    def __str__(self):
+        return (
+            f"{self.agent_id} - {self.box} "
+            f"({'activa' if self.is_active else 'recuperada'})"
+        )
 
 class AgentStatus(models.Model):
     box = models.CharField(max_length=16, primary_key=True)

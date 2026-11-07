@@ -446,6 +446,12 @@
                 "type": "integer",
                 "minimum": 0
               },
+
+              "remaining_seconds": {
+                "type": "integer",
+                "minimum": 0
+              },
+
               "smile_last_sync": {
                 "anyOf": [
                   {
@@ -462,6 +468,8 @@
                   "",
                   "RECOVERY_REQUIRED",
                   "DISK_LOW",
+                  "STORAGE_WARNING",
+                  "STORAGE_CRITICAL",
                   "UPLOAD_INTERVENTION",
                   "SMILE_UNAVAILABLE"
                 ]

@@ -41,3 +41,26 @@ class FragmentV2Serializer(FragmentSerializer):
     sample_rate = serializers.IntegerField(min_value=16000, max_value=16000)
     chunk_samples = serializers.IntegerField(min_value=1, max_value=16000 * 600)
     overlap_samples = serializers.IntegerField(min_value=0, max_value=16000 * 600 - 1)
+
+class AgentRegistrationCreateSerializer(serializers.Serializer):
+    """Datos permitidos al registrar un nuevo PC."""
+
+    name = serializers.CharField(
+        max_length=100,
+        allow_blank=False,
+        trim_whitespace=True,
+    )
+
+    box = serializers.ChoiceField(
+        choices=[f"box-{n}" for n in range(3, 8)]
+    )
+
+    def validate_name(self, value):
+        value = value.strip()
+
+        if not value:
+            raise serializers.ValidationError(
+                "El nombre del PC es obligatorio."
+            )
+
+        return value
