@@ -6,11 +6,12 @@ from collections import defaultdict
 from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.views import APIView
 
-from backend.apps.capture.agent_registry import (
+from backend.apps.capture.pc_registry import (
     create_agent,
     renew_agent,
     revoke_agent,
 )
+
 
 from backend.apps.capture.models import (
     AcceptedSequence,

@@ -5,7 +5,7 @@ import secrets
 
 from django.utils import timezone
 
-from .models import AgentRegistration
+from backend.apps.capture.models import AgentRegistration
 
 
 def _generate_credential(agent_id):

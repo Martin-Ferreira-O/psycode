@@ -20,7 +20,7 @@ from . import leases
 from rest_framework.exceptions import AuthenticationFailed
 
 from backend.common.errors import ServiceError
-from .agent_registry import create_agent, revoke_agent
+from .pc_registry import create_agent, revoke_agent
 
 class AudioTimelineTests(IngestionFixtures, TestCase):
     def timeline(self, start=0, end=160000, new=0):
