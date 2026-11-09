@@ -9,6 +9,7 @@ from urllib.parse import urlsplit
 
 from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
+from backend.common.boxes import is_box, DEFAULT_PC_BOXES
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 load_dotenv(BASE_DIR / ".env", override=False)
@@ -166,6 +167,9 @@ AUTH_LOGIN_WINDOW_SECONDS = positive_int("AUTH_LOGIN_WINDOW_SECONDS", 900)
 AUTH_REFRESH_IP_LIMIT = positive_int("AUTH_REFRESH_IP_LIMIT", 120)
 AUTH_RESET_IP_LIMIT = positive_int("AUTH_RESET_IP_LIMIT", 20)
 AUTH_OTHER_WINDOW_SECONDS = positive_int("AUTH_OTHER_WINDOW_SECONDS", 900)
+CAPTURE_AGENT_AUTH_IP_LIMIT = positive_int("CAPTURE_AGENT_AUTH_IP_LIMIT",20,)
+CAPTURE_AGENT_AUTH_ID_LIMIT = positive_int("CAPTURE_AGENT_AUTH_ID_LIMIT",10,)
+CAPTURE_AGENT_AUTH_WINDOW_SECONDS = positive_int("CAPTURE_AGENT_AUTH_WINDOW_SECONDS",300,)
 EMAIL_BACKEND_CHOICE = os.getenv("EMAIL_BACKEND", "file" if DEBUG else "smtp")
 EMAIL_BACKEND_CHOICE = {
     "django.core.mail.backends.filebased.EmailBackend": "file",
@@ -224,7 +228,7 @@ try:
     for agent_id, credential in CAPTURE_AGENTS.items():
         if (not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", agent_id)
                 or not isinstance(credential, dict) or set(credential) != {"box", "token_sha256"}
-                or credential["box"] not in {f"box-{n}" for n in range(3, 8)}
+                or not is_box(credential["box"])
                 or not isinstance(credential["token_sha256"], str)
                 or not re.fullmatch(r"[0-9a-f]{64}", credential["token_sha256"])):
             raise ValueError
@@ -252,9 +256,36 @@ try:
                 or set(scope) != {"collector_id", "boxes"} or scope["collector_id"] not in CAPTURE_AGENTS
                 or not isinstance(scope["boxes"], list) or not scope["boxes"]
                 or len(set(scope["boxes"])) != len(scope["boxes"])
-                or set(scope["boxes"]) - {f"box-{n}" for n in range(3, 8)}
+                or any(not is_box(box) for box in scope["boxes"])
                 or agenda_boxes.intersection(scope["boxes"])):
             raise ValueError()
         agenda_boxes.update(scope["boxes"])
 except (TypeError, ValueError):
     raise ImproperlyConfigured("CAPTURE_AGENDA_SOURCES inválido o con fuentes superpuestas.") from None
+
+# Audio, checkpoints SQL y journals deben residir en volúmenes cifrados.
+ANALYSIS_STATE_ROOT = local_path("ANALYSIS_STATE_ROOT", ".local/analysis")
+SENSITIVE_STORAGE_ENCRYPTION_REQUIRED = env_bool("SENSITIVE_STORAGE_ENCRYPTION_REQUIRED", not DEBUG)
+try:
+    SENSITIVE_STORAGE_EXTRA_ROOTS = json.loads(os.getenv("SENSITIVE_STORAGE_EXTRA_ROOTS", "[]"))
+    SENSITIVE_STORAGE_KEY_FILES = json.loads(os.getenv("SENSITIVE_STORAGE_KEY_FILES", "[]"))
+    for paths in (SENSITIVE_STORAGE_EXTRA_ROOTS, SENSITIVE_STORAGE_KEY_FILES):
+        if not isinstance(paths, list) or not all(isinstance(p, str) and Path(p).is_absolute() for p in paths):
+            raise ValueError
+except (ValueError, TypeError):
+    raise ImproperlyConfigured("Las rutas de cifrado deben ser listas JSON de rutas absolutas.") from None
+
+# Vinculación inicial: código corto, un uso y presupuesto global contra ataques distribuidos.
+try:
+    PC_REGISTRY_BOXES = json.loads(os.getenv('PC_REGISTRY_BOXES', json.dumps(DEFAULT_PC_BOXES)))
+    if (not isinstance(PC_REGISTRY_BOXES, list) or not PC_REGISTRY_BOXES
+            or any(not is_box(box) for box in PC_REGISTRY_BOXES)
+            or len(set(PC_REGISTRY_BOXES)) != len(PC_REGISTRY_BOXES)):
+        raise ValueError()
+except (ValueError, TypeError):
+    raise ImproperlyConfigured('PC_REGISTRY_BOXES debe ser una lista de boxes válidos sin duplicados.') from None
+
+PC_PAIRING_TTL_SECONDS = positive_int("PC_PAIRING_TTL_SECONDS", 300)
+PC_PAIRING_IP_LIMIT = positive_int("PC_PAIRING_IP_LIMIT", 5)
+PC_PAIRING_GLOBAL_LIMIT = positive_int("PC_PAIRING_GLOBAL_LIMIT", 20)
+PC_PAIRING_WINDOW_SECONDS = positive_int("PC_PAIRING_WINDOW_SECONDS", 300)

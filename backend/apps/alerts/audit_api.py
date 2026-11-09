@@ -122,7 +122,20 @@ class NotificationAuditSerializer(serializers.Serializer):
     backup_failures = serializers.IntegerField(required=False)
 
 
+class StorageAuditSerializer(serializers.Serializer):
+    provider_deleted = serializers.IntegerField(min_value=0)
+    provider_failures = serializers.IntegerField(min_value=0)
+    source = serializers.ChoiceField(choices=("automatic", "manual"))
+    freed_bytes = serializers.IntegerField(min_value=0)
+    removed = serializers.IntegerField(min_value=0)
+    failures = serializers.IntegerField(min_value=0)
+    protected = serializers.IntegerField(min_value=0)
+    checkpoints = serializers.IntegerField(min_value=0)
+
+
 class AuditEventSerializer(serializers.Serializer):
+    storage = StorageAuditSerializer(required=False)
+
     event_id = serializers.UUIDField()
     timestamp = serializers.DateTimeField(
         default_timezone=timezone.utc,
@@ -323,6 +336,7 @@ class AuditExportView(APIView):
             "analysis.speechmatics": "Speechmatics",
             "analysis.jev": "JEV",
             "alerts.flow": "Flujo de alerta",
+            "storage.cleanup": "Limpieza de almacenamiento",
         }
 
         resultados = {

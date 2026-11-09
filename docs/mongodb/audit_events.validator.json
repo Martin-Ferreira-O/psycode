@@ -44,7 +44,8 @@
             "analysis.speechmatics",
             "analysis.jev",
             "alerts.flow",
-            "notifications.result"
+            "notifications.result",
+            "storage.cleanup"
           ],
           "description": "Eventos internos de alertas, notificación y fallos técnicos de análisis. Autenticación solo en log."
         },
@@ -339,6 +340,77 @@
               }
             }
           ]
+        },
+        "storage": {
+          "bsonType": "object",
+          "required": [
+            "source",
+            "freed_bytes",
+            "removed",
+            "failures",
+            "protected",
+            "checkpoints",
+            "provider_deleted",
+            "provider_failures"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "source": {
+              "enum": [
+                "automatic",
+                "manual"
+              ]
+            },
+            "freed_bytes": {
+              "bsonType": [
+                "int",
+                "long"
+              ],
+              "minimum": 0
+            },
+            "removed": {
+              "bsonType": [
+                "int",
+                "long"
+              ],
+              "minimum": 0
+            },
+            "failures": {
+              "bsonType": [
+                "int",
+                "long"
+              ],
+              "minimum": 0
+            },
+            "protected": {
+              "bsonType": [
+                "int",
+                "long"
+              ],
+              "minimum": 0
+            },
+            "checkpoints": {
+              "bsonType": [
+                "int",
+                "long"
+              ],
+              "minimum": 0
+            },
+            "provider_deleted": {
+              "bsonType": [
+                "int",
+                "long"
+              ],
+              "minimum": 0
+            },
+            "provider_failures": {
+              "bsonType": [
+                "int",
+                "long"
+              ],
+              "minimum": 0
+            }
+          }
         }
       },
       "allOf": [
@@ -393,7 +465,8 @@
                   "enum": [
                     "analysis.speechmatics",
                     "analysis.jev",
-                    "alerts.flow"
+                    "alerts.flow",
+                    "storage.cleanup"
                   ]
                 }
               }
@@ -450,7 +523,8 @@
                     "alerts.evaluate",
                     "analysis.speechmatics",
                     "analysis.jev",
-                    "alerts.flow"
+                    "alerts.flow",
+                    "storage.cleanup"
                   ]
                 }
               },

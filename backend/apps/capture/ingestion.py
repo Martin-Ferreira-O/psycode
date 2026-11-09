@@ -34,7 +34,7 @@ class FragmentIngestionService:
         self.storage = storage
         self.control = control if control is not None else CaptureSessionService()
 
-    def receive(self, *, box, session_id, number, format, checksum, captured_at, upload, now=None, temporal=None):
+    def receive(self, *, box, session_id, number, format, checksum, captured_at, upload, now=None, temporal=None, agent_id=""):
         box, session_id = _box(box), _uuid(session_id)
         captured_at = _instant(captured_at) if captured_at is not None else None
         if captured_at is None:
@@ -70,6 +70,8 @@ class FragmentIngestionService:
                         raise FragmentError("AUDIO_VERSION_CONFLICT", 409)
                     self.control._accept_sequence(session, number, captured_at, received_at)
                     sequence = AcceptedSequence.objects.get(session=session, number=number)
+                    sequence.agent_id = agent_id
+                    sequence.save(update_fields=["agent_id"])
                     job = FragmentJob.objects.create(sequence=sequence, storage_key=stored.key,
                                                      checksum=stored.checksum, format=format, size=stored.size, temporal=temporal or {})
                     _event(session, "fragment.queued", received_at, sequence=number)

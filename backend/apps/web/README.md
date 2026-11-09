@@ -8,7 +8,6 @@ Plantillas Django en `templates/web/`, estilos y JavaScript clásicos en `static
 | `/dashboard` | Dashboard e historial con detalle y evaluación | Datos y guardado simulados en memoria |
 | `/alertas` | Acceso al historial | Redirige a `/dashboard#historial-alertas` |
 | `/evaluaciones` | Registro de evaluaciones | `GET /api/v1/alerts?revisadas=true` |
-| `/estadisticas` | Estadísticas | Datos simulados |
 
 SCRUM-46 centraliza presentación de estados y errores. Consulta [scripts](static/web/js/README.md), [estilos](static/web/css/README.md), [pruebas](tests/README.md) y [alcance y verificación](../../../docs/SCRUM-46.md).
 

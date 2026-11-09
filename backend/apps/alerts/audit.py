@@ -7,10 +7,11 @@ from django.utils import timezone
 from backend.common.audit import AuditWriter
 
 ACTIONS = ("alerts.register", "alerts.evaluate", "notifications.send", "notifications.result",
-           "analysis.speechmatics", "analysis.jev", "alerts.flow")
+           "analysis.speechmatics", "analysis.jev", "alerts.flow", "storage.cleanup")
 OUTCOMES = ("success", "failure", "skipped")
 ERROR_CODES = frozenset({
     "SPEECHMATICS_FAILED", "SPEECHMATICS_DELETE_PENDING", "JEV_FAILED",
+    "SPEECHMATICS_UNCERTAIN", "ANALYSIS_CONTEXT_LOST", "NOTIFICATION_UNCERTAIN",
     "JEV_SUBMISSION_UNCERTAIN", "FLOW_INTERRUPTED", "ALERT_PERSISTENCE_FAILED",
     "NOTIFICATION_TIMEOUT", "NOTIFICATION_CONNECTION_FAILED", "NOTIFICATION_REJECTED",
     "NOTIFICATION_NOT_CONFIGURED", "NOTIFICATION_INTERNAL_ERROR",

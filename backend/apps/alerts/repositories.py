@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 
 from pymongo.errors import DuplicateKeyError, PyMongoError
 
@@ -14,6 +15,20 @@ from .domain import Alerta, DomainError, Evaluacion, EstadoEvaluacion, normaliza
 from .exceptions import AlertAlreadyExists, AlertNotFound, EvaluationAlreadyRegistered
 from .mongo import schema_path
 from .ports import AlertQueryFilters, AlertQueryPort, AlertWritePort
+
+
+# Etiquetas de utils.js que representan códigos distintos del texto visible.
+RISK_LABEL_ALIASES = {
+    "Riesgo suicida": (
+        "sin_ideacion_identificable",
+        "deseo_pasivo_de_muerte",
+        "ideacion_activa",
+        "consideracion_de_metodo",
+        "conducta_suicida",
+    ),
+    "Vulneración de derechos": ("vulneracion_derechos",),
+    "Vulneracion de derechos": ("vulneracion_derechos",),
+}
 
 
 class AlertsRepository(AlertWritePort, AlertQueryPort):
@@ -86,6 +101,16 @@ class AlertsRepository(AlertWritePort, AlertQueryPort):
         self._audit("alerts.register", "success", alerta_id=alert.alerta_id, sesion_id=alert.sesion_id)
         return alert
 
+    def has_alert_event(self, alerta_id, action):
+        try:
+            return self._events().find_one({"alerta_id": alerta_id, "action": action}, {"_id": 1}) is not None
+        except PyMongoError:
+            raise PersistenceUnavailable() from None
+
+    def ensure_registration_audit(self, alert):
+        if not self.has_alert_event(alert.alerta_id, "alerts.register"):
+            self._audit("alerts.register", "success", alerta_id=alert.alerta_id, sesion_id=alert.sesion_id)
+
     def get_alert(self, alerta_id: str) -> Alerta:
         ident = normalizar_uuid(alerta_id, "alerta_id")
         try:
@@ -124,13 +149,28 @@ class AlertsRepository(AlertWritePort, AlertQueryPort):
             query["fecha_hora"] = fecha_cond
 
         if filters.q:
-            import re
-            patron = {"$regex": re.escape(filters.q.strip()), "$options": "i"}
+            text = filters.q.strip()
+            separator = r"[\s_-]+"
+            words_pattern = separator.join(re.escape(word) for word in re.split(separator, text))
+            box_pattern = words_pattern
+            box_number = re.fullmatch(r"box[\s_-]+0*([0-9]+)", text, re.IGNORECASE)
+            if box_number:
+                box_pattern = rf"box{separator}0*{box_number[1]}"
+
             query["$or"] = [
-                {"alerta_id": patron},
-                {"box": patron},
-                {"tipo_riesgo": patron},
+                {"alerta_id": {"$regex": re.escape(text), "$options": "i"}},
+                {"box": {"$regex": box_pattern, "$options": "i"}},
+                {"tipo_riesgo": {"$regex": words_pattern, "$options": "i"}},
             ]
+            matching_aliases = sorted({
+                code
+                for label, codes in RISK_LABEL_ALIASES.items()
+                if re.search(words_pattern, label, re.IGNORECASE)
+                for code in codes
+            })
+            if matching_aliases:
+                aliases_pattern = "^(?:" + "|".join(matching_aliases) + ")$"
+                query["$or"].append({"tipo_riesgo": {"$regex": aliases_pattern, "$options": "i"}})
 
         try:
             col = self._alerts()

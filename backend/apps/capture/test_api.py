@@ -155,7 +155,7 @@ class FragmentAPITests(IngestionFixtures, TestCase):
             del data[field]
             self.assert_error(self.client.post(URL, data, format="multipart"), 400, "VALIDATION_ERROR")
         for changes in (dict(checksum="PRIVATE"), dict(secuencia="-1"), dict(secuencia="1.0"),
-                        dict(secuencia="9223372036854775807"), dict(box="box-2"),
+                        dict(secuencia="9223372036854775807"), dict(box="box-0"),
                         dict(session_id="PRIVATE"), dict(captured_at="2026-10-19T12:00:10"),
                         dict(captured_at="PRIVATE"), dict(checksum="A" * 64),
                         dict(checksum=" " + "a" * 64), dict(secuencia="0\n"), dict(secuencia=" 0"),

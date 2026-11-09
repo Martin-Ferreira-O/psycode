@@ -1,3 +1,4 @@
+from backend.common.boxes import known_boxes
 from datetime import timedelta
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
@@ -37,8 +38,8 @@ class Command(BaseCommand):
                         self.stop_all(service)
                     else:
                         service.recover()
-                        for n in range(3, 8):
-                            service.reconcile_box(f"box-{n}")
+                        for box in known_boxes():
+                            service.reconcile_box(box)
                 if options["once"] or options["stop_all"]:
                     return
                 stop.wait(options["interval"])

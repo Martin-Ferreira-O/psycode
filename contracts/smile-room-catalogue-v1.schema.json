@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:psycode:smile-room-catalogue:1.0",
+  "title": "Smile physical room catalogue, additive to agenda v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "source",
+    "collection_id",
+    "rooms"
+  ],
+  "properties": {
+    "version": {
+      "const": "1.0"
+    },
+    "source": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "collection_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "rooms": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 500,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "box",
+          "name",
+          "smile_box_id"
+        ],
+        "properties": {
+          "box": {
+            "type": "string",
+            "pattern": "^box-[1-9][0-9]{0,11}$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "smile_box_id": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,11}$"
+          }
+        }
+      }
+    }
+  }
+}

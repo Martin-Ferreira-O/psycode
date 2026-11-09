@@ -79,11 +79,11 @@ class AgendaTests(SimpleTestCase):
         boxes = [f"BOX DE ATENCION {box}" for box in range(1, 10)] + [
             "BOX TELEMATICO 3", "Sala espejo", None, "PERSONAL_FICTICIO", "=1+2", "#VALUE!"]
         report = self.agenda.load_excel(self.workbook([row() for _ in boxes], boxes=boxes))
-        self.assertEqual((report.aceptadas, len(report.rechazadas)), (5, 10))
-        self.assertEqual(report.boxes_actualizados, BOXES)
+        self.assertEqual((report.aceptadas, len(report.rechazadas)), (9, 6))
+        self.assertEqual(report.boxes_actualizados, tuple(f"box-{n}" for n in range(1, 10)))
         self.assertEqual({entry.motivo for entry in report.rechazadas},
                          {"box_fuera_de_alcance", "box_invalido", "formula_no_admitida", "error_excel"})
-        for box in (1, 2, 8, 9, "BOX TELEMATICO 3", "Sala espejo", True, 3.5, "paciente"):
+        for box in (0, -1, "BOX TELEMATICO 3", "Sala espejo", True, 3.5, "paciente"):
             with self.subTest(box=box), self.assertRaises(AgendaError):
                 self.agenda.is_busy(box, WHEN)
         statuses = [(s, True) for s in ("REALIZADA", "CONFIRMADA", "NO CONFIRMADA", "AGENDADA", "PENDIENTE")]

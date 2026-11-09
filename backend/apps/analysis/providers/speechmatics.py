@@ -104,25 +104,30 @@ class BatchClient:
         self.settings, self.client, self.sleep = settings, client, sleep
         self.journal_dir = journal_dir
 
-    def transcribe(self, path: Path, chunk) -> dict:
+    def transcribe(self, path: Path, chunk, *, checkpoint=None, prepare=None) -> dict:
         self.settings.validate("speechmatics")
         if not 0 <= chunk.context_start <= chunk.start < chunk.end:
             raise ProviderError("Intervalo inválido")
-        pcm = read_pcm(path, chunk)
-        audio = io.BytesIO()
-        with wave.open(audio, "wb") as wav:
-            wav.setnchannels(1)
-            wav.setsampwidth(2)
-            wav.setframerate(RATE)
-            wav.writeframes(pcm)
-        self.journal_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        if checkpoint is None:
+            self.journal_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
         journal = self.journal_dir / f"{chunk.session_id}-{chunk.id}.json"
-        record = json.loads(journal.read_text()) if journal.exists() else {
-            "session": chunk.session_id, "sequence": chunk.id, "region": self.settings.region,
-            "state": "new", "job_id": None}
+        record = checkpoint.data.get("speechmatics") if checkpoint is not None else None
+        if record is None:
+            record = json.loads(journal.read_text(encoding="utf-8")) if journal.exists() else {
+                "session": chunk.session_id, "sequence": chunk.id, "region": self.settings.region,
+                "state": "new", "job_id": None,
+            }
         if record["region"] != self.settings.region:
             raise ProviderError("El trabajo pertenece a otra región")
-        if record["state"] in {"submitting", "uncertain", "deleted", "delete_pending"}:
+        if checkpoint is not None:
+            def persist():
+                checkpoint.data["speechmatics"] = record
+                checkpoint.save()
+        else:
+            def persist():
+                save_job(journal, record)
+
+        if checkpoint is None and record["state"] in {"submitting", "uncertain", "deleted", "delete_pending"}:
             raise SubmissionUncertain("Fragmento ya enviado o incierto; no se reenviará automáticamente")
         base = f"https://{self.settings.region}.asr.api.speechmatics.com/v2"
         started = time.monotonic()
@@ -132,14 +137,48 @@ class BatchClient:
             "Authorization": f"Bearer {self.settings.speechmatics_key}"}, trust_env=False)
         job_id = record["job_id"]
         timings, cleanup = {}, "pending"
+        reference = hashlib.sha256(f"{record['session']}:{chunk.id}".encode()).hexdigest()
+        prepared = checkpoint is not None and "utterances" in checkpoint.data
+        words = []
+        can_delete = checkpoint is None or prepared
+        submitted_bytes = (chunk.end - chunk.context_start) * 2
         try:
+            if checkpoint is not None and record["state"] in {"submitting", "uncertain"}:
+                try:
+                    jobs = json_body(request(client, "GET", base + "/jobs/",
+                                             deadline=deadline, sleep=self.sleep))["jobs"]
+                    matches = [
+                        job["id"] for job in jobs
+                        if (job.get("config") or {}).get("tracking", {}).get("reference") == reference
+                        and job.get("status") not in {"deleted", "expired"}
+                        and isinstance(job.get("id"), str)
+                        and re.fullmatch(r"[A-Za-z0-9_-]+", job["id"])
+                    ]
+                except (ProviderError, KeyError, TypeError, AttributeError):
+                    matches = []
+                if len(matches) != 1:
+                    record["state"] = "uncertain"
+                    persist()
+                    raise SubmissionUncertain("No se pudo reconciliar el envío a Speechmatics")
+                job_id = matches[0]
+                record.update(job_id=job_id, state="submitted")
+                persist()
+            if checkpoint is not None and record["state"] in {"deleted", "delete_pending"} and not prepared:
+                raise SubmissionUncertain("La transcripción anterior requiere revisión")
             if not job_id:
+                pcm = read_pcm(path, chunk)
+                audio = io.BytesIO()
+                with wave.open(audio, "wb") as wav:
+                    wav.setnchannels(1)
+                    wav.setsampwidth(2)
+                    wav.setframerate(RATE)
+                    wav.writeframes(pcm)
                 record["state"] = "submitting"
-                save_job(journal, record)
+                persist()
                 try:
                     response = request(client, "POST", base + "/jobs/", safe=False, sleep=self.sleep,
                                        deadline=deadline, data={"config": json.dumps({"type": "transcription",
-                                       "tracking": {"reference": hashlib.sha256(f"{record['session']}:{chunk.id}".encode()).hexdigest()},
+                                       "tracking": {"reference": reference},
                                        "transcription_config": {"language": "es", "model": self.settings.model,
                                                                 "diarization": "speaker"}})},
                                        files={"data_file": ("fragment.wav", audio.getvalue(), "audio/wav")})
@@ -152,50 +191,59 @@ class BatchClient:
                         raise SubmissionUncertain("No se recibió un identificador válido; envío incierto")
                 except SubmissionUncertain:
                     record["state"] = "uncertain"
-                    save_job(journal, record)
+                    persist()
                     raise
                 except ProviderError:
                     record["state"] = "new"
-                    save_job(journal, record)
+                    persist()
                     raise
                 record.update(job_id=job_id, state="submitted")
-                save_job(journal, record)
+                persist()
             timings["upload_seconds"] = time.monotonic() - started
-            polling = time.monotonic()
-            while True:
-                try:
-                    state = json_body(request(client, "GET", f"{base}/jobs/{job_id}",
-                                              params={"wait": 0}, deadline=deadline, sleep=self.sleep))["job"]["status"]
-                except (KeyError, TypeError):
-                    raise ProviderError("Estado de trabajo inválido") from None
-                if state == "done":
-                    break
-                if state == "rejected":
-                    raise ProviderError("Speechmatics rechazó el fragmento")
-                if state not in {"running", "queued"}:
-                    raise ProviderError("Estado de trabajo desconocido")
-                if time.monotonic() + self.settings.poll_interval >= deadline:
-                    raise ProviderError("Speechmatics superó el plazo de procesamiento")
-                self.sleep(self.settings.poll_interval)
-            timings["provider_wait_seconds"] = time.monotonic() - polling
-            retrieval = time.monotonic()
-            data = json_body(request(client, "GET", f"{base}/jobs/{job_id}/transcript",
-                                     params={"format": "json-v2", "wait": 0}, deadline=deadline, sleep=self.sleep))
-            words = parse_transcript(data, chunk, job_id)
-            timings["download_seconds"] = time.monotonic() - retrieval
+            if not prepared:
+                polling = time.monotonic()
+                while True:
+                    try:
+                        state = json_body(request(client, "GET", f"{base}/jobs/{job_id}",
+                                                  params={"wait": 0}, deadline=deadline, sleep=self.sleep))["job"]["status"]
+                    except (KeyError, TypeError):
+                        raise ProviderError("Estado de trabajo inválido") from None
+                    if state == "done":
+                        break
+                    if state == "rejected":
+                        raise ProviderError("Speechmatics rechazó el fragmento")
+                    if state not in {"running", "queued"}:
+                        raise ProviderError("Estado de trabajo desconocido")
+                    if time.monotonic() + self.settings.poll_interval >= deadline:
+                        raise ProviderError("Speechmatics superó el plazo de procesamiento")
+                    self.sleep(self.settings.poll_interval)
+                timings["provider_wait_seconds"] = time.monotonic() - polling
+                retrieval = time.monotonic()
+                data = json_body(request(client, "GET", f"{base}/jobs/{job_id}/transcript",
+                                         params={"format": "json-v2", "wait": 0}, deadline=deadline, sleep=self.sleep))
+                words = parse_transcript(data, chunk, job_id)
+                timings["download_seconds"] = time.monotonic() - retrieval
+                if checkpoint is not None:
+                    checkpoint.data["utterances"] = prepare(words)
+                    checkpoint.save()
+                can_delete = True
         finally:
-            if job_id:
-                deleting = time.monotonic()
-                try:
-                    request(client, "DELETE", f"{base}/jobs/{job_id}", params={"force": "true"},
-                            sleep=self.sleep, deadline=time.monotonic() + 30)
-                    record["state"] = cleanup = "deleted"
-                except ProviderError:
-                    record["state"] = cleanup = "delete_pending"
-                timings["cleanup_seconds"] = time.monotonic() - deleting
-                save_job(journal, record)
-            if own_client:
-                client.close()
+            try:
+                if record["state"] == "deleted":
+                    cleanup = "deleted"
+                elif job_id and can_delete:
+                    deleting = time.monotonic()
+                    try:
+                        request(client, "DELETE", f"{base}/jobs/{job_id}", params={"force": "true"},
+                                sleep=self.sleep, deadline=time.monotonic() + 30)
+                        record["state"] = cleanup = "deleted"
+                    except ProviderError:
+                        record["state"] = cleanup = "delete_pending"
+                    timings["cleanup_seconds"] = time.monotonic() - deleting
+                    persist()
+            finally:
+                if own_client:
+                    client.close()
         seconds = time.monotonic() - started
         return {"id": chunk.id, "start": chunk.start / RATE, "end": chunk.end / RATE,
                 "context_start": chunk.context_start / RATE,
@@ -203,6 +251,6 @@ class BatchClient:
                 "inference_seconds": seconds, "rtf": seconds / ((chunk.end - chunk.start) / RATE),
                 "provider": "speechmatics", "provider_job_id": job_id,
                 "provider_cleanup": cleanup, "timings": timings,
-                "submitted_audio_seconds": len(pcm) / (RATE * 2),
+                "submitted_audio_seconds": submitted_bytes / (RATE * 2),
                 "configuration": self.settings.public()}
 

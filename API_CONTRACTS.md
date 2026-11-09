@@ -26,9 +26,9 @@ Endpoints sin barra final; el prefijo sí se escribe `/api/v1/`. No depender de 
 | GET | `/api/v1/auth/me` | `accounts:me` | Protegido |
 | POST | `/api/v1/auth/password-reset` | `accounts:password_reset` | Público |
 | POST | `/api/v1/auth/password-reset/confirm` | `accounts:password_reset_confirm` | Token de recuperación |
-| GET | `/api/v1/auth/admin/users` | `accounts:admin_user_list` | Protegido (solo rol admin) |
-| POST | `/api/v1/auth/admin/users` | `accounts:admin_user_create` | Protegido (solo rol admin) |
-| PATCH | `/api/v1/auth/admin/users/{user_id}` | `accounts:admin_user_update` | Protegido (solo rol admin) |
+| GET | `/api/v1/auth/admin/users` | `accounts:admin_users` | Protegido (solo rol admin) |
+| POST | `/api/v1/auth/admin/users` | `accounts:admin_users` | Protegido (solo rol admin) |
+| PATCH | `/api/v1/auth/admin/users/{user_id}` | `accounts:admin_user_detail` | Protegido (solo rol admin) |
 | PATCH | `/api/v1/auth/admin/users/{user_id}/toggle-active` | `accounts:admin_user_toggle_active` | Protegido (solo rol admin) |
 | GET | `/api/v1/audit-events` | `alerts:audit-list` | Protegido (solo rol admin) |
 | GET, PUT | `/api/v1/configuracion-operativa` | `operational:configuracion_operativa` | Protegido (solo rol admin) |
@@ -594,7 +594,7 @@ Total cuenta coincidencias antes de paginar. Orden fijo: fecha_hora descendente,
 
 | Parámetro | Tipo / predeterminado | Semántica |
 |---|---|---|
-| `q` | string 1–100; omitido | Subcadena literal sin distinguir mayúsculas sobre alerta_id, box o tipo_riesgo; OR entre esos campos |
+| `q` | string 1–100; omitido | Búsqueda por subcadena sin distinguir mayúsculas en alerta_id, box o tipo_riesgo. Para box y riesgo, espacios, guiones y guiones bajos son equivalentes. También admite el número de box con ceros iniciales y las etiquetas visibles de riesgo. |
 | `fecha_desde` | YYYY-MM-DD; sin límite inferior | Día inicial inclusivo en Santiago |
 | `fecha_hasta` | YYYY-MM-DD; sin límite superior | Día final inclusivo en Santiago |
 | `box` | string 1–64; omitido | Coincidencia exacta, sensible a mayúsculas |
@@ -624,7 +624,7 @@ Respuesta 200:
         "box": "box-3",
         "tipo_riesgo": "riesgo_suicida",
         "nivel_severidad": 2,
-        "semaforo": "BAJO",
+        "semaforo": "MEDIO",
         "fecha_hora": "2026-09-12T14:05:22Z",
         "estado_evaluacion": "correcta",
         "evaluacion": {
@@ -657,7 +657,7 @@ Sin parámetros ni cuerpo. Ejemplo pendiente, respuesta 200:
     "box": "box-3",
     "tipo_riesgo": "riesgo_suicida",
     "nivel_severidad": 2,
-    "semaforo": "BAJO",
+    "semaforo": "MEDIO",
     "fecha_hora": "2026-09-12T14:05:22Z",
     "estado_evaluacion": "pendiente",
     "evaluacion": null,
@@ -1145,3 +1145,28 @@ Los schemas `contracts/agent-events-v1.schema.json` y
 `contracts/capture-ended-v1.schema.json`, incluidos en `manifest.json`, son la
 referencia para solicitudes. El `ready` anuncia `agent.events.v1` y
 `sessions.capture-ended.v1`. Desplegar/migrar primero central y después agentes.
+
+
+## Almacenamiento del servidor
+
+Solo administrador activo, con la autenticación vigente y CSRF al usar cookies.
+Todas las respuestas son privadas y `no-store`.
+
+| Método y ruta | Función |
+|---|---|
+| `GET /api/v1/almacenamiento/panel` | Panel HTML protegido en servidor. |
+| `GET /api/v1/almacenamiento` | Bytes ocupados/disponibles del volumen, material gestionado, liberable, protegido por motivo; última/próxima ejecución, retraso, deudas, revisión, vencimientos, cifrado y outbox. |
+| `POST /api/v1/almacenamiento/vista-previa` | Sin borrar: entrega `preview_token`, `preview_bytes`, `preview_files`, `expires_in_seconds=300` y métricas. Máximo 1000 archivos por vista previa. |
+| `POST /api/v1/almacenamiento/liberar` | JSON `{ "preview_token": "…" }`. Revalida identidad, tamaño/mtime, SQL, conservación y locks antes de cada borrado. Devuelve bytes liberados, archivos, fallos, protecciones y contexto retirado. |
+
+La entrada `/configuracion-operativa/almacenamiento` redirige al panel protegido dentro del ámbito de la cookie HttpOnly `/api/v1/`.
+
+El token está firmado y vinculado al administrador; no autoriza archivos nuevos ni
+reemplazados. Sin token: `400 STORAGE_PREVIEW_REQUIRED`; vencido/manipulado/otro
+actor: `409 STORAGE_PREVIEW_EXPIRED`; limpieza concurrente: `409 STORAGE_CLEANUP_BUSY`.
+La pérdida de una respuesta no autoriza repetir envíos de audio. Consultar estado
+y generar una vista previa nueva. La política es idéntica a la automática y no
+puede editarse por API. El evento `storage.cleanup` comparte bitácora/exportación,
+con subdocumento técnico `storage` y outbox SQL para reintentar si Mongo cae.
+
+[Política, plazos, claves y pruebas](docs/CONSERVACION-Y-ALMACENAMIENTO.md).

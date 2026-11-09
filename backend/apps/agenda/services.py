@@ -13,6 +13,8 @@ from xml.etree.ElementTree import ParseError
 from zipfile import BadZipFile
 from zoneinfo import ZoneInfo
 
+from backend.common.boxes import is_box
+
 from openpyxl import load_workbook
 from openpyxl.utils.exceptions import InvalidFileException
 
@@ -22,7 +24,6 @@ HEADERS = ("FECHA", "HORA", "DUR", "ESTATUS")
 STATUSES = {"REALIZADA", "CONFIRMADA", "NO CONFIRMADA", "AGENDADA", "PENDIENTE",
             "NO ASISTIO", "NO ASISTIO ALUMNO", "NO ASISTIO PACIENTE", "CANCELADA", "ANULADA"}
 NON_BLOCKING = {"CANCELADA", "ANULADA", "NO ASISTIO", "NO ASISTIO ALUMNO", "NO ASISTIO PACIENTE"}
-ALLOWED_BOXES = {"box-3", "box-4", "box-5", "box-6", "box-7"}
 
 
 class AgendaError(ValueError):
@@ -219,7 +220,7 @@ def _read_workbook(workbook, file_number=1):
     for sheet_number, sheet in enumerate(workbook.worksheets, 1):
         rows = iter(sheet.iter_rows())
         box, columns, box_column = _sheet_layout(rows)
-        if box in ALLOWED_BOXES:
+        if is_box(box):
             boxes.add(box)  
         for row_number, row in enumerate(rows, 8):
             cells = [row[column] for column in columns]
@@ -230,7 +231,7 @@ def _read_workbook(workbook, file_number=1):
                 row_box = box
                 if box_column is not None:
                     row_box = _box(_cell_value(row[box_column]))
-                if row_box not in ALLOWED_BOXES:
+                if not is_box(row_box):
                     raise AgendaError("box_fuera_de_alcance")
                 boxes.add(row_box)
                 item = _appointment(row_box, cells)
@@ -293,7 +294,7 @@ class AgendaService:
 
     def is_busy(self, box: str | int, when: datetime) -> bool:
         box, instant = _box(box), _local_datetime(when).astimezone(UTC)
-        if box not in ALLOWED_BOXES:
+        if not is_box(box):
             raise AgendaError("box_fuera_de_alcance")
         by_box = self._by_box
         if box not in by_box:
@@ -305,19 +306,19 @@ class AgendaService:
 
     def replace_boxes(self, by_box):
         """Publicar una revisión durable sin sustituir la instancia inyectada."""
-        if set(by_box) - ALLOWED_BOXES:
+        if any(not is_box(box) for box in by_box):
             raise AgendaError("box_fuera_de_alcance")
         with self._lock:
             self._by_box = {**self._by_box, **{box: tuple(items) for box, items in by_box.items()}}
 
 
-    def load_smile_json(self, raw, *, boxes, agenda_date):
+    def load_smile_json(self, raw, *, boxes, agenda_date, smile_ids=None):
         """Representación nativa del extractor entregado, sin conversión a Excel."""
         import json
         try:
             rows = json.loads(raw)
             day = date.fromisoformat(agenda_date)
-            if not isinstance(rows, list) or len(rows) > 100000 or not boxes or set(boxes) - ALLOWED_BOXES:
+            if not isinstance(rows, list) or len(rows) > 100000 or not boxes or any(not is_box(box) for box in boxes):
                 raise ValueError()
             grouped = {box: [] for box in boxes}
             seen = set()
@@ -326,7 +327,10 @@ class AgendaService:
                 if not isinstance(row, dict) or set(row) != keys or type(row["box"]) is not int:
                     raise ValueError()
                 box = f"box-{row['box']}"
-                if box not in grouped or row["smile_box_id"] != str(row["box"] + 5):
+                if (box not in grouped or not isinstance(row["smile_box_id"], str)
+                        or not re.fullmatch(r"[1-9][0-9]{0,11}", row["smile_box_id"])
+                        or (smile_ids is not None and smile_ids.get(box) != row["smile_box_id"])
+                        or (smile_ids is None and 3 <= row["box"] <= 7 and row["smile_box_id"] != str(row["box"] + 5))):
                     raise ValueError()
                 if any(not isinstance(row[k], str) or not row[k] or len(row[k]) > 256
                        for k in ("smile_cita_id", "codigo_estado", "estado", "fecha", "hora_inicio")):

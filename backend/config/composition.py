@@ -1,4 +1,4 @@
-﻿from backend.apps.accounts.clients import EmailClient
+from backend.apps.accounts.clients import EmailClient
 from backend.apps.accounts.repositories import AccountsRepository
 from backend.apps.accounts.services import AccountsService
 from backend.apps.agenda.services import AgendaService
@@ -61,7 +61,7 @@ def analysis_worker(*, settings=None,directory=None, speechmatics_http=None, jev
     from backend.apps.analysis.services import AnalysisService
 
     config = settings or Settings.from_env()
-    root = Path(directory) if directory is not None else django_settings.BASE_DIR / ".local/analysis"
+    root = Path(directory) if directory is not None else django_settings.ANALYSIS_STATE_ROOT
     store = alert_store if alert_store is not None else AlertsRepository()
 
     def events():

@@ -3,9 +3,12 @@ from dataclasses import dataclass
 from datetime import timedelta
 from uuid import UUID, uuid4
 
-from django.db import transaction
+from django.db import DatabaseError, transaction
+from django.db.models import Q
 from django.utils import timezone
 
+from backend.apps.analysis.errors import AnalysisRetry
+from backend.common.errors import PersistenceUnavailable
 from backend.apps.analysis.domain import AnalysisContextLost, AnalysisState, Fragment
 from .models import CaptureSession, FragmentJob, SessionState
 from .storage import FragmentError
@@ -33,6 +36,22 @@ class ClaimedFragmentJob:
     attempts: int
     temporal: dict
     error_code: str = ""
+    checkpoint: dict | None = None
+    session_start: object = None
+
+
+@dataclass
+class JobCheckpoint:
+    job: ClaimedFragmentJob
+    data: dict
+
+    def save(self):
+        updated = FragmentJob.objects.filter(
+            pk=self.job.job_id, state=FragmentJob.State.PROCESSING,
+            processing_token=self.job.token,
+        ).update(checkpoint=self.data)
+        if not updated:
+            raise DatabaseError("Fragment job claim lost")
 
 
 class QueueFragmentLedger:
@@ -59,12 +78,15 @@ class FragmentJobProcessor:
 
         self.storage = storage
         self.analysis = analysis
+        self.durable = callable(getattr(analysis, "resume", None))
         self.roles_provider = roles_provider or (lambda fragment: {})
         self.audit = audit
         self.max_attempts = max_attempts
         self.stuck_after = stuck_after
 
     def process_next(self, *, now=None):
+        from .encryption import require_encrypted_storage
+        require_encrypted_storage()
         now = now or timezone.now()
         self.recover_stuck(now=now)
 
@@ -75,6 +97,9 @@ class FragmentJobProcessor:
 
         if claimed.error_code:
             return self._finish_failed(claimed, claimed.error_code, now=timezone.now())
+
+        if self.durable:
+            return self._process_durable(claimed, now)
 
         analysis_started = False
 
@@ -165,6 +190,71 @@ class FragmentJobProcessor:
             now=timezone.now(),
         )
 
+    def _process_durable(self, claimed, now):
+        checkpoint = JobCheckpoint(claimed, claimed.checkpoint)
+        previous = FragmentJob.objects.filter(
+            sequence__session_id=claimed.session_id,
+            sequence__number=claimed.sequence - 1,
+            state=FragmentJob.State.COMPLETED,
+        ).values_list("checkpoint", flat=True).first() if claimed.sequence else {}
+        if claimed.sequence and not previous:
+            if previous is None or not checkpoint.data.get("accept_missing_context"):
+                return self._reschedule(claimed, "ANALYSIS_CONTEXT_LOST", now, review=True)
+
+        def run(path, frames, roles):
+            fragment = Fragment(
+                claimed.session_id, claimed.sequence, claimed.box,
+                claimed.session_start or claimed.captured_at, path, end=frames,
+                session_origin_sample=claimed.temporal.get("session_start_sample", 0),
+                new_audio_start_sample=claimed.temporal.get("new_audio_start_sample"),
+            )
+            if roles:
+                resolved_roles = self.roles_provider(fragment)
+                roles = resolved_roles if isinstance(resolved_roles, dict) else {}
+            return self.analysis.resume(fragment, roles=roles or {}, checkpoint=checkpoint, previous=previous)
+
+        try:
+            if "result" in checkpoint.data:
+                result, context = run(None, checkpoint.data["frames"], False)
+            else:
+                with self.storage.lease(claimed.storage_key) as path:
+                    frames = self._wav_frames(path)
+                    checkpoint.data["frames"] = frames
+                    result, context = run(path, frames, "roles" not in checkpoint.data)
+        except DatabaseError:
+            raise
+        except AnalysisRetry as exc:
+            return self._reschedule(claimed, exc.code, now, review=exc.code in {"JEV_SUBMISSION_UNCERTAIN", "NOTIFICATION_UNCERTAIN"})
+        except PersistenceUnavailable:
+            return self._reschedule(claimed, "ALERT_PERSISTENCE_FAILED", now)
+        except Exception:
+            return self._reschedule(claimed, "FLOW_INTERRUPTED", now)
+
+        state = {
+            AnalysisState.SIGNAL: FragmentJob.Result.RISK_DETECTED,
+            AnalysisState.NO_SIGNAL: FragmentJob.Result.NO_RISK_DETECTED,
+            AnalysisState.INDETERMINATE: FragmentJob.Result.INDETERMINATE,
+        }[result.state]
+        completed = self._finish_completed(claimed, state, now=timezone.now(), context=context)
+        if completed and claimed.attempts > 1:
+            self._audit_recovery(claimed.session_id, claimed.sequence)
+        return completed
+
+    def _reschedule(self, claimed, code, now, *, review=False):
+        now = max(now, timezone.now())
+        review = review or claimed.attempts >= self.max_attempts
+        state = FragmentJob.State.REVIEW if review else FragmentJob.State.PENDING
+        updated = FragmentJob.objects.filter(
+            pk=claimed.job_id, state=FragmentJob.State.PROCESSING, processing_token=claimed.token,
+        ).update(
+            state=state, retry_at=None if review else now + timedelta(minutes=2 ** (claimed.attempts - 1)),
+            processing_started_at=None, processing_token=None, last_error_code=code,
+        )
+        if updated:
+            self._audit_failure(code, claimed.session_id, claimed.sequence)
+            return state
+        return None
+
     def recover_stuck(self, *, now=None):
         now = now or timezone.now()
         cutoff = now - self.stuck_after
@@ -184,13 +274,29 @@ class FragmentJobProcessor:
             )
 
             for job in jobs:
-                try:
-                    with self.storage.lease(job.storage_key):
-                        fragment_available = True
-                except BlockingIOError:
+                if self.durable and "result" in job.checkpoint:
+                    fragment_available = True
+                else:
+                    try:
+                        with self.storage.lease(job.storage_key):
+                            fragment_available = True
+                    except BlockingIOError:
+                        continue
+                    except FragmentError:
+                        fragment_available = False
+
+                if self.durable:
+                    review = not fragment_available or job.attempts >= self.max_attempts
+                    job.state = FragmentJob.State.REVIEW if review else FragmentJob.State.PENDING
+                    job.processing_started_at = None
+                    job.processing_token = None
+                    job.last_error_code = "FLOW_INTERRUPTED"
+                    job.save(update_fields=["state", "processing_started_at", "processing_token", "last_error_code"])
+                    if review:
+                        failed.append((None, str(job.sequence.session_id), job.sequence.number))
+                    else:
+                        recovered.append((str(job.sequence.session_id), job.sequence.number))
                     continue
-                except FragmentError:
-                    fragment_available = False
 
                 session_id = str(job.sequence.session_id)
                 sequence = job.sequence.number
@@ -255,7 +361,8 @@ class FragmentJobProcessor:
                 sequence,
             )
 
-            self._delete_final(storage_key)
+            if storage_key is not None:
+                self._delete_final(storage_key)
 
         return len(recovered), len(failed)
 
@@ -266,6 +373,7 @@ class FragmentJobProcessor:
                 .select_for_update()
                 .select_related("sequence__session")
                 .filter(state=FragmentJob.State.PENDING)
+                .filter(Q(retry_at__isnull=True) | Q(retry_at__lte=now))
                 .order_by(
                     "sequence__accepted_at",
                     "sequence__session_id",
@@ -287,6 +395,8 @@ class FragmentJobProcessor:
                 )
 
                 if blocked:
+                    if self.durable:
+                        continue
                     if FragmentJob.objects.filter(sequence__session_id=job.sequence.session_id,
                             sequence__number__lt=job.sequence.number, state=FragmentJob.State.FAILED).exists():
                         # Finalizar fuera de la transacción con la misma limpieza
@@ -326,6 +436,8 @@ class FragmentJobProcessor:
                     attempts=job.attempts,
                     temporal=job.temporal,
                     error_code=error_code,
+                    checkpoint=job.checkpoint,
+                    session_start=job.sequence.session.actual_start,
                 )
 
         return None
@@ -383,7 +495,9 @@ class FragmentJobProcessor:
 
         return job.state
 
-    def _finish_completed(self, claimed, result, *, now):
+    @transaction.atomic
+    def _confirm_result(self, claimed, result, *, now, context):
+        fields = {"checkpoint": context, "retry_at": None} if context is not None else {}
         updated = (
             FragmentJob.objects
             .filter(
@@ -395,18 +509,29 @@ class FragmentJobProcessor:
                 state=FragmentJob.State.COMPLETED,
                 result=result,
                 finished_at=now,
+                **fields,
                 processing_started_at=None,
                 processing_token=None,
                 last_error_code="",
             )
         )
 
-        if not updated:
-            return None
+        if updated and context is not None and claimed.sequence:
+            previous = FragmentJob.objects.filter(
+                sequence__session_id=claimed.session_id, sequence__number=claimed.sequence - 1,
+                state=FragmentJob.State.COMPLETED,
+            ).first()
+            if previous:
+                previous.checkpoint.pop("history", None)
+                previous.checkpoint.pop("evidence", None)
+                previous.save(update_fields=["checkpoint"])
+        return updated
 
+    def _finish_completed(self, claimed, result, *, now, context=None):
+        if not self._confirm_result(claimed, result, now=now, context=context):
+            return None
         self._delete_final(claimed.storage_key)
         self._close_session_if_finished(claimed.session_id)
-
         return FragmentJob.State.COMPLETED
 
     def _finish_failed(
@@ -450,16 +575,8 @@ class FragmentJobProcessor:
         return FragmentJob.State.FAILED
 
     def _delete_final(self, storage_key):
-        try:
-            self.storage.delete(storage_key)
-
-        except FragmentError as exc:
-            if exc.code != "FRAGMENT_NOT_FOUND":
-                return False
-
-        except (BlockingIOError, OSError):
-            return False
-
+        # La retención durable elimina el WAV después de 24 h desde accepted_at.
+        # No borrar aquí: un fallo se recupera independientemente del análisis.
         return True
 
     def _close_session_if_finished(self, session_id):
@@ -478,6 +595,7 @@ class FragmentJobProcessor:
             state__in=[
                 FragmentJob.State.PENDING,
                 FragmentJob.State.PROCESSING,
+                FragmentJob.State.REVIEW,
             ],
         ).exists()
 

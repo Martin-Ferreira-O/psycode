@@ -342,6 +342,6 @@ class CaptureAuthorizationIntegrationTests(APITestCase):
         self.assertEqual(audit_emit.call_count, 1)
         self.assertEqual(audit_emit.call_args.args[0]["error_code"], "AGENDA_QUERY_FAILED")
 
-        # Box fuera de alcance (ej. box 1 o 9) lanza AgendaError
+        # Un identificador inválido sigue rechazándose; salas 1/9 ahora son válidas.
         with self.assertRaises(AgendaError):
-            self.auth_service.evaluate_box(1, when)
+            self.auth_service.evaluate_box(0, when)

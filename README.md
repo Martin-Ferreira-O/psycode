@@ -27,6 +27,8 @@ La [revisión funcional posterior a la separación](docs/REVISION-FUNCIONAMIENTO
 
 La integración interna de Speechmatics Batch y JEV está documentada en [implementación y pruebas sin credenciales](docs/INTEGRACION-SPEECHMATICS-JEV.md). Incluye el contrato de salida 1.0, procedencia del código y conexión a alertas/bitácora; no añade una interfaz ni habilita envíos externos por defecto.
 
+[Conservación, panel de almacenamiento, limpieza periódica y cifrado](docs/CONSERVACION-Y-ALMACENAMIENTO.md).
+
 ## Primera instalación
 
 Abre una terminal en la carpeta del proyecto, donde está `manage.py`. Necesitas Python 3.12 o 3.13. Elige una de las dos opciones siguientes; ambas instalan las mismas dependencias.

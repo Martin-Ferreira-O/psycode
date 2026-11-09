@@ -17,16 +17,16 @@ MAX_REPORT_BYTES = 10 * 1024 * 1024
 
 
 def source_for(identity, source):
-    config = settings.CAPTURE_AGENDA_SOURCES.get(source)
-    if not config or config["collector_id"] != identity.agent_id:
-        raise FragmentError("AGENDA_SCOPE_FORBIDDEN", 403)
-    return config
+    from .catalogue import source_scope
+    return source_scope(identity, source)
 
 
 def issue(identity, source):
-    source_for(identity, source)
-    row = AgendaCollection.objects.create(source=source, agent_id=identity.agent_id)
-    return {"collection_id": str(row.collection_id), "generation": row.pk, "source": source, "boxes": source_for(identity, source)["boxes"], "formats": ["smile.excel.v1", "smile.json.v1"]}
+    from .catalogue import descriptor
+    scope = source_for(identity, source)
+    row = AgendaCollection.objects.create(source=source, agent_id=identity.agent_id,
+        scope={"boxes": scope["boxes"], "room_mapping": scope.get("room_mapping", {})})
+    return descriptor(row)
 
 
 def receive(identity, metadata, upload):
@@ -37,6 +37,15 @@ def receive(identity, metadata, upload):
     scope = source_for(identity, m["source"])
     try:
         identifier(m["collection_id"])
+        from .catalogue import collector_ids
+        issued = AgendaCollection.objects.filter(collection_id=m["collection_id"], source=m["source"], agent_id__in=collector_ids(identity, m["source"])).first()
+        if issued is not None and issued.scope:
+            scope = issued.scope
+        elif issued is not None:
+            # Colecciones anteriores a la migración: conservar el contrato legacy,
+            # aunque el catálogo recién descubierto tenga otros IDs externos.
+            from .catalogue import configured_source
+            scope = {**configured_source(identity, m["source"]), "room_mapping": {}}
         date.fromisoformat(m["agenda_date"])
         obtained = instant(m["obtained_at"])
         if obtained > timezone.now() + timedelta(seconds=60):
@@ -57,7 +66,7 @@ def receive(identity, metadata, upload):
     if m["outcome"] == "valid":
         try:
             if m["format_version"] == "smile.json.v1":
-                result = agenda.load_smile_json(raw, boxes=m["boxes"], agenda_date=m["agenda_date"])
+                result = agenda.load_smile_json(raw, boxes=m["boxes"], agenda_date=m["agenda_date"], smile_ids=scope.get("room_mapping") or None)
             else:
                 with ZipFile(io.BytesIO(raw)) as archive:
                     if sum(f.file_size for f in archive.infolist()) > 50 * 1024 * 1024 or len(archive.infolist()) > 1000:
@@ -72,9 +81,11 @@ def receive(identity, metadata, upload):
             raise FragmentError("AGENDA_REPORT_INVALID", 422) from None
     with transaction.atomic(durable=True):
         row = AgendaCollection.objects.select_for_update().filter(
-            collection_id=m["collection_id"], source=m["source"], agent_id=identity.agent_id).first()
+            collection_id=m["collection_id"], source=m["source"], agent_id__in=collector_ids(identity, m["source"])).first()
         if row is None:
             raise FragmentError("AGENDA_COLLECTION_NOT_FOUND", 404)
+        if issued is not None and row.scope != issued.scope:
+            raise FragmentError("AGENDA_REPORT_CONFLICT", 409)
         if row.received_at is not None:
             if row.metadata != m:
                 raise FragmentError("AGENDA_REPORT_CONFLICT", 409)

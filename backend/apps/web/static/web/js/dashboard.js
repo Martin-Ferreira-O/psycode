@@ -782,7 +782,9 @@ function completarDetalle(alerta) {
     );
 }
 
-async function abrirDetalle(alertaId) {
+const focoModalDetalle = crearControlFocoModal(elementos.modal);
+
+async function abrirDetalle(alertaId, origen) {
     const idSolicitud =
         ++solicitudDetalle;
 
@@ -828,9 +830,7 @@ async function abrirDetalle(alertaId) {
         "Cargando detalle…"
     );
 
-    elementos.modal
-        .querySelector(".boton-cerrar")
-        .focus();
+    focoModalDetalle.abrir(elementos.modal.querySelector(".boton-cerrar"), origen);
 
     try {
         let alerta =
@@ -902,6 +902,7 @@ function cerrarDetalle() {
     alertaSeleccionada = null;
 
     actualizarBotonEvaluacion();
+    focoModalDetalle.cerrar(elementos.buscar);
 }
 
 function aplicarEvaluacion(
@@ -1329,9 +1330,7 @@ elementos.tabla.addEventListener(
             );
 
         if (boton) {
-            abrirDetalle(
-                boton.dataset.alerta
-            );
+            abrirDetalle(boton.dataset.alerta, boton);
         }
     }
 );

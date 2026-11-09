@@ -1,11 +1,12 @@
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from rest_framework import serializers
+from backend.common.boxes import BOX_PATTERN
 
 
 class FragmentSerializer(serializers.Serializer):
     archivo = serializers.FileField(allow_empty_file=True)
-    box = serializers.ChoiceField(choices=[f"box-{n}" for n in range(3, 8)])
+    box = serializers.RegexField(regex=rf"^{BOX_PATTERN}$", max_length=16)
     session_id = serializers.UUIDField()
     secuencia = serializers.RegexField(r"\A(0|[1-9][0-9]{0,18})\Z", max_length=19, trim_whitespace=False)
     formato = serializers.CharField(max_length=16, trim_whitespace=False)
@@ -41,3 +42,24 @@ class FragmentV2Serializer(FragmentSerializer):
     sample_rate = serializers.IntegerField(min_value=16000, max_value=16000)
     chunk_samples = serializers.IntegerField(min_value=1, max_value=16000 * 600)
     overlap_samples = serializers.IntegerField(min_value=0, max_value=16000 * 600 - 1)
+
+class AgentRegistrationCreateSerializer(serializers.Serializer):
+    """Datos permitidos al registrar un nuevo PC."""
+
+    name = serializers.CharField(
+        max_length=100,
+        allow_blank=False,
+        trim_whitespace=True,
+    )
+
+    box = serializers.RegexField(regex=rf"^{BOX_PATTERN}$", max_length=16)
+
+    def validate_name(self, value):
+        value = value.strip()
+
+        if not value:
+            raise serializers.ValidationError(
+                "El nombre del PC es obligatorio."
+            )
+
+        return value

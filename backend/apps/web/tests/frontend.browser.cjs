@@ -122,9 +122,32 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         assert.match(await page.locator('#estadoVacio').innerText(), /filtros/);
         await page.locator('#limpiarFiltros').click();
         await page.locator('[data-alerta]').first().click();
-        await page.locator('#guardarEvaluacion').click();
+        const guardar = page.locator('#guardarEvaluacion');
+        await guardar.waitFor();
+
+        const radioConFoco = page.locator('input[name="evaluacion"]:focus');
+        const opciones = ['correcta', 'falso_positivo', 'neutro'];
+        for (const valor of opciones) {
+            await page.keyboard.press('Tab');
+            assert.equal(await radioConFoco.inputValue({ timeout: 1000 }), valor);
+        }
+        await page.keyboard.press('Tab');
+        assert.equal(await guardar.evaluate(boton => boton === document.activeElement), true);
+        for (const valor of opciones.slice().reverse()) {
+            await page.keyboard.press('Shift+Tab');
+            assert.equal(await radioConFoco.inputValue({ timeout: 1000 }), valor);
+        }
+        assert.equal(await page.locator('input[name="evaluacion"]:checked').count(), 0);
+        await guardar.click();
         assert.equal(await page.locator('#mensajeEvaluacion').getAttribute('role'), 'alert');
         await page.locator('input[name="evaluacion"][value="correcta"]').check();
+        await page.keyboard.press('ArrowRight');
+        assert.equal(await page.locator('input[name="evaluacion"][value="falso_positivo"]').isChecked(), true);
+        await page.locator('#modalDetalle .boton-cerrar').focus();
+        await page.keyboard.press('Tab');
+        assert.equal(await radioConFoco.inputValue({ timeout: 1000 }), 'correcta');
+        assert.equal(await page.locator('input[name="evaluacion"][value="falso_positivo"]').isChecked(), true);
+        await page.keyboard.press('Space');
         await page.evaluate(() => mostrarError(document.querySelector('#mensajeEvaluacion'), new ErrorSolicitud(503)));
         assert.equal(await page.locator('input[name="evaluacion"][value="correcta"]').isChecked(), true);
         await page.locator('#guardarEvaluacion').click();

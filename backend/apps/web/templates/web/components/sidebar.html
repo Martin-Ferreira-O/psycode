@@ -36,6 +36,13 @@
             Gestión de usuarios
         </a>
 
+        <a href="{% url 'web:pcs' %}"
+            class="enlace-menu{% if seccion_activa == 'pcs' %} activo{% endif %}"
+            data-admin-only hidden
+            {% if seccion_activa == "pcs" %}aria-current="page"{% endif %}>
+            Gestión de PCs
+        </a>
+
         <a
             href="{% url 'web:bitacora' %}"
             class="enlace-menu{% if seccion_activa == 'bitacora' %} activo{% endif %}"

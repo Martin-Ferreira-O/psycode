@@ -2,7 +2,7 @@
 from backend.apps.alerts.audit import AlertAudit
 
 FAILURE_CODES = frozenset({"SPEECHMATICS_FAILED", "SPEECHMATICS_DELETE_PENDING",
-                           "JEV_FAILED", "JEV_SUBMISSION_UNCERTAIN",
+                           "JEV_FAILED", "JEV_SUBMISSION_UNCERTAIN", "SPEECHMATICS_UNCERTAIN", "ANALYSIS_CONTEXT_LOST", "NOTIFICATION_UNCERTAIN",
                            "FLOW_INTERRUPTED", "ALERT_PERSISTENCE_FAILED"})
 
 

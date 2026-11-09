@@ -1,3 +1,4 @@
+from backend.common.boxes import known_boxes
 import json
 from django.core.management.base import BaseCommand
 from django.db.models import Count, F, Q
@@ -21,19 +22,22 @@ class Command(BaseCommand):
             | Q(state=SessionState.FAILED, actual_end__isnull=True)
             | Q(state=SessionState.FAILED, final_sequence__isnull=True)
             | Q(state=SessionState.FAILED, next_sequence__lte=F('final_sequence'))
-            | Q(sequences__fragment_job__state__in=[FragmentJob.State.PENDING, FragmentJob.State.PROCESSING])
+            | Q(sequences__fragment_job__state__in=[
+                FragmentJob.State.PENDING, FragmentJob.State.PROCESSING, FragmentJob.State.REVIEW,
+            ])
         ).distinct().order_by('box', 'authorized_at', 'pk')
         lifecycles = [service.inspection(s.box, s.pk, now=now) for s in sessions]
         backlog = {
             'reception_pending': sum(s['reception'] == 'pending' for s in lifecycles),
             'reception_intervention': sum(s['reception'] == 'intervention_required' for s in lifecycles),
             'capture_stop_unconfirmed': sum(s['capture'] == 'stop_unconfirmed' for s in lifecycles),
+            'processing_intervention_jobs': FragmentJob.objects.filter(state=FragmentJob.State.REVIEW).count(),
             'processing_pending_jobs': FragmentJob.objects.filter(
                 state__in=[FragmentJob.State.PENDING, FragmentJob.State.PROCESSING]).count(),
             **{level: sum(s['backlog_alert'] == level for s in lifecycles) for level in ('notice', 'warning', 'critical')},
         }
         last_events = []
-        for box in (f'box-{n}' for n in range(3, 8)):
+        for box in known_boxes():
             item = {'box': box}
             for channel in ('https', 'wss'):
                 item[channel] = AgentConnectivityEvent.objects.filter(box=box, kind__in=[

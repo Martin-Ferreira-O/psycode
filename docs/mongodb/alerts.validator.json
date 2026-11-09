@@ -105,7 +105,7 @@
             "descripcion": {
               "bsonType": ["string", "null"],
               "maxLength": 500,
-              "description": "Texto opcional de la alerta. Ausente en el alta se normaliza a null. No es transcripción."
+              "description": "Fragmento relevante de transcripción asociado a la alerta, de hasta 500 caracteres. Si se omite o está vacío, se almacena como null."
             },
             "trazabilidad": {
               "bsonType": "object",

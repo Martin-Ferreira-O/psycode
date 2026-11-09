@@ -38,7 +38,8 @@ let usuarios = [];
 let usuarioEnEdicion = null;
 let usuarioCambioEstado = null;
 let usuarioSesionId = null;
-let elementoFocoAnterior = null;
+const focoFormularioUsuario = crearControlFocoModal(elementosUsuarios.modal);
+const focoConfirmacionUsuario = crearControlFocoModal(elementosUsuarios.modalConfirmacion);
 
 function ocultar(elemento) {
     if (elemento) elemento.hidden = true;
@@ -247,7 +248,7 @@ function crearAccionesUsuario(usuario) {
     botonEditar.dataset.tooltip = "Editar";
     botonEditar.setAttribute("aria-label", `Editar usuario ${usuario.usuario}`);
     botonEditar.appendChild(crearIconoAccion("editar"));
-    botonEditar.addEventListener("click", () => abrirModalEditar(usuario));
+    botonEditar.addEventListener("click", () => abrirModalEditar(usuario, botonEditar));
 
     const botonEstado = document.createElement("button");
     botonEstado.type = "button";
@@ -272,7 +273,7 @@ function crearAccionesUsuario(usuario) {
         botonEstado.disabled = true;
         botonEstado.dataset.tooltip = "No puedes desactivar tu propia cuenta";
     } else {
-        botonEstado.addEventListener("click", () => abrirConfirmacionEstado(usuario));
+        botonEstado.addEventListener("click", () => abrirConfirmacionEstado(usuario, botonEstado));
     }
 
     contenedor.appendChild(botonEditar);
@@ -344,13 +345,13 @@ function limpiarErrorFormulario() {
     ocultar(elementosUsuarios.mensajeFormulario);
 }
 
-function abrirModalBase() {
-    elementoFocoAnterior = document.activeElement;
+function abrirModalBase(focoInicial, origen) {
     mostrar(elementosUsuarios.modal);
     document.body.style.overflow = "hidden";
+    focoFormularioUsuario.abrir(focoInicial, origen);
 }
 
-function abrirModalCrear() {
+function abrirModalCrear(evento) {
     usuarioEnEdicion = null;
     elementosUsuarios.formulario.reset();
     limpiarErrorFormulario();
@@ -371,11 +372,10 @@ function abrirModalCrear() {
     elementosUsuarios.rol.value = "supervisor";
     elementosUsuarios.activo.value = "true";
 
-    abrirModalBase();
-    setTimeout(() => elementosUsuarios.usuario.focus(), 0);
+    abrirModalBase(elementosUsuarios.usuario, evento.currentTarget);
 }
 
-function abrirModalEditar(usuario) {
+function abrirModalEditar(usuario, origen) {
     usuarioEnEdicion = usuario;
     elementosUsuarios.formulario.reset();
     limpiarErrorFormulario();
@@ -397,8 +397,7 @@ function abrirModalEditar(usuario) {
     elementosUsuarios.correo.value = usuario.correo || "";
     elementosUsuarios.rol.value = usuario.rol || "supervisor";
 
-    abrirModalBase();
-    setTimeout(() => elementosUsuarios.nombre.focus(), 0);
+    abrirModalBase(elementosUsuarios.nombre, origen);
 }
 
 function cerrarModalUsuario() {
@@ -407,7 +406,7 @@ function cerrarModalUsuario() {
     usuarioEnEdicion = null;
     limpiarErrorFormulario();
 
-    if (elementoFocoAnterior) elementoFocoAnterior.focus();
+    focoFormularioUsuario.cerrar(elementosUsuarios.botonCrear);
 }
 
 async function crearUsuario() {
@@ -480,9 +479,8 @@ async function guardarUsuario(evento) {
     }
 }
 
-function abrirConfirmacionEstado(usuario) {
+function abrirConfirmacionEstado(usuario, origen) {
     usuarioCambioEstado = usuario;
-    elementoFocoAnterior = document.activeElement;
 
     const vaAActivar = !usuario.activo;
 
@@ -498,7 +496,7 @@ function abrirConfirmacionEstado(usuario) {
     mostrar(elementosUsuarios.modalConfirmacion);
     document.body.style.overflow = "hidden";
 
-    setTimeout(() => elementosUsuarios.botonCancelarConfirmacion.focus(), 0);
+    focoConfirmacionUsuario.abrir(elementosUsuarios.botonCancelarConfirmacion, origen);
 }
 
 function cerrarConfirmacionEstado() {
@@ -506,7 +504,7 @@ function cerrarConfirmacionEstado() {
     document.body.style.overflow = "";
     usuarioCambioEstado = null;
 
-    if (elementoFocoAnterior) elementoFocoAnterior.focus();
+    focoConfirmacionUsuario.cerrar(elementosUsuarios.botonCrear);
 }
 
 async function confirmarCambioEstado() {

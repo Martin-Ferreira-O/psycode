@@ -120,12 +120,14 @@ function renderizarEvaluaciones() {
 
     document.querySelectorAll(".boton-ver-detalle").forEach((boton) => {
         boton.addEventListener("click", () => {
-            abrirDetalle(boton.dataset.alerta);
+            abrirDetalle(boton.dataset.alerta, boton);
         });
     });
 }
 
-async function abrirDetalle(alertaId) {
+const focoModalDetalle = crearControlFocoModal(elementos.modal);
+
+async function abrirDetalle(alertaId, origen) {
     const idSolicitud = ++solicitudDetalle;
     limpiarTranscripcion();
     elementos.tituloModal.textContent = "Detalle de alerta";
@@ -135,7 +137,7 @@ async function abrirDetalle(alertaId) {
     const bloques = elementos.modal.querySelectorAll(".detalle-grid, .evaluacion-registrada");
     bloques.forEach(bloque => { bloque.hidden = true; });
     mostrarCarga(estado, "Cargando detalle…");
-    elementos.modal.querySelector(".boton-cerrar").focus();
+    focoModalDetalle.abrir(elementos.modal.querySelector(".boton-cerrar"), origen);
     try {
         const alerta = await apiGetDatos(`/api/v1/alerts/${encodeURIComponent(alertaId)}`);
         if (idSolicitud !== solicitudDetalle) return;
@@ -158,6 +160,7 @@ function cerrarDetalle() {
     document.body.classList.remove(
         "modal-abierto"
     );
+    focoModalDetalle.cerrar();
 }
 
 
