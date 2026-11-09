@@ -31,7 +31,7 @@ def _linux_encrypted(path):
     source = mount["source"].split("[", 1)[0]
     if not source.startswith("/dev/"):
         return False
-    devices = _json_command(["lsblk", "--json", "--inverse", "--output", "TYPE", source])["blockdevices"]
+    devices = _json_command(["lsblk", "--json", "--inverse", "--tree", "--output", "TYPE", source])["blockdevices"]
     return bool(devices) and all(_encrypted_ancestry(device) for device in devices)
 
 
