@@ -19,6 +19,13 @@ class EncryptionTests(SimpleTestCase):
         self.assertFalse(encryption._encrypted_ancestry({'type': 'lvm', 'children': [{'type': 'crypt'}, {'type': 'disk'}]}))
         self.assertFalse(encryption._encrypted_ancestry({'type': 'disk'}))
 
+    def test_lsblk_requests_device_tree_for_a_bind_mount(self):
+        mount = {'filesystems': [{'source': '/dev/mapper/secure[/audio]'}]}
+        tree = {'blockdevices': [{'type': 'crypt', 'children': [{'type': 'loop'}]}]}
+        with patch.object(encryption, '_json_command', side_effect=[mount, tree]) as command:
+            self.assertTrue(encryption._linux_encrypted(Path('/audio')))
+        command.assert_called_with(['lsblk', '--json', '--inverse', '--tree', '--output', 'TYPE', '/dev/mapper/secure'])
+
     def test_plain_overlay_and_missing_utilities_never_count_as_encryption(self):
         with patch.object(encryption, '_json_command', return_value={'filesystems': [{'source': 'overlay'}]}):
             self.assertFalse(encryption._linux_encrypted(Path('/tmp')))
