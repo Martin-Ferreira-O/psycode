@@ -6,6 +6,8 @@ from backend.apps.capture.storage_views import StoragePanelView
 app_name = "web"
 
 urlpatterns = [
+    path("api/v1/pcs/panel", views.PCPanelView.as_view(), name="pcs"),
+    path("gestion-pcs", views.pcs_entrada, name="pcs_entrada"),
     path("api/v1/almacenamiento/panel", StoragePanelView.as_view(), name="almacenamiento"),
     path("configuracion-operativa/almacenamiento", views.almacenamiento_entrada),
     path("", views.inicio, name="inicio"),

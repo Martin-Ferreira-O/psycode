@@ -381,7 +381,7 @@ class CaptureLifecycleTests(CaptureFixtures, TestCase):
 
     def test_invalid_authorization_and_timestamps_are_rejected(self):
         for changed in (replace(self.authorization, inicio=None), replace(self.authorization, origen="patient-name"),
-                        replace(self.authorization, termino=NOW), replace(self.authorization, box="box-1")):
+                        replace(self.authorization, termino=NOW), replace(self.authorization, box="box-0")):
             with self.assertRaises(CaptureError):
                 self.service.apply_authorization(changed, now=NOW)
         self.assert_code("INVALID_TIMESTAMP", self.service.apply_authorization, self.authorization, now=NOW.replace(tzinfo=None))

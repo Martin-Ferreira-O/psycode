@@ -6,6 +6,7 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from backend.common.audit import AuditWriter
+from backend.common.boxes import is_box
 from .domain import CaptureError, Command, Session, TECHNICAL_ERRORS
 from .models import (
     OPEN_STATES, AcceptedSequence, AgentCommand, CaptureEvent, CaptureSession,
@@ -23,7 +24,7 @@ def _instant(value=None):
 def _box(value):
     if type(value) is int or (isinstance(value, str) and value.isdigit()):
         value = f"box-{value}"
-    if not isinstance(value, str) or value not in {f"box-{n}" for n in range(3, 8)}:
+    if not is_box(value):
         raise CaptureError("INVALID_BOX")
     return value
 

@@ -182,13 +182,7 @@
                 "format": "uuid"
               },
               "box": {
-                "enum": [
-                  "box-3",
-                  "box-4",
-                  "box-5",
-                  "box-6",
-                  "box-7"
-                ]
+                "pattern": "^box-[1-9][0-9]{0,11}$"
               },
               "kind": {
                 "enum": [
@@ -446,12 +440,10 @@
                 "type": "integer",
                 "minimum": 0
               },
-
               "remaining_seconds": {
                 "type": "integer",
                 "minimum": 0
               },
-
               "smile_last_sync": {
                 "anyOf": [
                   {

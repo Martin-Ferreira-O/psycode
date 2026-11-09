@@ -30,7 +30,7 @@ from backend.config.composition import capture_session_service
 # Compartir la MISMA instancia de AgendaService que ya usa SCRUM-70.
 coordinator = capture_session_service(agenda_service=agenda)
 
-# En cada tick del coordinador, para los boxes 3 a 7:
+# En cada tick del coordinador, para las salas conocidas del registro y la configuración:
 session = coordinator.reconcile_box("box-3")
 ```
 
@@ -152,11 +152,13 @@ a 16 kHz y 16 bits, alineado con Speechmatics; se valida su estructura real,
 tamaño y SHA-256. El nombre original y el MIME no se usan como evidencia.
 
 `authentication.py` valida `Authorization: Agent <agent_id>.<secret>` antes de
-leer audio. La identidad debe existir en `CAPTURE_AGENTS` y estar asignada al box
-solicitado. El hash SHA-256 se calcula sobre el token completo, sin `Agent `;
-usar secretos aleatorios de al menos 32 bytes. La configuración vacía deniega
-todo acceso. Para revocar o rotar, cambiar el entorno y reiniciar los procesos.
-No hay emisión pública de credenciales ni permisos heredados de profesionales.
+leer audio. Admite el registro administrable y las identidades existentes de
+`CAPTURE_AGENTS`, siempre ligadas a su box. La BD guarda solo la huella SHA-256;
+las instalaciones nuevas obtienen su credencial mediante código temporal y
+activación recuperable. La revocación administrativa corta conexiones activas y
+cancela preparaciones. No necesita editar el entorno ni reiniciar el servidor.
+Los JWT de profesionales no autorizan máquinas. Ver
+[Gestión de PCs](../../../docs/GESTION-DE-PCS.md).
 
 `uploads.py` limita los bytes mientras escribe el multipart a un temporal
 privado y comprueba que la carga tenga su cierre completo. `storage.py` valida

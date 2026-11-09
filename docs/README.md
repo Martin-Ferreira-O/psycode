@@ -8,6 +8,9 @@ Explica qué instalar, dónde ejecutar cada comando y cómo comprobar el resulta
 
 | Documento | Cuándo consultarlo |
 |---|---|
+| [GESTION-DE-PCS.md](GESTION-DE-PCS.md) | Operación actual: instalación única, recuperación, registro compatible y API. |
+| [ENTREGA-OPERACION-PCS.md](ENTREGA-OPERACION-PCS.md) | Cambios implementados, evidencia de pruebas y validación Windows pendiente. |
+| [REVISION-OPERACION-PCS.md](REVISION-OPERACION-PCS.md) | Diagnóstico del flujo actual y propuesta de instalación única, recuperación automática y administración de PCs sin conocimientos técnicos. |
 | [Configuración operativa: contrato API](../API_CONTRACTS.md#12-configuración-operativa) | Modalidad principal de notificación, respaldo independiente, validaciones, ejemplos y migración para frontend. |
 | [PRUEBAS-SERVIDOR-AGENTE.md](PRUEBAS-SERVIDOR-AGENTE.md) | Primera prueba conjunta: paquete del agente, integración automática, fallos comunes y captura manual opcional. |
 | [SCRUM-72-INTEGRACION.md](SCRUM-72-INTEGRACION.md) | Traspaso histórico del agente del box; para operación y transporte actuales, usar la guía conjunta y OPERACION-SEPARADA.md. |

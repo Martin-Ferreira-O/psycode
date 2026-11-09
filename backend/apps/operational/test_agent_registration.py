@@ -48,6 +48,13 @@ class AgentRegistrationAPITests(APITestCase):
 
         self.url = "/api/v1/pcs"
 
+    def record_pc_status(self, *, box, seen_at, diagnostics):
+        # La telemetría del PC tiene identidad propia; AgentStatus sigue siendo por box.
+        agent = AgentRegistration.objects.get(box=box)
+        agent.last_seen_at, agent.diagnostics = seen_at, diagnostics
+        agent.save(update_fields=["last_seen_at", "diagnostics"])
+        return AgentStatus.objects.create(box=box, seen_at=seen_at, diagnostics=diagnostics)
+
     def test_admin_puede_crear_pc_y_recibe_api_key(self):
         self.client.force_authenticate(user=self.admin)
 
@@ -202,14 +209,14 @@ class AgentRegistrationAPITests(APITestCase):
             status.HTTP_401_UNAUTHORIZED,
         )
 
-    def test_rechaza_box_fuera_del_rango(self):
+    def test_rechaza_identificador_box_invalido(self):
         self.client.force_authenticate(user=self.admin)
 
         response = self.client.post(
             self.url,
             {
                 "name": "PC Box inválido",
-                "box": "box-8",
+                "box": "box-0",
             },
             format="json",
         )
@@ -433,7 +440,7 @@ class AgentRegistrationAPITests(APITestCase):
             status.HTTP_201_CREATED,
         )
 
-        AgentStatus.objects.create(
+        self.record_pc_status(
             box="box-3",
             seen_at=timezone.now(),
             diagnostics={
@@ -447,11 +454,12 @@ class AgentRegistrationAPITests(APITestCase):
             },
         )
 
-        RuntimeLease.objects.create(
+        lease = RuntimeLease.objects.create(
             name="control:box-3",
             owner=uuid.uuid4(),
             expires_at=timezone.now() + timedelta(minutes=5),
         )
+        AgentRegistration.objects.filter(box="box-3").update(control_owner=lease.owner)
 
         response = self.client.get(self.url)
 
@@ -528,6 +536,7 @@ class AgentRegistrationAPITests(APITestCase):
         )
 
         sequence = AcceptedSequence.objects.create(
+            agent_id=create_response.data["data"]["agent_id"],
             session=session,
             number=1,
             captured_at=now - timedelta(seconds=10),
@@ -756,7 +765,7 @@ class AgentRegistrationAPITests(APITestCase):
 
         last_seen = timezone.now() - timedelta(minutes=8)
 
-        AgentStatus.objects.create(
+        self.record_pc_status(
             box="box-4",
             seen_at=last_seen,
             diagnostics={
@@ -1043,7 +1052,7 @@ class AgentRegistrationAPITests(APITestCase):
 
         last_seen = timezone.now() - timedelta(minutes=4)
 
-        AgentStatus.objects.create(
+        self.record_pc_status(
             box="box-3",
             seen_at=last_seen,
             diagnostics={
@@ -1126,7 +1135,7 @@ class AgentRegistrationAPITests(APITestCase):
 
         agent_id = create_response.data["data"]["agent_id"]
 
-        AgentStatus.objects.create(
+        self.record_pc_status(
             box="box-4",
             seen_at=timezone.now() - timedelta(minutes=5),
             diagnostics={},
@@ -1204,7 +1213,7 @@ class AgentRegistrationAPITests(APITestCase):
 
         last_seen = timezone.now() - timedelta(minutes=6)
 
-        AgentStatus.objects.create(
+        self.record_pc_status(
             box="box-3",
             seen_at=last_seen,
             diagnostics={
@@ -1328,7 +1337,7 @@ class AgentRegistrationAPITests(APITestCase):
             status.HTTP_201_CREATED,
         )
 
-        AgentStatus.objects.create(
+        self.record_pc_status(
             box="box-3",
             seen_at=timezone.now(),
             diagnostics={

@@ -1,3 +1,4 @@
+from backend.common.boxes import known_boxes
 import json
 from django.core.management.base import BaseCommand
 from django.db.models import Count, F, Q
@@ -36,7 +37,7 @@ class Command(BaseCommand):
             **{level: sum(s['backlog_alert'] == level for s in lifecycles) for level in ('notice', 'warning', 'critical')},
         }
         last_events = []
-        for box in (f'box-{n}' for n in range(3, 8)):
+        for box in known_boxes():
             item = {'box': box}
             for channel in ('https', 'wss'):
                 item[channel] = AgentConnectivityEvent.objects.filter(box=box, kind__in=[

@@ -4,11 +4,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, time, timezone
 from threading import Lock
+from backend.common.boxes import is_box, known_boxes
 from typing import Callable
 from zoneinfo import ZoneInfo
 
 from backend.apps.agenda.services import (
-    ALLOWED_BOXES,
     NON_BLOCKING,
     AgendaError,
     AgendaNotLoaded,
@@ -128,7 +128,7 @@ class CaptureAuthorizationService:
 
     def _normalize_box(self, box: str | int) -> str:
         box_name = _box(box)
-        if box_name not in ALLOWED_BOXES:
+        if not is_box(box_name):
             raise AgendaError("box_fuera_de_alcance")
         return box_name
 
@@ -153,6 +153,9 @@ class CaptureAuthorizationService:
         """Determina si el box está autorizado para capturar en el instante indicado."""
         box_name = self._normalize_box(box)
         current_dt = self._normalize_when(when)
+        from backend.apps.agenda.models import SmileRoom
+        if SmileRoom.objects.filter(box=box_name, available=False).exists():
+            return BoxCaptureAuthorization(box_name, False, None, None, ORIGIN_NONE)
 
         try:
             config = self.config_loader()
@@ -268,13 +271,13 @@ class CaptureAuthorizationService:
         return current
 
     def evaluate_all_boxes(self, when: datetime | None = None) -> tuple[BoxCaptureAuthorization, ...]:
-        """Evalúa el estado actual de los boxes 3 a 7."""
-        return tuple(self.evaluate_box(box, when) for box in sorted(ALLOWED_BOXES))
+        """Evalúa las salas conocidas del registro y de la agenda."""
+        return tuple(self.evaluate_box(box, when) for box in known_boxes())
 
     def evaluate_all_transitions(self, when: datetime | None = None) -> tuple[BoxCaptureAuthorization, ...]:
         """Devuelve únicamente los boxes que cambiaron su estado de autorización."""
         transitions = []
-        for box in sorted(ALLOWED_BOXES):
+        for box in known_boxes():
             change = self.evaluate_transition(box, when)
             if change is not None:
                 transitions.append(change)

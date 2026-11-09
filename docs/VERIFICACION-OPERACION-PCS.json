@@ -1,0 +1,58 @@
+{
+  "verified_at": "2026-11-08T22:27:20.996337-03:00",
+  "environment": {
+    "system": "Darwin",
+    "architecture": "arm64"
+  },
+  "server": {
+    "tests": 514,
+    "skipped": 5,
+    "result": "passed"
+  },
+  "agent": {
+    "tests_passed": 326,
+    "result": "passed",
+    "isolated_from_private_configuration": true
+  },
+  "javascript": {
+    "tests_passed": 14
+  },
+  "browser": {
+    "result": "passed",
+    "widths": [
+      375,
+      768,
+      1024,
+      1440
+    ],
+    "tls_verification_agent": true,
+    "auto_refresh_preserves_focus": true,
+    "create_pc_without_catalogue": true,
+    "all_boxes_occupied_explained": true
+  },
+  "cross_integration": {
+    "result": "passed",
+    "test_cases": 7,
+    "simulated_agents": 5
+  },
+  "wheel": {
+    "name": "psycode_agent-1.1.0-py3-none-any.whl",
+    "sha256": "a7db68783f3d06f675dcdc5fe6d76a2c100013319102b8cd61574b4869486f5b"
+  },
+  "not_verified": [
+    "physical OBS, microphone and audio transport",
+    "institutional Smile access",
+    "physical Windows operation"
+  ],
+  "not_performed": [
+    "production database migrations",
+    "deployment",
+    "real credential replacement",
+    "recordings on clinic PCs",
+    "Jira updates"
+  ],
+  "scope": {
+    "current": "registro web/API, credenciales y recuperación del agente por CLI",
+    "graphical_installer": "siguiente tarea; borrador separado del código activo"
+  }
+}

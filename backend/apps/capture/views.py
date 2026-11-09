@@ -33,6 +33,7 @@ class FragmentUploadView(APIView):
                 box=request.user.box, session_id=data["session_id"], number=data["secuencia"],
                 format=data["formato"], checksum=data["checksum"], captured_at=data["captured_at"],
                 upload=data["archivo"],
+                agent_id=request.user.agent_id,
                 temporal={k: data[k] for k in ("session_start_sample", "session_end_sample", "new_audio_start_sample",
                     "sample_rate", "chunk_samples", "overlap_samples")} if self.serializer_class is FragmentV2Serializer else None,
             )

@@ -44,3 +44,12 @@ class ReportView(APIView):
             handler = getattr(request, "_fragment_upload_handler", None)
             if handler is not None:
                 handler.close()
+
+
+class SmileCatalogView(CollectionView):
+    from backend.apps.capture.agent_events import BoundedJSONParser
+    parser_classes = [BoundedJSONParser]
+
+    def post(self, request):
+        from .catalogue import publish
+        return success_response(publish(request.user, request.data), "Catálogo de salas sincronizado")

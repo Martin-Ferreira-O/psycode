@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Instalación recuperable de PCs, v2",
+  "description": "HTTPS. El canje queda ligado a installation_id y a una prueba secreta local. El servidor genera la API key; confirmar solo después de guardar su configuración candidata de forma durable. No es una autorización para capturar.",
+  "$defs": {
+    "prepare": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "installation_id",
+        "secret"
+      ],
+      "properties": {
+        "code": {
+          "type": "string",
+          "pattern": "^[A-HJ-NP-Z2-9]{5}$"
+        },
+        "installation_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "secret": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{43}$"
+        },
+        "expected_box": {
+          "type": "string",
+          "pattern": "^box-[1-9][0-9]{0,11}$"
+        }
+      }
+    },
+    "prepared": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "agent_id",
+        "name",
+        "box",
+        "api_key",
+        "installation_id",
+        "confirmation_required"
+      ],
+      "properties": {
+        "agent_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "box": {
+          "type": "string",
+          "pattern": "^box-[1-9][0-9]{0,11}$"
+        },
+        "api_key": {
+          "type": "string",
+          "pattern": "^[0-9a-f-]{36}\\.[A-Za-z0-9_-]{43}$"
+        },
+        "installation_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "confirmation_required": {
+          "const": true
+        }
+      }
+    },
+    "confirm": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "installation_id"
+      ],
+      "properties": {
+        "installation_id": {
+          "type": "string",
+          "format": "uuid"
+        }
+      }
+    },
+    "confirmed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "agent_id",
+        "box"
+      ],
+      "properties": {
+        "agent_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "box": {
+          "type": "string",
+          "pattern": "^box-[1-9][0-9]{0,11}$"
+        }
+      }
+    }
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/prepare"
+    },
+    {
+      "$ref": "#/$defs/prepared"
+    },
+    {
+      "$ref": "#/$defs/confirm"
+    },
+    {
+      "$ref": "#/$defs/confirmed"
+    }
+  ]
+}

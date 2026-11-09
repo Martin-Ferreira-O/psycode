@@ -1,11 +1,12 @@
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from rest_framework import serializers
+from backend.common.boxes import BOX_PATTERN
 
 
 class FragmentSerializer(serializers.Serializer):
     archivo = serializers.FileField(allow_empty_file=True)
-    box = serializers.ChoiceField(choices=[f"box-{n}" for n in range(3, 8)])
+    box = serializers.RegexField(regex=rf"^{BOX_PATTERN}$", max_length=16)
     session_id = serializers.UUIDField()
     secuencia = serializers.RegexField(r"\A(0|[1-9][0-9]{0,18})\Z", max_length=19, trim_whitespace=False)
     formato = serializers.CharField(max_length=16, trim_whitespace=False)
@@ -51,9 +52,7 @@ class AgentRegistrationCreateSerializer(serializers.Serializer):
         trim_whitespace=True,
     )
 
-    box = serializers.ChoiceField(
-        choices=[f"box-{n}" for n in range(3, 8)]
-    )
+    box = serializers.RegexField(regex=rf"^{BOX_PATTERN}$", max_length=16)
 
     def validate_name(self, value):
         value = value.strip()

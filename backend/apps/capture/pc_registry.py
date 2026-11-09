@@ -1,92 +1,73 @@
-"""Registro y gestión segura de credenciales de PCs de captura."""
-
+"""Identidades estables y credenciales individuales; nunca persistir el secreto."""
 import hashlib
 import secrets
 
+from django.db import transaction
 from django.utils import timezone
 
-from backend.apps.capture.models import AgentRegistration
+from .models import AgentRegistration
 
 
 def _generate_credential(agent_id):
-    """Genera la credencial completa; solo se devuelve en este momento."""
-    secret = secrets.token_urlsafe(32)
-    token = f"{agent_id}.{secret}"
-    token_hash = hashlib.sha256(token.encode("ascii")).hexdigest()
-    return token, token_hash
+    token = f"{agent_id}.{secrets.token_urlsafe(32)}"
+    return token, hashlib.sha256(token.encode("ascii")).hexdigest()
 
 
+@transaction.atomic
 def create_agent(*, name, box):
-    """Registra un PC y devuelve su API key una sola vez."""
-    agent = AgentRegistration(
-        name=name,
-        box=box,
-        token_sha256="0" * 64,
-    )
-
-    # Necesitamos primero el UUID estable para construir la credencial.
+    from .pairing import registration_lock, check_available_box
+    registration_lock()
+    check_available_box(box)
+    agent = AgentRegistration(name=name, box=box)
+    token, agent.token_sha256 = _generate_credential(agent.agent_id)
     agent.save()
-
-    token, token_hash = _generate_credential(agent.agent_id)
-    agent.token_sha256 = token_hash
-    agent.save(update_fields=["token_sha256", "updated_at"])
-
     return agent, token
 
 
-def renew_credential(agent):
-    """Renueva la API key conservando identidad, nombre, box e historial."""
-    token, token_hash = _generate_credential(agent.agent_id)
+def _invalidate_connection(agent, cause):
+    from .authentication import AgentIdentity
+    from . import leases
+    from .server_connectivity import register_server_disconnect
 
-    agent.token_sha256 = token_hash
-    agent.revoked_at = None
-    agent.save(update_fields=["token_sha256", "revoked_at", "updated_at"])
+    if agent.control_owner is not None:
+        name = f"control:{agent.box}"
+        if leases.owned(name, agent.control_owner):
+            register_server_disconnect(AgentIdentity(str(agent.pk), agent.box, managed=True), cause=cause)
+        leases.release(name, agent.control_owner)
+    agent.control_owner = None
 
-    return token
 
-
-def revoke_credential(agent):
-    """Revoca la credencial sin eliminar la identidad ni su historial."""
-    agent.revoked_at = timezone.now()
-    agent.save(update_fields=["revoked_at", "updated_at"])
-
+@transaction.atomic
 def revoke_agent(agent):
-    """
-    Revoca la credencial actual del PC sin eliminar
-    su identidad ni su historial.
-    """
-    if agent.revoked_at is None:
-        agent.revoked_at = timezone.now()
-        agent.save(
-            update_fields=[
-                "revoked_at",
-                "updated_at",
-            ]
-        )
-
+    from .models import PCPairingCode
+    current = AgentRegistration.objects.select_for_update().get(pk=agent.pk)
+    PCPairingCode.objects.filter(agent=current).delete()
+    _invalidate_connection(current, "CREDENTIAL_REVOKED")
+    current.legacy_enabled = False
+    current.revoked_at = current.revoked_at or timezone.now()
+    current.save(update_fields=["revoked_at", "control_owner", "legacy_enabled", "updated_at"])
+    agent.revoked_at, agent.control_owner = current.revoked_at, None
     return agent
 
 
+@transaction.atomic
 def renew_agent(agent):
-    """
-    Genera una nueva credencial manteniendo el mismo agent_id.
-
-    La credencial anterior deja de ser válida inmediatamente.
-    Si el PC estaba revocado, queda habilitado nuevamente.
-    """
-    token, token_hash = _generate_credential(
-        agent.agent_id
-    )
-
-    agent.token_sha256 = token_hash
-    agent.revoked_at = None
-
-    agent.save(
-        update_fields=[
-            "token_sha256",
-            "revoked_at",
-            "updated_at",
-        ]
-    )
-
+    from .models import PCPairingCode
+    current = AgentRegistration.objects.select_for_update().get(pk=agent.pk)
+    PCPairingCode.objects.filter(agent=current).delete()
+    _invalidate_connection(current, "CREDENTIAL_RENEWED")
+    current.legacy_enabled = False
+    token, current.token_sha256 = _generate_credential(current.agent_id)
+    current.revoked_at = None
+    current.save(update_fields=["token_sha256", "revoked_at", "control_owner", "legacy_enabled", "updated_at"])
+    agent.token_sha256, agent.revoked_at, agent.control_owner = current.token_sha256, None, None
     return agent, token
+
+
+# Compatibilidad con los consumidores del servicio original.
+def revoke_credential(agent):
+    revoke_agent(agent)
+
+
+def renew_credential(agent):
+    return renew_agent(agent)[1]

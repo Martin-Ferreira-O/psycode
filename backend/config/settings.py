@@ -9,6 +9,7 @@ from urllib.parse import urlsplit
 
 from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
+from backend.common.boxes import is_box, DEFAULT_PC_BOXES
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 load_dotenv(BASE_DIR / ".env", override=False)
@@ -227,7 +228,7 @@ try:
     for agent_id, credential in CAPTURE_AGENTS.items():
         if (not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", agent_id)
                 or not isinstance(credential, dict) or set(credential) != {"box", "token_sha256"}
-                or credential["box"] not in {f"box-{n}" for n in range(3, 8)}
+                or not is_box(credential["box"])
                 or not isinstance(credential["token_sha256"], str)
                 or not re.fullmatch(r"[0-9a-f]{64}", credential["token_sha256"])):
             raise ValueError
@@ -255,7 +256,7 @@ try:
                 or set(scope) != {"collector_id", "boxes"} or scope["collector_id"] not in CAPTURE_AGENTS
                 or not isinstance(scope["boxes"], list) or not scope["boxes"]
                 or len(set(scope["boxes"])) != len(scope["boxes"])
-                or set(scope["boxes"]) - {f"box-{n}" for n in range(3, 8)}
+                or any(not is_box(box) for box in scope["boxes"])
                 or agenda_boxes.intersection(scope["boxes"])):
             raise ValueError()
         agenda_boxes.update(scope["boxes"])
@@ -273,3 +274,18 @@ try:
             raise ValueError
 except (ValueError, TypeError):
     raise ImproperlyConfigured("Las rutas de cifrado deben ser listas JSON de rutas absolutas.") from None
+
+# Vinculación inicial: código corto, un uso y presupuesto global contra ataques distribuidos.
+try:
+    PC_REGISTRY_BOXES = json.loads(os.getenv('PC_REGISTRY_BOXES', json.dumps(DEFAULT_PC_BOXES)))
+    if (not isinstance(PC_REGISTRY_BOXES, list) or not PC_REGISTRY_BOXES
+            or any(not is_box(box) for box in PC_REGISTRY_BOXES)
+            or len(set(PC_REGISTRY_BOXES)) != len(PC_REGISTRY_BOXES)):
+        raise ValueError()
+except (ValueError, TypeError):
+    raise ImproperlyConfigured('PC_REGISTRY_BOXES debe ser una lista de boxes válidos sin duplicados.') from None
+
+PC_PAIRING_TTL_SECONDS = positive_int("PC_PAIRING_TTL_SECONDS", 300)
+PC_PAIRING_IP_LIMIT = positive_int("PC_PAIRING_IP_LIMIT", 5)
+PC_PAIRING_GLOBAL_LIMIT = positive_int("PC_PAIRING_GLOBAL_LIMIT", 20)
+PC_PAIRING_WINDOW_SECONDS = positive_int("PC_PAIRING_WINDOW_SECONDS", 300)

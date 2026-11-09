@@ -30,6 +30,11 @@ class AgentIdentity:
     # Huella de la credencial con la que abrió la conexión.
     # Permite detectar renovación/revocación en conexiones WSS activas.
     credential_hash: str = ""
+    registration_id: str = ""
+
+    @property
+    def registry_id(self):
+        return self.registration_id or self.agent_id
 
 
 class BoxAgentAuthentication(BaseAuthentication):
@@ -74,6 +79,8 @@ def _managed_registration(agent_id):
             "box",
             "token_sha256",
             "revoked_at",
+            "legacy_agent_id",
+            "legacy_enabled",
         )
         .first()
     )
@@ -140,7 +147,7 @@ def authenticate_agent_header(header, *, source_ip=""):
             registration.token_sha256,
         )
 
-        if registration.revoked_at is not None or not matches:
+        if not registration.is_active or not matches:
             _consume_failed_agent_auth(
                 agent_id=agent_id,
                 source_ip=source_ip,
@@ -154,33 +161,18 @@ def authenticate_agent_header(header, *, source_ip=""):
             credential_hash=token_hash,
         )
 
-    # 2. Compatibilidad con PCs antiguos configurados
-    # mediante CAPTURE_AGENTS.
-    credential = settings.CAPTURE_AGENTS.get(agent_id)
-
-    expected = (
-        credential["token_sha256"]
-        if credential
-        else "0" * 64
-    )
-
-    matches = hmac.compare_digest(
-        token_hash,
-        expected,
-    )
-
-    if not credential or not matches:
-        _consume_failed_agent_auth(
-            agent_id=agent_id,
-            source_ip=source_ip,
-        )
+    # La identidad lógica se conserva en BD; el token antiguo sigue siendo válido.
+    from .legacy_registry import sync_legacy_registry
+    if agent_id in settings.CAPTURE_AGENTS:
+        sync_legacy_registry()
+    registration = AgentRegistration.objects.filter(legacy_agent_id=agent_id).first()
+    matches = hmac.compare_digest(token_hash, registration.token_sha256 if registration else "0" * 64)
+    if (registration is None or not registration.legacy_enabled
+            or not registration.is_active or not matches or _legacy_replaced(registration.box)
+            or not _legacy_credential_current(agent_id, registration.box, token_hash)):
+        _consume_failed_agent_auth(agent_id=agent_id, source_ip=source_ip)
         raise AuthenticationFailed()
-
-    return AgentIdentity(
-        agent_id,
-        credential["box"],
-        credential_hash=token_hash,
-    )
+    return AgentIdentity(agent_id, registration.box, managed=True, credential_hash=token_hash, registration_id=str(registration.pk))
 
 
 def ensure_agent_identity_current(identity):
@@ -191,16 +183,23 @@ def ensure_agent_identity_current(identity):
     invalida la conexión que utilizaba la credencial anterior.
     """
 
+    if identity.registration_id and not _legacy_credential_current(identity.agent_id, identity.box, identity.credential_hash):
+        raise AuthenticationFailed()
     if not identity.managed:
+        registration = AgentRegistration.objects.filter(legacy_agent_id=identity.agent_id).first()
+        if (_legacy_replaced(identity.box) or (registration and (
+                not registration.legacy_enabled or not registration.is_active
+                or (identity.credential_hash and not hmac.compare_digest(identity.credential_hash, registration.token_sha256))))):
+            raise AuthenticationFailed()
         return
 
     registration = _managed_registration(
-        identity.agent_id
+        identity.registry_id
     )
 
     if (
         registration is None
-        or registration.revoked_at is not None
+        or not registration.is_active
         or registration.box != identity.box
         or not hmac.compare_digest(
             registration.token_sha256,
@@ -208,4 +207,13 @@ def ensure_agent_identity_current(identity):
         )
     ):
         raise AuthenticationFailed()
-    
+
+
+def _legacy_replaced(box):
+    from backend.apps.agenda.models import SmileRoom
+    return SmileRoom.objects.filter(box=box, legacy_blocked_at__isnull=False).exists()
+
+
+def _legacy_credential_current(agent_id, box, token_hash):
+    configured = settings.CAPTURE_AGENTS.get(agent_id)
+    return bool(configured and configured['box'] == box and hmac.compare_digest(configured['token_sha256'], token_hash))

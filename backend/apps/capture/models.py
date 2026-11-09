@@ -50,7 +50,7 @@ class CaptureSession(models.Model):
             models.CheckConstraint(condition=models.Q(final_sequence__isnull=True) | models.Q(final_sequence__gte=-1),
                                    name="capture_valid_final_sequence"),
             models.CheckConstraint(condition=models.Q(state__in=SessionState.values), name="capture_valid_state"),
-            models.CheckConstraint(condition=models.Q(box__in=[f"box-{n}" for n in range(3, 8)]),
+            models.CheckConstraint(condition=models.Q(box__regex=r"^box-[1-9][0-9]{0,11}$"),
                                    name="capture_valid_box"),
         ]
         indexes = [models.Index(fields=["state", "last_seen_at"])]
@@ -84,6 +84,8 @@ class AcceptedSequence(models.Model):
     number = models.PositiveBigIntegerField()
     captured_at = models.DateTimeField()
     accepted_at = models.DateTimeField()
+    # Vacío para audio anterior a la trazabilidad por PC; no inferir su emisor.
+    agent_id = models.CharField(max_length=64, blank=True, default="", db_index=True)
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=["session", "number"], name="capture_unique_sequence")]
@@ -169,18 +171,29 @@ class AgentRegistration(models.Model):
         editable=False,
     )
     name = models.CharField(max_length=100)
-    box = models.CharField(
-        max_length=16,
-        choices=[(f"box-{n}", f"Box {n}") for n in range(3, 8)],
-    )
+    legacy_agent_id = models.CharField(max_length=64, null=True, blank=True, unique=True)
+    legacy_enabled = models.BooleanField(default=False)
+    smile_room = models.OneToOneField("agenda.SmileRoom", null=True, blank=True, on_delete=models.PROTECT, related_name="pc")
+    box = models.CharField(max_length=16)
     token_sha256 = models.CharField(max_length=64)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     revoked_at = models.DateTimeField(null=True, blank=True)
+    last_seen_at = models.DateTimeField(null=True, blank=True)
+    diagnostics = models.JSONField(default=dict)
+    control_owner = models.UUIDField(null=True, blank=True, editable=False)
 
     @property
     def is_active(self):
-        return self.revoked_at is None
+        if self.revoked_at is not None:
+            return False
+        if self.legacy_enabled:
+            from django.conf import settings
+            import hmac
+            configured = settings.CAPTURE_AGENTS.get(self.legacy_agent_id)
+            return bool(configured and configured['box'] == self.box
+                        and hmac.compare_digest(configured['token_sha256'], self.token_sha256))
+        return True
 
     def __str__(self):
         return f"{self.name} ({self.box})"
@@ -327,3 +340,18 @@ class StorageCleanupRun(models.Model):
     provider_failures = models.PositiveIntegerField(default=0)
     error_code = models.CharField(max_length=40, blank=True)
     audit_sent_at = models.DateTimeField(null=True)
+
+
+class PCRegistryAllocation(models.Model):
+    """Fila única para serializar la asignación de salas entre procesos."""
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+
+
+class PCPairingCode(models.Model):
+    agent = models.OneToOneField(AgentRegistration, primary_key=True, on_delete=models.CASCADE, related_name="pairing")
+    code_hash = models.CharField(max_length=64, unique=True)
+    expires_at = models.DateTimeField()
+    consumed_at = models.DateTimeField(null=True)
+    installation_id = models.UUIDField(null=True)
+    pending_token_sha256 = models.CharField(max_length=64, blank=True)
+    activated_at = models.DateTimeField(null=True)
