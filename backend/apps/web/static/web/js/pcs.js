@@ -127,8 +127,9 @@
         history.setAttribute('aria-label', `Ver historial de ${pc.name}`);
         const actions = nodos('details', null, 'pc-mantenimiento');
         actions.append(nodos('summary', 'Instalación y acceso'));
-        const renew = boton(instalacion ? 'Preparar instalación' : 'Reinstalar o reemplazar', () => confirmar(pc, 'renovar'));
-        renew.setAttribute('aria-label', `${instalacion ? 'Preparar instalación de' : 'Reinstalar o reemplazar'} ${pc.name}`);
+        const renovarTexto = instalacion ? 'Generar otro código' : 'Reinstalar o reemplazar';
+        const renew = boton(renovarTexto, () => confirmar(pc, 'renovar'));
+        renew.setAttribute('aria-label', instalacion ? `${renovarTexto} para ${pc.name}` : `${renovarTexto} ${pc.name}`);
         renew.disabled = pc.room_available === false;
         const revoke = boton('Deshabilitar acceso', () => confirmar(pc, 'revocar'), 'pcs-peligro');
         revoke.setAttribute('aria-label', `Deshabilitar acceso de ${pc.name}`);
@@ -258,6 +259,7 @@
     function mostrarCredencial(data) {
         if (typeof data.pairing_code !== 'string' || !/^[A-HJ-NP-Z2-9]{5}$/.test(data.pairing_code)) throw new Error('missing code');
         $('equipoCredencialPC').textContent = data.name.trim().toLocaleLowerCase('es') === boxNombre(data.box).toLocaleLowerCase('es') ? data.name : `${data.name} · ${boxNombre(data.box)}`;
+        $('servidorCredencialPC').textContent = window.location.origin;
         $('secretoPC').value = data.pairing_code;
         $('vencimientoCodigoPC').textContent = `Válido hasta ${fecha(data.expires_at)} · Chile`;
         $('estadoCopiaPC').textContent = '';
@@ -283,12 +285,14 @@
     });
     function confirmar(pc, accion) {
         objetivo = { pc, accion };
-        $('tituloAccionPC').textContent = accion === 'cancelar-instalacion' ? 'Cancelar instalación pendiente' : accion === 'renovar' ? 'Reinstalar o reemplazar PC' : 'Deshabilitar acceso';
+        const otroCodigo = ['pending_pairing', 'pairing_expired'].includes(pc.credential_state);
+        const tituloRenovacion = otroCodigo ? 'Generar otro código' : 'Reinstalar o reemplazar PC';
+        $('tituloAccionPC').textContent = accion === 'cancelar-instalacion' ? 'Cancelar instalación pendiente' : accion === 'renovar' ? tituloRenovacion : 'Deshabilitar acceso';
         $('descripcionAccionPC').textContent = accion === 'cancelar-instalacion'
             ? `Se cancelará la instalación pendiente de ${pc.name}. Su acceso actual y su historial se conservan.` : accion === 'renovar'
             ? `Prepara un código para que el técnico instale o recupere ${pc.name}. El acceso actual se mantiene hasta que la nueva instalación se confirme. Su identidad, box e historial se conservan. Una caída de Internet se recupera automáticamente y no requiere esta acción.`
             : `Se deshabilitará inmediatamente el acceso de ${pc.name} y se cancelarán sus instalaciones pendientes. No podrá enviar audio ni recibir órdenes hasta que un técnico complete una nueva instalación. Su identidad e historial se conservan.`;
-        $('confirmarAccionPC').textContent = accion === 'cancelar-instalacion' ? 'Cancelar instalación' : accion === 'renovar' ? 'Preparar instalación' : 'Deshabilitar acceso';
+        $('confirmarAccionPC').textContent = accion === 'cancelar-instalacion' ? 'Cancelar instalación' : accion === 'renovar' ? (otroCodigo ? 'Generar código' : 'Preparar instalación') : 'Deshabilitar acceso';
         mensaje('errorAccionPC', ''); abrir('dialogoAccionPC');
     }
     $('confirmarAccionPC').addEventListener('click', async () => {

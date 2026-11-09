@@ -1,4 +1,4 @@
-# Gestión de PCs: instalación única y operación diaria
+# Gestión de PCs · Instalación y operación diaria
 
 Pantalla: `/api/v1/pcs/panel`; `/gestion-pcs` redirige a ella. La pantalla y las
 APIs administrativas exigen administrador activo. Con cookies, las mutaciones
@@ -27,33 +27,112 @@ de boxes falla de forma independiente: no impide consultar el estado de los PCs.
 
 ## Alta e instalación inicial
 
-1. El técnico prepara el servidor, HTTPS/WSS, migraciones, boxes configurados y
-   componentes de captura. El mismo programa se instala en todos los equipos.
-2. En **Crear nuevo PC**, seleccionar un box y escribir un nombre reconocible.
-   Los boxes proceden de `PC_REGISTRY_BOXES` (3–7 por defecto), del
-   registro existente y de las salas verificadas de Smile. No se inventan IDs de Smile ni se exige esperar a su catálogo para
-   registrar un box ya configurado.
-3. El técnico introduce el código de cinco caracteres mediante la CLI del agente
-   en ese computador. Tiene cinco minutos de vigencia. El agente conserva OBS,
-   estado y configuración existentes; guarda la credencial automáticamente.
-4. Completar el inicio automático bajo la cuenta interactiva que opera OBS y
-   verificar micrófono, audio, permisos y reinicio de Windows. La vinculación no
-   inicia una grabación ni demuestra que haya audio.
+1. Desde el PC Windows x64, inicia sesión en Psycode como administrador y abre
+   **Gestión de PCs**. Pulsa **Descargar instalador para Windows x64** y ejecuta
+   el `.exe` con la cuenta de Windows que opera OBS. El instalador incluye
+   Python y detecta OBS, FFmpeg y ffprobe. Si faltan, descarga y verifica las
+   dependencias. Windows puede solicitar elevación para instalar OBS.
+2. Con el asistente abierto, usa **Crear nuevo PC** para elegir el box y darle
+   un nombre al equipo. Los boxes proceden de `PC_REGISTRY_BOXES` (3–7 por
+   defecto), del registro existente y de las salas verificadas de Smile. El
+   diálogo de alta también ofrece el instalador y su SHA-256. Puedes completar
+   todo este flujo con el navegador y el asistente de Windows.
+3. En **Vinculación** del asistente, introduce la dirección HTTPS y el código
+   de cinco caracteres que muestra el diálogo. Pulsa **Vincular e iniciar**. El código
+   vence a los cinco minutos por defecto. Si vence, cierra el diálogo y abre
+   **Instalación y acceso → Generar otro código** en la tarjeta del mismo PC.
+   Usa **Recuperar vinculación** en el asistente para continuar un canje
+   interrumpido que ya tenga progreso guardado.
+4. Comprueba que el equipo figure como **Conectado** en Gestión de PCs y que
+   vuelva a conectarse al iniciar sesión en Windows. Para verificar el audio,
+   comprueba OBS y la pista mediante una sesión sintética autorizada.
 
-El instalador `.exe` y su interfaz gráfica son una tarea posterior. Esta entrega
-incluye el registro web/API, vinculación y recuperación del agente por la CLI.
-El borrador gráfico previo se apartó del código activo y se conservó en
-`.local/next-task/windows-installer` del servidor.
-Para la configuración inicial y recuperación técnica se utiliza la CLI:
+El mismo `.exe` sirve para todos los boxes. La descarga está separada del alta
+y del canje, y no modifica el código. Si el instalador no está publicado, la
+pantalla muestra un aviso y permite consultar equipos, generar códigos y
+vincular desde un asistente que ya esté instalado.
+
+## Publicar el instalador en el VPS
+
+El VPS sirve el `.exe` y su SHA-256 por HTTPS con la misma autorización de
+administrador activo que el panel. `PC_WINDOWS_INSTALLER_DIR` apunta a un
+directorio absoluto fuera de los checkouts y de los estáticos públicos. En
+este VPS usa `/srv/psycode/shared/agent-installers`. Cada versión tiene su
+propio directorio `X.Y.Z`. `current` es un enlace relativo al directorio de
+la versión activa. Nginx usa su proxy existente para estas descargas. Los
+archivos persisten entre despliegues y tras el vencimiento del artefacto de CI.
+
+1. Prepara el paquete Windows x64 verificado. Para un build nuevo sigue
+   `docs/INSTALACION-WINDOWS.md` del agente. Para la distribución institucional,
+   esa guía pide revisar avisos y licencias, aprobar la identidad visual y
+   aplicar la firma Authenticode. El binario local `1.2.1` de `psycode-agent/dist`
+   está sin firmar. Después de firmar, genera el manifiesto sobre el `.exe`
+   final con `shasum -a 256 "$exe" > "$exe.sha256"` desde el directorio que
+   contiene el binario. Para verificar y subir el par desde la máquina de
+   mantenimiento:
+
+   ```sh
+   set -eu
+   cd /Users/martin/Desktop/psycode-agent/dist
+   exe=PsycodeAgent-Setup-1.2.1-x64.exe
+   shasum -a 256 -c "$exe.sha256"
+   vps=ubuntu@144.22.56.52
+   upload=$(ssh "$vps" 'mktemp -d "$HOME/psycode-installer.XXXXXX"')
+   scp "$exe" "$exe.sha256" "$vps:$upload/"
+   printf 'Directorio de carga en el VPS = %s\n' "$upload"
+   ```
+
+   El SHA-256 comprobado para los bytes locales de `1.2.1` antes de firmar es
+   `9a1d311f18a0405f93380f4b6bc1a34a3ed4353a1226c050642e4c82985a8ba8`.
+
+2. En el VPS, como usuario de mantenimiento, sustituye `upload` por la ruta
+   que imprimió el paso anterior. El servicio web lee los archivos como
+   `psycode`. Activa el enlace solo después de verificar la copia definitiva.
+   Conserva el directorio de cada versión publicada para poder volver a ella.
+
+   ```sh
+   set -eu
+   upload=/home/ubuntu/psycode-installer.XXXXXX
+   root=/srv/psycode/shared/agent-installers
+   version=1.2.1
+   exe="PsycodeAgent-Setup-$version-x64.exe"
+   (cd "$upload" && sha256sum --check --strict "$exe.sha256")
+   sudo install -d -o root -g psycode -m 0750 "$root"
+   sudo mkdir -m 0750 "$root/$version"
+   sudo chgrp psycode "$root/$version"
+   sudo install -o root -g psycode -m 0640 \
+     "$upload/$exe" "$upload/$exe.sha256" "$root/$version/"
+   sudo -u psycode sh -c 'cd "$1" && sha256sum --check --strict "$2"' \
+     sh "$root/$version" "$exe.sha256"
+   next="$root/.current-$$"
+   sudo ln -s "$version" "$next"
+   sudo mv -Tf "$next" "$root/current"
+   ```
+
+3. Añade `PC_WINDOWS_INSTALLER_DIR=/srv/psycode/shared/agent-installers` a
+   `/srv/psycode/shared/server.env` con `sudoedit`. Despliega el cambio web por
+   el procedimiento habitual de `main`. Si el código ya está desplegado,
+   aplica la variable con `sudo systemctl restart psycode-web.service`.
+   En `/gestion-pcs`, verifica como administrador que se ofrece `1.2.1`, que
+   el navegador descarga ambos adjuntos y que su SHA-256 coincide. En una
+   ventana sin sesión, verifica que la URL del `.exe` rechaza la solicitud.
+
+### Volver a una versión anterior
+
+En el VPS, indica una versión anterior que hayas conservado y verifica sus
+archivos antes de reemplazar `current`. La próxima carga del panel refleja el
+cambio sin reiniciar el servicio. Esto cambia lo que se descarga desde la web.
 
 ```sh
-psycode-agent vincular --server https://servidor.example --env-file /ruta/privada/agent.env
-psycode-agent resume-installation --env-file /ruta/privada/agent.env
+set -eu
+root=/srv/psycode/shared/agent-installers
+version=1.2.0  # Solo si se publicó y conservó esta versión.
+sudo -u psycode sh -c 'cd "$1" && sha256sum --check --strict "$2"' \
+  sh "$root/$version" "PsycodeAgent-Setup-$version-x64.exe.sha256"
+next="$root/.current-$$"
+sudo ln -s "$version" "$next"
+sudo mv -Tf "$next" "$root/current"
 ```
-
-No pasar códigos o claves como argumentos. El primer comando solicita el código
-sin mostrarlo. El segundo recupera una instalación interrumpida con el progreso
-privado guardado, sin volver a pedirlo.
 
 ## Activación recuperable de credenciales
 
@@ -126,6 +205,7 @@ Los archivos privados usan 0600 en POSIX y los helpers de ACL en Windows.
 |---|---|
 | `GET /api/v1/pcs` | Registro, estados y `installation_pending`; nunca devuelve secretos. |
 | `GET /api/v1/pcs/salas` | Boxes configurados y salas verificadas; `room_id`/`smile_box_id` pueden ser nulos sin catálogo. |
+| `GET /api/v1/pcs/instalador/windows-x64/{version}` | Descarga privada del `.exe` de la versión activa. Añade `/sha256` para descargar su checksum. Devuelve 404 si la versión solicitada no está disponible. |
 | `POST /api/v1/pcs/alta` | `{name, box}` o `{name, room_id}`, exactamente una selección; devuelve código temporal. |
 | `POST /api/v1/pcs/{id}/vinculacion` | Prepara instalación conservando la credencial vigente. |
 | `POST /api/v1/pcs/{id}/cancelar-instalacion` | Cancela preparación sin revocar acceso actual; rechaza cancelar una activación ya confirmada. |

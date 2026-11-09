@@ -1,8 +1,11 @@
 // Integración en navegador con base local sintética; no ejecutar en producción.
 const assert = require('node:assert/strict');
+const { createHash } = require('node:crypto');
+const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const base = process.env.FRONTEND_TEST_URL || 'https://127.0.0.1:8769';
 const output = process.env.FRONTEND_SCREENSHOT_DIR;
+const installerHash = process.env.PC_BROWSER_INSTALLER_SHA256;
 const ok = data => ({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, data }) });
 (async () => {
     const browser = await chromium.launch({ headless: true, ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}) });
@@ -10,6 +13,16 @@ const ok = data => ({ status: 200, contentType: 'application/json', body: JSON.s
     const page = await context.newPage();
     const errors = [];
     page.on('pageerror', e => errors.push(e.message));
+    const checkInstaller = async container => {
+        if (!installerHash) {
+            await container.getByText('El instalador de Windows x64 no está disponible.', { exact: false }).waitFor();
+            return;
+        }
+        const link = container.getByRole('link', { name: 'Descargar instalador para Windows x64' });
+        const [download] = await Promise.all([page.waitForEvent('download'), link.click()]);
+        assert.match(download.suggestedFilename(), /^PsycodeAgent-Setup-\d+\.\d+\.\d+-x64\.exe$/);
+        assert.equal(createHash('sha256').update(fs.readFileSync(await download.path())).digest('hex'), installerHash);
+    };
     const login = async (tab, username) => {
         await tab.goto(base);
         const status = await tab.evaluate(async username => {
@@ -23,6 +36,7 @@ const ok = data => ({ status: 200, contentType: 'application/json', body: JSON.s
     try {
         await login(page, 'pcs-browser');
         await page.goto(`${base}/api/v1/pcs/panel`);
+        await checkInstaller(page.locator('.pcs-descarga-inicial'));
         await page.getByRole('heading', { name: 'PC Box 3', exact: true }).waitFor();
         assert.equal((await page.locator('body').innerText()).includes('catálogo'), false);
         await page.getByRole('button', { name: 'Crear nuevo PC en Box 4', exact: true }).waitFor();
@@ -60,11 +74,13 @@ const ok = data => ({ status: 200, contentType: 'application/json', body: JSON.s
         await page.locator('#nombrePC').fill('Box 18');
         await page.locator('#guardarPC').click();
         await page.locator('#dialogoCredencialPC[open]').waitFor();
+        assert.equal(await page.locator('#servidorCredencialPC').textContent(), new URL(base).origin);
         const code = await page.locator('#secretoPC').inputValue();
         assert.match(code, /^[A-HJ-NP-Z2-9]{5}$/);
+        await checkInstaller(page.locator('#dialogoCredencialPC'));
+        assert.equal(await page.locator('#secretoPC').inputValue(), code);
         assert.equal(await page.locator('#identidadCredencialPC').count(), 0);
         const { spawnSync } = require('node:child_process');
-        const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
         const privateRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'pcs-pair-test-'));
         const envFile = path.join(privateRoot, 'agent.env');
         fs.writeFileSync(envFile, `OBSW_PASSWORD=synthetic-test\nSTREAM_URL=rtmp://localhost/test\nAGENT_STATE_ROOT=${privateRoot}/state\n`, { mode: 0o600 });

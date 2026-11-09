@@ -25,6 +25,10 @@
                 <div class="pcs-acciones"><button id="actualizarPCs" class="pcs-boton" type="button">Actualizar</button>
                     <button id="crearPC" class="pcs-boton pcs-primario" type="button">Crear nuevo PC</button></div>
             </div>
+            <div class="pcs-descarga-inicial">
+                {% include "web/components/pcs_instalador.html" %}
+                {% if installer_version %}<p class="pcs-ayuda">Puedes ejecutar el instalador y abrir el asistente antes de crear el PC y generar el código.</p>{% endif %}
+            </div>
             <div class="pcs-filtros">
                 <label class="pcs-campo pcs-busqueda">Buscar sala o equipo<input id="buscarPC" type="search" placeholder="Sala, nombre o identificador" maxlength="100"></label>
                 <label class="pcs-campo">Box<select id="boxPC"><option value="">Todos los boxes</option></select></label>
@@ -56,11 +60,12 @@
 </dialog>
 <dialog id="dialogoCredencialPC" class="pcs-dialogo" aria-labelledby="tituloCredencialPC" aria-describedby="avisoCredencialPC">
     <p class="pcs-eyebrow">INSTALACIÓN INICIAL</p><h2 id="tituloCredencialPC">Código temporal</h2>
-    <p id="equipoCredencialPC"></p><p id="avisoCredencialPC" class="pcs-aviso">El técnico introduce este código en el agente del computador. Es válido por 5 minutos y la configuración se guarda automáticamente. El PC actual conserva su acceso hasta confirmar la instalación.</p>
+    <p id="equipoCredencialPC"></p><p id="avisoCredencialPC" class="pcs-aviso">En el asistente de Psycode Agent, introduce el servidor <strong id="servidorCredencialPC"></strong> y el código. Pulsa «Vincular e iniciar». El acceso actual del PC se conserva hasta confirmar la instalación.</p>
     <label class="pcs-campo">Código de instalación<input id="secretoPC" class="pcs-codigo" readonly spellcheck="false" autocomplete="off"></label>
     <p id="vencimientoCodigoPC" class="pcs-ayuda"></p>
     <div class="pcs-acciones"><button id="copiarCredencialPC" type="button" class="pcs-boton">Copiar código</button><p id="estadoCopiaPC" class="pcs-ayuda" role="status" aria-live="polite"></p></div>
-    <p class="pcs-ayuda">Entrega el código al técnico que configura el agente de este computador. No se necesita otro código para reconectar después de una caída de Internet.</p>
+    <p class="pcs-ayuda">Si el código vence, cierra este diálogo y abre «Instalación y acceso» en la tarjeta del mismo PC para generar otro.</p>
+    {% include "web/components/pcs_instalador.html" %}
     <div class="pcs-dialogo-acciones"><button id="cerrarCredencialPC" type="button" class="pcs-boton pcs-primario">Listo, cerrar</button></div>
 </dialog>
 <dialog id="dialogoHistorialPC" class="pcs-dialogo pcs-historial" aria-labelledby="tituloHistorialPC">
