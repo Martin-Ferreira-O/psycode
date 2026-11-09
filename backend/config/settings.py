@@ -285,6 +285,9 @@ try:
 except (ValueError, TypeError):
     raise ImproperlyConfigured('PC_REGISTRY_BOXES debe ser una lista de boxes válidos sin duplicados.') from None
 
+# Ruta absoluta y privada. Sin configuración no se ofrece la descarga.
+PC_WINDOWS_INSTALLER_DIR = os.getenv("PC_WINDOWS_INSTALLER_DIR", "").strip()
+
 PC_PAIRING_TTL_SECONDS = positive_int("PC_PAIRING_TTL_SECONDS", 300)
 PC_PAIRING_IP_LIMIT = positive_int("PC_PAIRING_IP_LIMIT", 5)
 PC_PAIRING_GLOBAL_LIMIT = positive_int("PC_PAIRING_GLOBAL_LIMIT", 20)

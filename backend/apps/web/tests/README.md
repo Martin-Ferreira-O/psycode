@@ -85,3 +85,9 @@ que informa y termina su servidor al concluir. `--artifacts-dir` selecciona ese
 directorio. No prepara ni utiliza la base habitual del servidor. También cubre
 fallo independiente de salas, actualización automática conservando foco y
 acciones de instalación separadas de una desconexión normal.
+
+El runner comprueba el aviso si no hay instalador publicado. Para comprobar
+ambas descargas en Chromium, apunta `PC_WINDOWS_INSTALLER_DIR` a un directorio
+de prueba con la estructura descrita en [Gestión de PCs](../../../../docs/GESTION-DE-PCS.md)
+y pasa el hash esperado del `.exe` en `PC_BROWSER_INSTALLER_SHA256`. El navegador
+descarga el archivo y verifica su hash sin ejecutarlo.

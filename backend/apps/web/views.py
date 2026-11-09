@@ -4,6 +4,7 @@ from django.utils.decorators import method_decorator
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from backend.apps.operational.views import IsActiveAdmin
+from backend.apps.operational.windows_installer import published_installer
 
 
 @ensure_csrf_cookie
@@ -54,4 +55,7 @@ class PCPanelView(APIView):
     permission_classes = [IsAuthenticated, IsActiveAdmin]
 
     def get(self, request):
-        return render(request, "web/pcs.html")
+        installer = published_installer()
+        return render(request, "web/pcs.html", {
+            "installer_version": installer.parent.name if installer else None,
+        })
