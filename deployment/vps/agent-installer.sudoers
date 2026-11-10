@@ -1,0 +1,2 @@
+# La cuenta de GitHub Actions solo puede entregar un par de archivos por stdin.
+psycode-installer ALL=(root) NOPASSWD: /usr/bin/timeout 900 /usr/local/sbin/psycode-agent-installer receive

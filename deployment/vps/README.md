@@ -153,3 +153,55 @@ La instalación de esta unidad y el cifrado real son acciones de operaciones.
 Versionar los archivos no ejecuta ni acredita un despliegue: en un equipo sin
 volúmenes dm-crypt ni archivos de clave protegidos, `verify_sensitive_storage`
 termina en `ENCRYPTION_UNVERIFIED`.
+
+## Publicación del instalador Windows
+
+`PC_WINDOWS_INSTALLER_DIR` apunta a `/srv/psycode/shared/agent-installers`.
+El directorio es de `root:psycode` con permisos `0750` y está fuera de los
+estáticos y del checkout. Se conserva entre despliegues web. Cada versión
+se guarda en su propio directorio y los servicios leen el enlace `current`.
+
+Desde el checkout de mantenimiento en Ubuntu, instala el publicador y valida
+la regla de sudo. La cuenta dedicada queda con contraseña bloqueada. Su
+directorio y el archivo de claves son propiedad de root.
+
+```sh
+sudo install -d -m 0750 -o root -g psycode /srv/psycode/shared/agent-installers
+sudo install -m 0755 -o root -g root deployment/vps/agent-installer.py /usr/local/sbin/psycode-agent-installer
+sudo visudo -cf deployment/vps/agent-installer.sudoers
+sudo install -m 0440 -o root -g root deployment/vps/agent-installer.sudoers /etc/sudoers.d/psycode-agent-installer
+id psycode-installer >/dev/null 2>&1 || sudo useradd --system --home-dir /var/lib/psycode-installer --shell /bin/sh psycode-installer
+sudo install -d -m 0755 -o root -g root /var/lib/psycode-installer /var/lib/psycode-installer/.ssh
+```
+
+Genera una clave ED25519 exclusiva para este workflow. Instala en
+`/var/lib/psycode-installer/.ssh/authorized_keys` una sola línea que combine
+las opciones siguientes y la clave pública generada. El archivo debe tener
+propietario `root:root` y permisos `0644`.
+
+```text
+restrict,command="/usr/bin/sudo -n /usr/bin/timeout 900 /usr/local/sbin/psycode-agent-installer receive" ssh-ed25519 <clave-pública>
+```
+
+Configura `AGENT_INSTALLER_SSH_KEY` en los secretos del repositorio del
+agente con la clave privada exclusiva. Configura
+`AGENT_INSTALLER_KNOWN_HOSTS` con la entrada ED25519 del VPS verificada
+por el operador. El workflow tiene acceso de solo lectura a Releases con
+su `GITHUB_TOKEN`. Configura la huella de 40 caracteres del certificado
+institucional de firma de código en la variable
+`PSYCODE_WINDOWS_SIGNER_THUMBPRINT`. La firma y la comprobación de la
+versión interna se hacen en Windows antes del envío. El VPS valida nombre,
+versión y SHA-256 recibido con la clave exclusiva. El acceso de mantenimiento
+usa su propia clave.
+
+Una sesión SSH con la clave del workflow solo puede entregar un paquete por
+stdin. El formato contiene la versión, el tamaño decimal y la línea del
+manifiesto, seguidos por los bytes del ejecutable. El publicador valida en
+una carpeta temporal, conserva los bytes de cada versión y cambia el enlace
+bajo bloqueo. Usa `rollback` y `resume` para mantenimiento. Las instrucciones
+y las verificaciones del panel están en
+[Gestión de PCs](../../docs/GESTION-DE-PCS.md#publicación-estable-del-instalador).
+
+```sh
+python3 deployment/vps/test_agent_installer.py
+```
