@@ -155,6 +155,21 @@ Sus reportes pendientes mantienen identidad de recolección, bytes y alcance. So
 ese equipo necesita las credenciales privadas de Smile. Los demás PCs no consultan
 agendas por su cuenta.
 
+Un administrador puede usar **Probar colector** en la tarjeta del PC designado.
+El PC debe estar conectado con una versión compatible. La prueba ejecuta el
+extractor integrado en ese equipo: inicia sesión y verifica el selector de
+salas. No descarga citas, no modifica la agenda ni recibe claves por la web.
+La tarjeta muestra el resultado al actualizarse. Si indica que falta el perfil,
+impórtalo desde **Soporte** en ese PC. Un resultado correcto no confirma la
+entrega de una recolección completa; para eso revisa la sincronización normal.
+
+El agente anuncia `agenda.smile-check.v1` y el servidor la negocia solo para el
+colector autorizado. `POST /api/v1/internal/smile-collector-check` usa la
+credencial del agente y el [contrato v1](../contracts/smile-collector-check-v1.schema.json).
+La prueba se reclama una sola vez y vence tras diez minutos sin resultado.
+Aplicar `agenda.0004` antes de activar la función. Las versiones anteriores
+siguen recolectando con sus contratos vigentes.
+
 Una descarga fallida no borra el catálogo anterior ni publica una agenda vacía.
 Una sala retirada por una sincronización completa bloquea nuevas instalaciones y
 captura. Registrar un PC no elimina los controles de autorización ni inventa una

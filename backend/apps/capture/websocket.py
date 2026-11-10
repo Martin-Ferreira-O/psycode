@@ -23,6 +23,7 @@ from .server_connectivity import (
 )
 from functools import partial
 from backend.common.errors import ServiceError
+from backend.apps.agenda.collector_check import CAPABILITY as SMILE_CHECK_CAPABILITY, sources_for
 
 
 def serial(value):
@@ -87,7 +88,7 @@ class RemoteControl:
             leases.release(self.name, self.owner)
 
     @transaction.atomic
-    def register_hello(self, agent_version):
+    def register_hello(self, agent_version, smile_check_supported=False):
         """
         Guarda información estable anunciada por el agente
         durante el handshake WebSocket.
@@ -105,6 +106,8 @@ class RemoteControl:
         )
 
         diagnostics = {"agent_version": agent_version}
+        if smile_check_supported:
+            diagnostics["smile_check_supported"] = True
 
         status.seen_at = now
         status.diagnostics = diagnostics
@@ -178,6 +181,8 @@ class RemoteControl:
 
                 # Status es una fotografía; un opcional ausente deja de ser conocido.
                 diagnostics = {"agent_version": status.diagnostics.get("agent_version")}
+                if status.diagnostics.get("smile_check_supported") is True:
+                    diagnostics["smile_check_supported"] = True
                 diagnostics.update(p)
 
                 status.seen_at = timezone.now()
@@ -250,11 +255,15 @@ async def agent_websocket(scope, receive, send):
             raise ValueError("INVALID_MESSAGE")
         await db(control.open)
         opened = True
-        await db(control.register_hello, p["agent_version"])
+        smile_check = SMILE_CHECK_CAPABILITY in p["capabilities"] and bool(await db(sources_for, identity))
+        await db(control.register_hello, p["agent_version"], smile_check)
         await db(register_server_reconnect, identity)
+        capabilities = ["audio.v1", "audio.v2", "agenda.excel.v1", "agenda.smile-json.v1",
+                        "agent.events.v1", "sessions.capture-ended.v1"]
+        if smile_check:
+            capabilities.append(SMILE_CHECK_CAPABILITY)
         await emit("ready", {"box": identity.box, "server_time": timezone.now().isoformat(),
-            "capabilities": ["audio.v1", "audio.v2", "agenda.excel.v1", "agenda.smile-json.v1",
-                             "agent.events.v1", "sessions.capture-ended.v1"],
+            "capabilities": capabilities,
             "heartbeat_interval": settings.CAPTURE_HEARTBEAT_SECONDS}, hello["message_id"])
         next_poll = 0
         last_message = time.monotonic()
