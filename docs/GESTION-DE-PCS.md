@@ -52,87 +52,55 @@ y del canje, y no modifica el código. Si el instalador no está publicado, la
 pantalla muestra un aviso y permite consultar equipos, generar códigos y
 vincular desde un asistente que ya esté instalado.
 
-## Publicar el instalador en el VPS
+## Publicación estable del instalador
 
-El VPS sirve el `.exe` y su SHA-256 por HTTPS con la misma autorización de
-administrador activo que el panel. `PC_WINDOWS_INSTALLER_DIR` apunta a un
-directorio absoluto fuera de los checkouts y de los estáticos públicos. En
-este VPS usa `/srv/psycode/shared/agent-installers`. Cada versión tiene su
-propio directorio `X.Y.Z`. `current` es un enlace relativo al directorio de
-la versión activa. Nginx usa su proxy existente para estas descargas. Los
-archivos persisten entre despliegues y tras el vencimiento del artefacto de CI.
+GitHub Releases del agente es la fuente de versiones. Publica una Release
+estable con etiqueta `vX.Y.Z` y los dos adjuntos definitivos
+`PsycodeAgent-Setup-X.Y.Z-x64.exe` y `PsycodeAgent-Setup-X.Y.Z-x64.exe.sha256`.
+Genera el SHA-256 después de aplicar la firma Authenticode institucional.
+El workflow **Publish stable Windows installer to Psycode** valida la versión
+interna, la firma y los hashes antes de enviar el par al VPS. Para reintentar,
+ejecuta el workflow en `main` e indica la etiqueta de la misma Release.
 
-1. Prepara el paquete Windows x64 verificado. Para un build nuevo sigue
-   `docs/INSTALACION-WINDOWS.md` del agente. Para la distribución institucional,
-   esa guía pide revisar avisos y licencias, aprobar la identidad visual y
-   aplicar la firma Authenticode. El binario local `1.2.1` de `psycode-agent/dist`
-   está sin firmar. Después de firmar, genera el manifiesto sobre el `.exe`
-   final con `shasum -a 256 "$exe" > "$exe.sha256"` desde el directorio que
-   contiene el binario. Para verificar y subir el par desde la máquina de
-   mantenimiento:
+El VPS coteja el nombre y la versión del manifiesto, comprueba el SHA-256 de los
+bytes guardados y activa `current` mediante un reemplazo atómico. Conserva los
+directorios de las versiones anteriores. El panel y la API de actualización del
+agente leen el mismo enlace en cada petición. La nueva versión queda disponible
+sin reiniciar el servicio. La automatización omite los reintentos de versiones
+inferiores a la última recibida y rechaza sustituir los bytes de una versión
+existente.
 
-   ```sh
-   set -eu
-   cd /Users/martin/Desktop/psycode-agent/dist
-   exe=PsycodeAgent-Setup-1.2.1-x64.exe
-   shasum -a 256 -c "$exe.sha256"
-   vps=ubuntu@144.22.56.52
-   upload=$(ssh "$vps" 'mktemp -d "$HOME/psycode-installer.XXXXXX"')
-   scp "$exe" "$exe.sha256" "$vps:$upload/"
-   printf 'Directorio de carga en el VPS = %s\n' "$upload"
-   ```
+Para verificar una publicación, abre `/gestion-pcs` como administrador,
+comprueba la versión visible y descarga ambos adjuntos. Comprueba el SHA-256
+del `.exe` descargado. Repite la petición sin sesión y comprueba que se rechaza.
+La aceptación en Windows se realiza por separado. Instala manualmente 1.3.0
+sobre 1.2.1 con la misma cuenta operadora y comprueba la vinculación y los
+pendientes. Para probar la autoactualización, usa dos builds de prueba y un
+Psycode de ensayo con una identidad sintética vinculada. Comprueba el rechazo
+de la descarga al elegir **No**, la instalación al elegir **Sí**, la integridad,
+la reapertura y el aplazamiento durante una captura sintética.
 
-   El SHA-256 comprobado para los bytes locales de `1.2.1` antes de firmar es
-   `9a1d311f18a0405f93380f4b6bc1a34a3ed4353a1226c050642e4c82985a8ba8`.
+### Revertir y reanudar
 
-2. En el VPS, como usuario de mantenimiento, sustituye `upload` por la ruta
-   que imprimió el paso anterior. El servicio web lee los archivos como
-   `psycode`. Activa el enlace solo después de verificar la copia definitiva.
-   Conserva el directorio de cada versión publicada para poder volver a ella.
-
-   ```sh
-   set -eu
-   upload=/home/ubuntu/psycode-installer.XXXXXX
-   root=/srv/psycode/shared/agent-installers
-   version=1.2.1
-   exe="PsycodeAgent-Setup-$version-x64.exe"
-   (cd "$upload" && sha256sum --check --strict "$exe.sha256")
-   sudo install -d -o root -g psycode -m 0750 "$root"
-   sudo mkdir -m 0750 "$root/$version"
-   sudo chgrp psycode "$root/$version"
-   sudo install -o root -g psycode -m 0640 \
-     "$upload/$exe" "$upload/$exe.sha256" "$root/$version/"
-   sudo -u psycode sh -c 'cd "$1" && sha256sum --check --strict "$2"' \
-     sh "$root/$version" "$exe.sha256"
-   next="$root/.current-$$"
-   sudo ln -s "$version" "$next"
-   sudo mv -Tf "$next" "$root/current"
-   ```
-
-3. Añade `PC_WINDOWS_INSTALLER_DIR=/srv/psycode/shared/agent-installers` a
-   `/srv/psycode/shared/server.env` con `sudoedit`. Despliega el cambio web por
-   el procedimiento habitual de `main`. Si el código ya está desplegado,
-   aplica la variable con `sudo systemctl restart psycode-web.service`.
-   En `/gestion-pcs`, verifica como administrador que se ofrece `1.2.1`, que
-   el navegador descarga ambos adjuntos y que su SHA-256 coincide. En una
-   ventana sin sesión, verifica que la URL del `.exe` rechaza la solicitud.
-
-### Volver a una versión anterior
-
-En el VPS, indica una versión anterior que hayas conservado y verifica sus
-archivos antes de reemplazar `current`. La próxima carga del panel refleja el
-cambio sin reiniciar el servicio. Esto cambia lo que se descarga desde la web.
+En el VPS, indica una versión conservada. El comando verifica sus bytes,
+pausa la automatización y cambia `current` bajo el mismo bloqueo que usa la
+publicación. El panel vuelve a servir esa versión en la próxima carga. Los
+agentes con una versión posterior conservan la que ya tienen instalada.
 
 ```sh
-set -eu
-root=/srv/psycode/shared/agent-installers
-version=1.2.0  # Solo si se publicó y conservó esta versión.
-sudo -u psycode sh -c 'cd "$1" && sha256sum --check --strict "$2"' \
-  sh "$root/$version" "PsycodeAgent-Setup-$version-x64.exe.sha256"
-next="$root/.current-$$"
-sudo ln -s "$version" "$next"
-sudo mv -Tf "$next" "$root/current"
+sudo /usr/local/sbin/psycode-agent-installer rollback 1.2.1
 ```
+
+Cuando mantenimiento quiera volver a publicar, reanuda y ejecuta el workflow
+con la última etiqueta válida o publica una versión superior. Se conserva el
+orden anterior a la reversión para impedir que un reintento viejo se active.
+
+```sh
+sudo /usr/local/sbin/psycode-agent-installer resume
+```
+
+La instalación del publicador y de su credencial exclusiva está en la
+[guía del VPS](../deployment/vps/README.md#publicación-del-instalador-windows).
 
 ## Activación recuperable de credenciales
 
@@ -187,6 +155,21 @@ Sus reportes pendientes mantienen identidad de recolección, bytes y alcance. So
 ese equipo necesita las credenciales privadas de Smile. Los demás PCs no consultan
 agendas por su cuenta.
 
+Un administrador puede usar **Probar colector** en la tarjeta del PC designado.
+El PC debe estar conectado con una versión compatible. La prueba ejecuta el
+extractor integrado en ese equipo: inicia sesión y verifica el selector de
+salas. No descarga citas, no modifica la agenda ni recibe claves por la web.
+La tarjeta muestra el resultado al actualizarse. Si indica que falta el perfil,
+impórtalo desde **Soporte** en ese PC. Un resultado correcto no confirma la
+entrega de una recolección completa; para eso revisa la sincronización normal.
+
+El agente anuncia `agenda.smile-check.v1` y el servidor la negocia solo para el
+colector autorizado. `POST /api/v1/internal/smile-collector-check` usa la
+credencial del agente y el [contrato v1](../contracts/smile-collector-check-v1.schema.json).
+La prueba se reclama una sola vez y vence tras diez minutos sin resultado.
+Aplicar `agenda.0004` antes de activar la función. Las versiones anteriores
+siguen recolectando con sus contratos vigentes.
+
 Una descarga fallida no borra el catálogo anterior ni publica una agenda vacía.
 Una sala retirada por una sincronización completa bloquea nuevas instalaciones y
 captura. Registrar un PC no elimina los controles de autorización ni inventa una
@@ -206,6 +189,8 @@ Los archivos privados usan 0600 en POSIX y los helpers de ACL en Windows.
 | `GET /api/v1/pcs` | Registro, estados y `installation_pending`; nunca devuelve secretos. |
 | `GET /api/v1/pcs/salas` | Boxes configurados y salas verificadas; `room_id`/`smile_box_id` pueden ser nulos sin catálogo. |
 | `GET /api/v1/pcs/instalador/windows-x64/{version}` | Descarga privada del `.exe` de la versión activa. Añade `/sha256` para descargar su checksum. Devuelve 404 si la versión solicitada no está disponible. |
+| `GET /api/v1/internal/agent-updates/windows-x64` | Solo HTTPS con la credencial individual activa `Authorization: Agent <clave>`. Devuelve `version`, `size` en bytes y `sha256` de la versión activa, o 404 si no está disponible. |
+| `GET /api/v1/internal/agent-updates/windows-x64/{version}` | Entrega el ejecutable de la versión activa con la misma autenticación del agente. Si cambió la versión desde la consulta, devuelve 404. |
 | `POST /api/v1/pcs/alta` | `{name, box}` o `{name, room_id}`, exactamente una selección; devuelve código temporal. |
 | `POST /api/v1/pcs/{id}/vinculacion` | Prepara instalación conservando la credencial vigente. |
 | `POST /api/v1/pcs/{id}/cancelar-instalacion` | Cancela preparación sin revocar acceso actual; rechaza cancelar una activación ya confirmada. |

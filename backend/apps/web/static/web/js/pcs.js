@@ -7,6 +7,7 @@
     let equipos = [], salas = [], cargando = false, mutando = false, objetivo = null;
     let historialPC = null, pagina = 1, totalPaginas = 0, filtros = {}, consultaHistorial = null;
     const origenes = new Map();
+    const pruebasSmile = new Set();
     let ultimaConsulta = null, temporizador = null, consultaPCs = null, consultaSalas = null, salasConsultadas = false;
     const nodos = (tag, texto, clase) => {
         const el = document.createElement(tag);
@@ -85,6 +86,47 @@
         b.addEventListener('click', accion);
         return b;
     }
+    const resultadosSmile = {
+        ok: 'Acceso a Smile y selector de salas verificados.',
+        missing_profile: 'Falta el perfil en este PC. Impórtalo en Psycode Agent → Soporte.',
+        source_mismatch: 'El perfil del PC tiene otra fuente. Revisa su asignación e importa el perfil correcto.',
+        external_command: 'El perfil usa un comando externo. Esta prueba requiere el extractor integrado.',
+        timeout: 'La prueba superó el tiempo de espera. Comprueba la red institucional.',
+        failed: 'No se pudo comprobar Smile. Revisa el perfil, la red institucional y el certificado.',
+    };
+    const pruebaSmileActiva = check => ['queued', 'running'].includes(check?.state);
+    function estadoSmile(check) {
+        if (check?.state === 'queued') return 'Esperando al colector…';
+        if (check?.state === 'running') return 'Comprobando acceso a Smile…';
+        if (check?.state === 'expired') return 'El colector no devolvió un resultado a tiempo.';
+        if (check?.state === 'finished') return resultadosSmile[check.result] || 'Resultado no disponible.';
+        return 'Sin prueba registrada.';
+    }
+    async function probarSmile(pc, source) {
+        if (pruebasSmile.has(pc.agent_id)) return;
+        pruebasSmile.add(pc.agent_id);
+        renderizar();
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 10000);
+        try {
+            const check = await leerRespuesta(await apiPost(
+                `${endpoint}/${encodeURIComponent(pc.agent_id)}/smile/prueba`,
+                { source }, { signal: controller.signal }
+            ));
+            const actual = equipos.find(item => item.agent_id === pc.agent_id);
+            if (actual) actual.smile_check = check;
+            mensaje('estadoSmilePCs', `Prueba solicitada para ${pc.name}. El resultado aparecerá en su tarjeta.`);
+        } catch (error) {
+            const fallo = error.estado === 429 ? 'Espera 30 segundos desde la última solicitud.'
+                : error.estado === 409 ? 'Comprueba que el colector esté conectado, actualizado y sin otra prueba en curso.'
+                : 'No se confirmó la solicitud. Comprueba el estado en la tarjeta antes de reintentar.';
+            mensaje('estadoSmilePCs', fallo, 'error');
+        } finally {
+            clearTimeout(timeout);
+            pruebasSmile.delete(pc.agent_id);
+            renderizar();
+        }
+    }
     function tarjeta(pc) {
         const article = nodos('article', null, 'pc-tarjeta');
         article.dataset.agentId = pc.agent_id;
@@ -120,8 +162,24 @@
         if (pc.room_available === false) article.append(nodos('p', 'La sala está deshabilitada. Solicita una revisión técnica antes de utilizarla.', 'pcs-aviso pc-aviso'));
         if (pc.connection === 'online' && pc.obs === 'unavailable') article.append(nodos('p', 'La aplicación de captura no responde. Comprueba que OBS esté abierto en la cuenta de Windows configurada. Si continúa, solicita asistencia técnica.', 'pcs-aviso pc-aviso'));
         if (pc.storage_warning?.active) article.append(nodos('p', pc.storage_warning.level === 'critical' ? 'Atención: capacidad crítica. Revisa el disco y los envíos pendientes.' : 'Aviso: capacidad baja. Revisa el espacio y la autonomía disponible.', `pcs-aviso pc-aviso ${pc.storage_warning.level === 'critical' ? 'critical' : ''}`));
-        const ayuda = { RECOVERY_REQUIRED: 'Hay una captura pendiente de recuperación. Solicita asistencia técnica; los archivos se conservan.', UPLOAD_INTERVENTION: 'Hay envíos que necesitan revisión técnica. Los audios pendientes se conservan.', SMILE_UNAVAILABLE: 'La agenda no se ha podido actualizar. La aplicación volverá a intentarlo automáticamente.' };
+        const ayuda = { RECOVERY_REQUIRED: 'Hay una captura pendiente de recuperación. Solicita asistencia técnica; los archivos se conservan.', UPLOAD_INTERVENTION: 'Hay envíos que necesitan revisión técnica. Los audios pendientes se conservan.', SMILE_UNAVAILABLE: 'La agenda no se ha podido actualizar. Prueba el acceso a Smile o solicita una revisión del perfil.' };
         if (pc.operational_code && !pc.storage_warning?.active) article.append(nodos('p', ayuda[pc.operational_code] || 'El equipo informó un problema. Consulta el historial y solicita asistencia técnica si continúa.', 'pcs-aviso pc-aviso'));
+        if (Array.isArray(pc.smile_sources) && pc.smile_sources.length) {
+            const smile = nodos('section', null, 'pc-flujo-bloque');
+            smile.append(nodos('h4', 'Colector Smile'));
+            for (const source of pc.smile_sources) {
+                const check = pc.smile_check?.source === source ? pc.smile_check : null;
+                const texto = pc.smile_sources.length === 1 ? 'Probar colector' : `Probar colector · ${source}`;
+                const probar = boton(texto, () => probarSmile(pc, source));
+                probar.disabled = pc.connection !== 'online' || !pc.smile_check_supported
+                    || pruebaSmileActiva(pc.smile_check) || pruebasSmile.has(pc.agent_id);
+                const nota = pc.connection !== 'online' ? 'Colector sin conexión.'
+                    : !pc.smile_check_supported ? 'Actualiza el agente para probar el colector.'
+                    : estadoSmile(check);
+                smile.append(nodos('p', nota, 'pc-nota'), probar);
+            }
+            article.append(smile);
+        }
         const footer = nodos('footer', null, 'pc-tarjeta-pie');
         const history = boton('Ver historial', () => abrirHistorial(pc));
         history.setAttribute('aria-label', `Ver historial de ${pc.name}`);

@@ -7,9 +7,10 @@ from .views import (
     AgentRegistrationRenewView,
     AgentConnectivityHistoryView,
     SmileRoomListView,
+    SmileCollectorCheckView,
 )
 from backend.apps.capture.storage_views import StorageStatusView, StoragePreviewView, StorageCleanupView
-from .windows_installer import WindowsInstallerView
+from .windows_installer import AgentWindowsUpdateView, WindowsInstallerView
 
 app_name = "operational"
 
@@ -22,6 +23,8 @@ urlpatterns = [
     path("pcs/<uuid:agent_id>/cancelar-instalacion", PCEnrollmentCancelView.as_view(), name="pcs_cancel_enrollment"),
     path("internal/pcs/confirmar", PCPairingConfirmView.as_view(), name="pcs_pair_confirm"),
     path("internal/pcs/vincular", PCPairingExchangeView.as_view(), name="pcs_pair"),
+    path("internal/agent-updates/windows-x64", AgentWindowsUpdateView.as_view(), name="agent_windows_update"),
+    path("internal/agent-updates/windows-x64/<str:version>", AgentWindowsUpdateView.as_view(), name="agent_windows_update_download"),
     path("almacenamiento", StorageStatusView.as_view(), name="storage_status"),
     path("almacenamiento/vista-previa", StoragePreviewView.as_view(), name="storage_preview"),
     path("almacenamiento/liberar", StorageCleanupView.as_view(), name="storage_cleanup"),
@@ -29,6 +32,7 @@ urlpatterns = [
     path("pcs", AgentRegistrationListCreateView.as_view(), name="pcs"),
     path("pcs/<uuid:agent_id>/revocar",AgentRegistrationRevokeView.as_view(),name="pcs_revoke",),
     path("pcs/<uuid:agent_id>/renovar",AgentRegistrationRenewView.as_view(),name="pcs_renew",),
+    path("pcs/<uuid:agent_id>/smile/prueba", SmileCollectorCheckView.as_view(), name="pcs_smile_check"),
     path("pcs/<uuid:agent_id>/historial",AgentConnectivityHistoryView.as_view(),name="pcs_connectivity_history",),
     ]
 

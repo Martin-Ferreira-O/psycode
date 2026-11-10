@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Prueba del colector Smile v1 (petición o campo data de respuesta)",
+  "oneOf": [
+    {"type": "null"},
+    {
+      "type": "object", "additionalProperties": false, "required": ["action"],
+      "properties": {"action": {"const": "claim"}}
+    },
+    {
+      "type": "object", "additionalProperties": false, "required": ["request_id", "source"],
+      "properties": {
+        "request_id": {"$ref": "#/$defs/id"},
+        "source": {"type": "string", "pattern": "^[A-Za-z0-9_-]{1,64}$"}
+      }
+    },
+    {
+      "type": "object", "additionalProperties": false, "required": ["action", "request_id", "result"],
+      "properties": {
+        "action": {"const": "finish"},
+        "request_id": {"$ref": "#/$defs/id"},
+        "result": {"enum": ["ok", "missing_profile", "source_mismatch", "external_command", "timeout", "failed"]}
+      }
+    },
+    {
+      "type": "object", "additionalProperties": false, "required": ["recorded"],
+      "properties": {"recorded": {"const": true}}
+    }
+  ],
+  "$defs": {
+    "id": {"type": "string", "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$"}
+  }
+}

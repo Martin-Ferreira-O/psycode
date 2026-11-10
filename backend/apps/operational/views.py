@@ -33,6 +33,8 @@ from backend.apps.capture.serializers import (
 )
 from backend.apps.capture.services import CaptureSessionService
 from backend.common.responses import success_response
+from backend.apps.agenda.collector_check import identity_for, request_check, snapshot, sources_for
+from backend.apps.capture.agent_events import BoundedJSONParser
 
 from .services import OperationalService
 
@@ -100,7 +102,7 @@ class AgentRegistrationListCreateView(APIView):
         sync_legacy_registry()
         now = timezone.now()
         data, pipelines = [], {}
-        for agent in AgentRegistration.objects.select_related("pairing", "smile_room").all().order_by("box", "name", "agent_id"):
+        for agent in AgentRegistration.objects.select_related("pairing", "smile_room", "smilecollectorcheck").all().order_by("box", "name", "agent_id"):
             if agent.control_owner:
                 reconcile_connection(agent)
             pairing = getattr(agent, "pairing", None)
@@ -109,6 +111,7 @@ class AgentRegistrationListCreateView(APIView):
                 "pairing_expired" if pairing and not pairing.activated_at else
                 "pending_pairing" if not agent.token_sha256 else "revoked")
             diagnostics = agent.diagnostics or {}
+            smile_sources = sources_for(identity_for(agent))
             connected = bool(agent.is_active and agent.control_owner and RuntimeLease.objects.filter(
                 name=f"control:{agent.box}", owner=agent.control_owner, expires_at__gt=now,
             ).exists())
@@ -155,6 +158,9 @@ class AgentRegistrationListCreateView(APIView):
                     "code": code if storage else None,
                 },
                 "smile_last_sync": diagnostics.get("smile_last_sync"), "last_audio": last_audio,
+                "smile_sources": smile_sources,
+                "smile_check_supported": diagnostics.get("smile_check_supported") is True,
+                "smile_check": snapshot(getattr(agent, "smilecollectorcheck", None), now) if smile_sources else None,
                 "capture_status": pipeline["capture"] if pipeline else "no_session",
                 "reception_status": pipeline["reception"] if pipeline else "no_session",
                 "processing_status": pipeline["processing"] if pipeline else "no_session",
@@ -200,6 +206,17 @@ class AgentRegistrationListCreateView(APIView):
             ),
             status=201,
         )
+
+
+class SmileCollectorCheckView(APIView):
+    permission_classes = [IsAuthenticated, IsActiveAdmin]
+    parser_classes = [BoundedJSONParser]
+
+    def post(self, request, agent_id):
+        data = request.data
+        if not isinstance(data, dict) or set(data) != {"source"} or not isinstance(data["source"], str):
+            raise ValidationError("Indica la fuente del colector.")
+        return success_response(request_check(agent_id, data["source"]), "Prueba Smile solicitada", status=202)
 
 
 class AgentRegistrationRevokeView(APIView):

@@ -42,3 +42,14 @@ class SmileCatalogState(models.Model):
     generation = models.PositiveBigIntegerField(default=0)
     digest = models.CharField(max_length=64, blank=True)
     synced_at = models.DateTimeField(null=True)
+
+
+class SmileCollectorCheck(models.Model):
+    """Última solicitud de diagnóstico por PC, sin datos de agenda ni secretos."""
+    agent = models.OneToOneField("capture.AgentRegistration", on_delete=models.CASCADE, primary_key=True)
+    request_id = models.UUIDField(default=uuid.uuid4, unique=True)
+    source = models.CharField(max_length=64)
+    requested_at = models.DateTimeField()
+    expires_at = models.DateTimeField()
+    state = models.CharField(max_length=16)
+    result = models.CharField(max_length=24, blank=True)
