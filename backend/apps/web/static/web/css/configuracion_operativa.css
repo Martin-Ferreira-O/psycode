@@ -264,15 +264,40 @@
     border-top: 1px solid #edf1f5;
 }
 
-.boton-guardar-configuracion {
+.boton-guardar-configuracion,
+.boton-navegacion-configuracion {
     min-height: 46px;
     padding: 10px 20px;
     border: 1px solid #173858;
     border-radius: 8px;
-    background: #173858;
-    color: #fff;
     font-weight: 600;
     cursor: pointer;
+}
+
+.boton-guardar-configuracion {
+    background: #173858;
+    color: #fff;
+}
+
+.boton-navegacion-configuracion {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    max-width: 100%;
+    margin-bottom: 16px;
+    background: var(--blanco);
+    color: #173858;
+    text-align: center;
+    text-decoration: none;
+}
+
+.boton-navegacion-configuracion:hover {
+    background: #eef5fb;
+}
+
+.boton-navegacion-configuracion:focus-visible {
+    outline: 2px solid #2b5278;
+    outline-offset: 3px;
 }
 
 .boton-guardar-configuracion:hover {

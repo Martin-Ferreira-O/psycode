@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="{% static 'web/css/styles.css' %}">
     <link rel="stylesheet" href="{% static 'web/css/dashboard.css' %}?v=5">
     <link rel="stylesheet" href="{% static 'web/css/estados.css' %}">
-    <link rel="stylesheet" href="{% static 'web/css/configuracion_operativa.css' %}?v=2">
+    <link rel="stylesheet" href="{% static 'web/css/configuracion_operativa.css' %}?v=3">
 </head>
 <body>
     <div class="aplicacion">
@@ -51,7 +51,9 @@
                         </div>
                     </div>
 
-                    <p class="ayuda-configuracion"><a href="{% url 'web:almacenamiento' %}">Almacenamiento del servidor · Liberar espacio</a></p>
+                    <a class="boton-navegacion-configuracion" href="{% url 'web:almacenamiento' %}">
+                        Almacenamiento del servidor
+                    </a>
                     <form id="formularioConfiguracion" novalidate>
                         <fieldset class="grupo-configuracion">
                             <legend>Días habilitados</legend>
