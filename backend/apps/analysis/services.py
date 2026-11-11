@@ -77,6 +77,7 @@ class AnalysisService:
                     "evidence": self.evidence[session_id],
                     "speechmatics": checkpoint.data.get("speechmatics", {}),
                     "jev_requests": checkpoint.data.get("jev_requests", []),
+                    **({"test_alerts": checkpoint.data.get("test_alerts", [])} if fragment.audio_test else {}),
                 }
             finally:
                 self.histories.pop(session_id, None)
@@ -147,7 +148,8 @@ class AnalysisService:
             while history and sum(len(h["text"]) for h in history) + len(text) > 12000:
                 history.pop(0)
             # Roles solo confirmados por un llamador interno, nunca inferidos de S1/S2.
-            role = roles.get(utterance["speaker"], "unknown")
+            role = "patient" if fragment.audio_test and utterance["attribution"] == "assigned" else roles.get(
+                utterance["speaker"], "unknown")
             role = role if role in {"patient", "professional", "unknown"} else "unknown"
             current = {"text": text, "start": utterance["start"], "end": utterance["end"],
                        "role": role}
@@ -229,7 +231,7 @@ class AnalysisService:
             raise FragmentRejected("Resultado no corresponde al fragmento")
         if result.state != AnalysisState.SIGNAL or result.error_codes:
             return
-        delivery = checkpoint.data.setdefault("delivery", {}) if checkpoint is not None else {}
+        delivery = checkpoint.data.setdefault("delivery", {}) if checkpoint is not None and not fragment.audio_test else {}
         for signal in result.signals:
             evidence = self.evidence.setdefault(fragment.session_id, [])
             excerpt = " ".join(signal.excerpt.casefold().split())
@@ -239,6 +241,14 @@ class AnalysisService:
                 continue
             ident = str(uuid5(NAMESPACE_URL, f"psycode:1.0:{fragment.session_id}:{fragment.sequence}:"
                              f"{signal.start}:{signal.end}:{signal.category_id}"))
+            if fragment.audio_test:
+                if checkpoint is not None:
+                    checkpoint.data.setdefault("test_alerts", []).append({
+                        "id": ident, "category": signal.category_id, "severity": signal.severity,
+                        "start": signal.start, "end": signal.end,
+                    })
+                evidence.append((signal.category_id, excerpt, signal.start, signal.end))
+                continue
             def before_notify(alert_id):
                 if delivery.get(alert_id) == "sending":
                     if self.alerts.store.has_alert_event(alert_id, "notifications.result"):

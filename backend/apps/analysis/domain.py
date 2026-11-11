@@ -35,6 +35,7 @@ class Fragment:
     context_start: int = 0
     session_origin_sample: int = 0
     new_audio_start_sample: int | None = None
+    audio_test: bool = False
 
     def __post_init__(self):
         if str(UUID(self.session_id)) != self.session_id:

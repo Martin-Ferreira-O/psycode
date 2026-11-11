@@ -6,6 +6,7 @@ from uuid import UUID
 
 from django.db import transaction
 
+from .audio_tests import accept_test_sequence, load_test
 from .domain import CaptureError
 from .models import AcceptedSequence, FragmentJob
 from .services import CaptureSessionService, _box, _event, _instant, _uuid
@@ -34,7 +35,8 @@ class FragmentIngestionService:
         self.storage = storage
         self.control = control if control is not None else CaptureSessionService()
 
-    def receive(self, *, box, session_id, number, format, checksum, captured_at, upload, now=None, temporal=None, agent_id=""):
+    def receive(self, *, box, session_id, number, format, checksum, captured_at, upload, now=None, temporal=None,
+                agent_id="", test_agent=None):
         box, session_id = _box(box), _uuid(session_id)
         captured_at = _instant(captured_at) if captured_at is not None else None
         if captured_at is None:
@@ -46,14 +48,19 @@ class FragmentIngestionService:
         if not isinstance(checksum, str) or not re.fullmatch(r"[0-9a-f]{64}", checksum):
             raise FragmentError("VALIDATION_ERROR", 400)
         try:
-            self.control._recover_one(box, session_id, _instant(now))
+            if test_agent is None:
+                self.control._recover_one(box, session_id, _instant(now))
+            else:
+                load_test(session_id, test_agent)
             with self.storage.stage(upload, checksum) as stored:
                 received_at = _instant(now)
                 # Vuelve a evaluar vencimiento tras el I/O, fuera de la transacción
                 # de aceptación para conservar la recuperación aunque se rechace.
-                self.control._recover_one(box, session_id, received_at)
+                if test_agent is None:
+                    self.control._recover_one(box, session_id, received_at)
                 with transaction.atomic(durable=True):
-                    session = self.control._load(box, session_id)
+                    run = load_test(session_id, test_agent, lock=True) if test_agent is not None else None
+                    session = run.session if run is not None else self.control._load(box, session_id)
                     sequence = AcceptedSequence.objects.filter(session=session, number=number).first()
                     if sequence:
                         job = FragmentJob.objects.filter(sequence=sequence).first()
@@ -63,12 +70,15 @@ class FragmentIngestionService:
                                 or sequence.captured_at != captured_at or job.temporal != (temporal or {})):
                             raise FragmentError("SEQUENCE_CONFLICT", 409)
                         return receipt(job, session, sequence), False
+                    if run is not None:
+                        accept_test_sequence(run, number, captured_at, received_at, temporal)
                     if temporal is not None:
                         from .temporal import validate
                         validate(temporal, upload, session, number, captured_at, received_at)
                     elif session.audio_profile:
                         raise FragmentError("AUDIO_VERSION_CONFLICT", 409)
-                    self.control._accept_sequence(session, number, captured_at, received_at)
+                    if run is None:
+                        self.control._accept_sequence(session, number, captured_at, received_at)
                     sequence = AcceptedSequence.objects.get(session=session, number=number)
                     sequence.agent_id = agent_id
                     sequence.save(update_fields=["agent_id"])

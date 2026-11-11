@@ -1,0 +1,117 @@
+"""Recepción de clips ficticios, autenticada por PC y separada de captura."""
+
+from datetime import timedelta
+
+from django.db import transaction
+from django.utils import timezone
+from rest_framework.parsers import JSONParser
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.views import APIView
+
+from backend.common.responses import success_response
+from .authentication import BoxAgentAuthentication
+from .models import AUDIO_TEST_ORIGIN, AcceptedSequence, AgentRegistration, AudioTest, CaptureSession, FragmentJob, SessionState
+from .storage import FragmentError
+
+RATE = 16000
+CHUNK = RATE * 10
+OVERLAP = RATE
+STEP = CHUNK - OVERLAP
+SCENARIOS = {"neutral", "alerta"}
+
+
+def load_test(test_id, agent, *, lock=False):
+    runs = AudioTest.objects.select_related("session").filter(agent_id=agent.registry_id, session__box=agent.box)
+    if lock:
+        runs = runs.select_for_update()
+    run = runs.filter(pk=test_id).first()
+    if run is None:
+        raise FragmentError("AUDIO_TEST_NOT_FOUND", 404)
+    return run
+
+
+def accept_test_sequence(run, number, captured_at, now, temporal):
+    session = run.session
+    if now >= run.expires_at:
+        raise FragmentError("AUDIO_TEST_EXPIRED", 409)
+    if number != session.next_sequence or number > session.final_sequence:
+        raise FragmentError("SEQUENCE_OUT_OF_ORDER", 409)
+    start = number * STEP
+    end = min(start + CHUNK, run.samples)
+    if (temporal is None or temporal["session_start_sample"] != start
+            or temporal["session_end_sample"] != end
+            or captured_at != session.actual_start + timedelta(seconds=start / RATE)):
+        raise FragmentError("INVALID_AUDIO_TIMELINE", 422)
+    AcceptedSequence.objects.create(session=session, number=number, captured_at=captured_at, accepted_at=now)
+    session.next_sequence += 1
+    session.save(update_fields=["next_sequence"])
+
+
+def status_data(run, now):
+    session = run.session
+    expected = session.final_sequence + 1
+    jobs = list(FragmentJob.objects.filter(sequence__session=session).order_by("sequence__number")
+                .values("state", "result", "checkpoint"))
+    completed = [job for job in jobs if job["state"] == FragmentJob.State.COMPLETED]
+    alerts = [alert for job in completed for alert in job["checkpoint"].get("test_alerts", [])]
+    if any(job["state"] in {FragmentJob.State.FAILED, FragmentJob.State.REVIEW} for job in jobs):
+        state = "failed"
+    elif len(completed) == expected:
+        state = "completed"
+    elif len(jobs) == expected:
+        state = "analyzing"
+    elif now >= run.expires_at:
+        state = "expired"
+    else:
+        state = "receiving"
+    return {
+        "test_id": str(run.pk), "box": session.box, "scenario": run.scenario, "samples": run.samples,
+        "started_at": session.actual_start.isoformat(), "state": state,
+        "expected": expected, "accepted": len(jobs), "analyzed": len(completed),
+        "indeterminate": sum(job["result"] == FragmentJob.Result.INDETERMINATE for job in completed),
+        "alerts": alerts,
+    }
+
+
+class AudioTestView(APIView):
+    authentication_classes = [BoxAgentAuthentication]
+    permission_classes = [IsAuthenticated]
+    parser_classes = [JSONParser]
+
+    def get(self, request, test_id):
+        return success_response(status_data(load_test(test_id, request.user), timezone.now()), "Estado de prueba")
+
+    @transaction.atomic
+    def put(self, request, test_id):
+        data = request.data
+        if not isinstance(data, dict) or set(data) != {"scenario", "samples"}:
+            raise FragmentError("VALIDATION_ERROR", 400)
+        scenario, samples = data["scenario"], data["samples"]
+        if (not isinstance(scenario, str) or scenario not in SCENARIOS
+                or type(samples) is not int or not 0 < samples <= RATE * 60):
+            raise FragmentError("VALIDATION_ERROR", 400)
+        agent = AgentRegistration.objects.select_for_update().get(pk=request.user.registry_id)
+        now = timezone.now()
+        run = AudioTest.objects.select_related("session").filter(pk=test_id, agent=agent, session__box=request.user.box).first()
+        if run is not None:
+            if (run.scenario, run.samples) != (scenario, samples):
+                raise FragmentError("AUDIO_TEST_CONFLICT", 409)
+            return success_response(status_data(run, now), "Prueba autorizada")
+        if CaptureSession.objects.filter(pk=test_id).exists():
+            raise FragmentError("AUDIO_TEST_CONFLICT", 409)
+        # Solo una carga simultánea por agente. Una prueba enviada puede seguir
+        # procesándose mientras el operador vuelve a usar el asistente.
+        for previous in AudioTest.objects.filter(agent=agent, expires_at__gt=now).select_related("session"):
+            if status_data(previous, now)["state"] in {"receiving", "analyzing"}:
+                raise FragmentError("AUDIO_TEST_ALREADY_RUNNING", 409)
+        end = now + timedelta(seconds=samples / RATE)
+        session = CaptureSession.objects.create(
+            pk=test_id, box=request.user.box, origin=AUDIO_TEST_ORIGIN, state=SessionState.COMPLETED,
+            scheduled_start=now, scheduled_end=end, authorized_at=now, authorization_ended_at=now,
+            actual_start=now, actual_end=end, last_seen_at=now, closed_at=end,
+            final_sequence=max(0, (samples - OVERLAP - 1) // STEP),
+            audio_profile={"sample_rate": RATE, "chunk_samples": CHUNK, "overlap_samples": OVERLAP},
+        )
+        run = AudioTest.objects.create(session=session, agent=agent, scenario=scenario, samples=samples,
+                                       expires_at=now + timedelta(minutes=5))
+        return success_response(status_data(run, now), "Prueba autorizada", status=201)
