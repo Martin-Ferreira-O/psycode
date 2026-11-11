@@ -13,13 +13,15 @@ class SessionState(models.TextChoices):
 
 
 OPEN_STATES = (SessionState.STARTED, SessionState.ACTIVE, SessionState.STOPPING)
+AUDIO_TEST_ORIGIN = "prueba_audio"
 
 
 class CaptureSession(models.Model):
     session_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     box = models.CharField(max_length=16)
     state = models.CharField(max_length=16, choices=SessionState.choices)
-    origin = models.CharField(max_length=24, choices=[("agenda", "Agenda"), ("horario_clinico", "Respaldo")])
+    origin = models.CharField(max_length=24, choices=[("agenda", "Agenda"), ("horario_clinico", "Respaldo"),
+                                                     (AUDIO_TEST_ORIGIN, "Prueba de audio")])
     scheduled_start = models.DateTimeField()
     scheduled_end = models.DateTimeField()
     authorized_at = models.DateTimeField()
@@ -197,6 +199,14 @@ class AgentRegistration(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.box})"
+
+
+class AudioTest(models.Model):
+    session = models.OneToOneField(CaptureSession, primary_key=True, on_delete=models.PROTECT)
+    agent = models.ForeignKey(AgentRegistration, on_delete=models.PROTECT)
+    scenario = models.CharField(max_length=16)
+    samples = models.PositiveIntegerField()
+    expires_at = models.DateTimeField()
 
 class ServerConnectivityOutage(models.Model):
     """
