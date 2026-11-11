@@ -156,7 +156,7 @@ Consulta [componentes adaptados, recuperación y pendientes de Jira](docs/INTEGR
 
 ## Bitácora y notificaciones (SCRUM-65)
 
-Consulta `GET /api/v1/audit-events` con JWT de administrador o supervisor activo. Admite período UTC (`fecha_desde`, `fecha_hasta`), `alerta_id`, `action`, `outcome`, `limit`, `offset` y `order`. [Contrato y ejemplos](API_CONTRACTS.md#consulta-de-bitácora-scrum-65).
+Consulta `GET /api/v1/audit-events` con el JWT de una cuenta activa que sea administradora o superusuaria. Admite período UTC (`fecha_desde`, `fecha_hasta`), `alerta_id`, `action`, `outcome`, `limit`, `offset` y `order`. [Contrato y ejemplos](API_CONTRACTS.md#consulta-de-bitácora-scrum-65).
 
 Para habilitar correo, configura `NOTIFICATIONS_ENABLED=true` y guarda la modalidad en la configuración operativa: `lista_distribucion` usa exclusivamente `primary_email`; `supervisores_activos` envía un mensaje individual a cada supervisor habilitado con correo válido. Los destinatarios se consultan en cada notificación. Los fallos individuales no detienen los demás intentos y el resultado distingue éxito total, fallo parcial y fallo total. Sin destinatarios principales válidos se registra esa condición; en modalidad de supervisores puede intentarse el respaldo habilitado. Las variables antiguas de destinatarios no sustituyen la configuración y el respaldo solo se intenta si está habilitado y hay un fallo principal o no hay supervisores destinatarios válidos. `EMAIL_BACKEND=file` permite probar sin SMTP; para SMTP configura únicamente las credenciales del remitente/relay. Teams permanece deshabilitado.
 

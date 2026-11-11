@@ -62,8 +62,13 @@ class AccountsRepository:
         PasswordReset.objects.filter(user=user).delete()
         RefreshSession.objects.filter(user=user, revoked_at__isnull=True).update(revoked_at=timezone.now())
 
-    def list_users(self):
-        return list(User.objects.all().order_by("-date_joined"))
+    def list_users(self, *, limit=None, offset=0):
+        users = User.objects.order_by("-date_joined", "-pk")
+        if limit is None:
+            items = list(users)
+            return items, len(items)
+        total = users.count()
+        return list(users[offset:offset + limit]), total
 
     def create_user(self, *, username, email, first_name, last_name, password, role, is_active=True):
         user = User(

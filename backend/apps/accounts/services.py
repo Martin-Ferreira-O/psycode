@@ -180,11 +180,14 @@ class AccountsService:
 
     # --- Módulo Administrativo de Usuarios ---
 
-    def list_users(self, actor):
+    def list_users(self, actor, *, limit=None, offset=0):
         if not (actor.is_authenticated and actor.is_active and getattr(actor, "is_admin", False)):
             raise ServiceError("AUTH_FORBIDDEN", "No tienes permisos para administrar usuarios", 403)
-        users = self.repository.list_users()
-        return [self._format_user(u) for u in users]
+        users, total = self.repository.list_users(limit=limit, offset=offset)
+        items = [self._format_user(user) for user in users]
+        if limit is None:
+            return items
+        return {"items": items, "total": total, "limit": limit, "offset": offset}
 
     def create_admin_user(self, actor, usuario, nombre, correo, password, rol=Role.SUPERVISOR, activo=True):
         if not (actor.is_authenticated and actor.is_active and getattr(actor, "is_admin", False)):

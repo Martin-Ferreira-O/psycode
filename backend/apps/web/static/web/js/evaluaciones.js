@@ -1,12 +1,18 @@
-let evaluaciones = [];
+const EVALUACIONES_POR_PAGINA = 10;
+let offsetEvaluaciones = 0;
 let cargandoEvaluaciones = false;
 let solicitudDetalle = 0;
 
 const elementos = {
     tabla: document.querySelector("#tablaEvaluaciones"),
+    tituloEvaluaciones: document.querySelector("#tituloEvaluaciones"),
     resultadoTexto: document.querySelector("#resultadoEvaluaciones"),
     estadoVacio: document.querySelector("#estadoVacioEvaluaciones"),
     tablaContenedor: document.querySelector("#tablaEvaluacionesContenedor"),
+    paginacion: document.querySelector("#paginacionEvaluaciones"),
+    pagina: document.querySelector("#paginaEvaluaciones"),
+    anterior: document.querySelector("#evaluacionesAnterior"),
+    siguiente: document.querySelector("#evaluacionesSiguiente"),
     modal: document.querySelector("#modalDetalle"),
  
     tituloModal: document.querySelector("#tituloModal"),
@@ -41,11 +47,22 @@ function obtenerClaseEvaluacion(resultado) {
     return clases[resultado] || "neutro";
 }
 
-function renderizarEvaluaciones() {
+function renderizarEvaluaciones(evaluaciones, total) {
+    const ultimaVisible = offsetEvaluaciones + evaluaciones.length;
     elementos.resultadoTexto.textContent =
-        evaluaciones.length === 1
+        total === 1
             ? "1 evaluación registrada"
-            : `${evaluaciones.length} evaluaciones registradas`;
+            : `${total} evaluaciones registradas`;
+
+    elementos.paginacion.hidden = total <= EVALUACIONES_POR_PAGINA;
+    if (!elementos.paginacion.hidden) {
+        const paginaActual = Math.floor(offsetEvaluaciones / EVALUACIONES_POR_PAGINA) + 1;
+        const paginas = Math.ceil(total / EVALUACIONES_POR_PAGINA);
+        elementos.resultadoTexto.textContent = `Mostrando ${offsetEvaluaciones + 1}–${ultimaVisible} de ${total} evaluaciones`;
+        elementos.pagina.textContent = `Página ${paginaActual} de ${paginas}`;
+        elementos.anterior.disabled = paginaActual === 1;
+        elementos.siguiente.disabled = paginaActual === paginas;
+    }
 
     if (evaluaciones.length === 0) {
         mostrarVacio(
@@ -61,68 +78,61 @@ function renderizarEvaluaciones() {
     limpiarEstado(elementos.estadoVacio);
     elementos.tablaContenedor.hidden = false;
 
-    elementos.tabla.innerHTML = evaluaciones
-        .map((alerta) => {
-            const resultado = obtenerResultado(alerta);
-
-            return `
-                <tr>
-                    <td>
-                        <strong>
-                            ${codigoAlertaVisible(alerta.alerta_id)}
-                        </strong>
-                    </td>
-
-                    <td>
-                        <span class="etiqueta-evaluacion ${obtenerClaseEvaluacion(resultado)}">
-                            ${obtenerEtiquetaEvaluacion(resultado)}
-                        </span>
-                    </td>
-
-                    <td>
-                        <span class="registro-sistema">
-                            ${obtenerRegistroSistema(resultado)}
-                        </span>
-                    </td>
-
-                    <td>
-                        <span class="etiqueta-estado estado-revisada">
-                            Revisada
-                        </span>
-                    </td>
-
-                    <td>
-                        <div class="fecha-evaluacion-tabla">
-                            <span>
-                                ${formatearFecha(alerta.evaluacion?.fecha_hora)}
-                            </span>
-                            
-                            <small>
-                            
-                            ${formatearHora(alerta.evaluacion?.fecha_hora)}
-                            </small>
-                        </div>
-                    </td>
-
-                    <td>
-                        <button
-                            type="button"
-                            class="boton-ver-detalle boton-revisar"
-                            data-alerta="${alerta.alerta_id}"
-                        >
-                            Ver detalle
-                        </button>
-                    </td>
-                </tr>
-            `;
-        })
-        .join("");
-
-    document.querySelectorAll(".boton-ver-detalle").forEach((boton) => {
-        boton.addEventListener("click", () => {
-            abrirDetalle(boton.dataset.alerta, boton);
-        });
+    const filas = evaluaciones.map((alerta) => {
+        const resultado = obtenerResultado(alerta);
+        const fila = document.createElement("tr");
+        fila.setAttribute("role", "row");
+        fila.innerHTML = `
+            <td role="cell">
+                <span class="etiqueta-campo-evaluacion" aria-hidden="true">Alerta</span>
+                <strong></strong>
+            </td>
+            <td role="cell">
+                <span class="etiqueta-campo-evaluacion" aria-hidden="true">Evaluación seleccionada</span>
+                <span class="etiqueta-evaluacion ${obtenerClaseEvaluacion(resultado)}">
+                    ${obtenerEtiquetaEvaluacion(resultado)}
+                </span>
+            </td>
+            <td role="cell">
+                <span class="etiqueta-campo-evaluacion" aria-hidden="true">Registro del sistema</span>
+                <span class="registro-sistema">${obtenerRegistroSistema(resultado)}</span>
+            </td>
+            <td role="cell">
+                <span class="etiqueta-campo-evaluacion" aria-hidden="true">Estado</span>
+                <span class="etiqueta-estado estado-revisada">Revisada</span>
+            </td>
+            <td role="cell">
+                <span class="etiqueta-campo-evaluacion" aria-hidden="true">Fecha de evaluación</span>
+                <div class="fecha-evaluacion-tabla">
+                    <span>${formatearFecha(alerta.evaluacion?.fecha_hora)}</span>
+                    <small>${formatearHora(alerta.evaluacion?.fecha_hora)}</small>
+                </div>
+            </td>
+            <td role="cell" class="celda-detalle-evaluacion">
+                <button
+                    type="button"
+                    class="boton-detalle-evaluacion"
+                    title="Ver detalle"
+                >
+                    <svg
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                        class="icono-detalle-evaluacion"
+                    >
+                        <path d="M9 6l6 6-6 6"></path>
+                    </svg>
+                </button>
+            </td>
+        `;
+        const codigoAlerta = codigoAlertaVisible(alerta.alerta_id);
+        fila.querySelector("strong").textContent = codigoAlerta;
+        const boton = fila.querySelector(".boton-detalle-evaluacion");
+        boton.dataset.alerta = alerta.alerta_id;
+        boton.setAttribute("aria-label", `Ver detalle de ${codigoAlerta}`);
+        boton.addEventListener("click", () => abrirDetalle(alerta.alerta_id, boton));
+        return fila;
     });
+    elementos.tabla.replaceChildren(...filas);
 }
 
 const focoModalDetalle = crearControlFocoModal(elementos.modal);
@@ -164,7 +174,7 @@ function cerrarDetalle() {
 }
 
 
-async function cargarEvaluaciones() {
+async function cargarEvaluaciones(offsetSolicitado = 0, moverFoco = false) {
     if (cargandoEvaluaciones) {
         return;
     }
@@ -180,6 +190,7 @@ async function cargarEvaluaciones() {
         "Consultando evaluaciones…";
 
     elementos.tablaContenedor.hidden = true;
+    elementos.paginacion.hidden = true;
 
     elementos.tablaContenedor.setAttribute(
         "aria-busy",
@@ -187,17 +198,26 @@ async function cargarEvaluaciones() {
     );
 
     try {
-        const data = await apiGetDatos(
-            "/api/v1/alerts?revisadas=true"
-        );
-
-        if (!Array.isArray(data?.items)) {
-            throw new ErrorSolicitud();
+        const filtros = new URLSearchParams({
+            revisadas: "true",
+            limit: String(EVALUACIONES_POR_PAGINA),
+        });
+        let offset = offsetSolicitado;
+        let data;
+        while (true) {
+            filtros.set("offset", String(offset));
+            data = await apiGetDatos(`/api/v1/alerts?${filtros}`);
+            if (!Array.isArray(data?.items) || !Number.isInteger(data.total) || data.total < 0) {
+                throw new ErrorSolicitud();
+            }
+            if (data.total === 0 || offset < data.total) {
+                break;
+            }
+            offset = Math.floor((data.total - 1) / EVALUACIONES_POR_PAGINA) * EVALUACIONES_POR_PAGINA;
         }
 
-        evaluaciones = data.items;
-
-        renderizarEvaluaciones();
+        offsetEvaluaciones = data.total === 0 ? 0 : offset;
+        renderizarEvaluaciones(data.items, data.total);
     } catch (error) {
         elementos.resultadoTexto.textContent =
             "No se pudieron consultar las evaluaciones.";
@@ -210,7 +230,7 @@ async function cargarEvaluaciones() {
                     404: "No encontramos el registro de evaluaciones solicitado.",
                 },
 
-                reintentar: cargarEvaluaciones,
+                reintentar: () => cargarEvaluaciones(offsetSolicitado, true),
             }
         );
     } finally {
@@ -219,8 +239,18 @@ async function cargarEvaluaciones() {
         elementos.tablaContenedor.removeAttribute(
             "aria-busy"
         );
+        if (moverFoco) {
+            elementos.tituloEvaluaciones.focus();
+        }
     }
 }
+
+elementos.anterior.addEventListener("click", () => {
+    cargarEvaluaciones(offsetEvaluaciones - EVALUACIONES_POR_PAGINA, true);
+});
+elementos.siguiente.addEventListener("click", () => {
+    cargarEvaluaciones(offsetEvaluaciones + EVALUACIONES_POR_PAGINA, true);
+});
 
 document
     .querySelectorAll("[data-cerrar-modal]")

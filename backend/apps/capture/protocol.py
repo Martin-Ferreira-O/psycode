@@ -6,7 +6,8 @@ from uuid import UUID, uuid4
 VERSION = "1.0"
 MAX_BYTES = 65536
 TYPES = {"hello", "ready", "sync", "state", "command", "command_ack", "command_receipt",
-         "heartbeat", "heartbeat_receipt", "interrupted", "interruption_receipt", "status", "error"}
+         "heartbeat", "heartbeat_receipt", "interrupted", "interruption_receipt", "status", "error",
+         "config_sync", "config_ack", "config_receipt"}
 
 def instant(value):
     if not isinstance(value, str):

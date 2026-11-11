@@ -44,6 +44,8 @@ class PairingTests(APITestCase):
         self.assertLessEqual((grant.expires_at - timezone.now()).total_seconds(), 300)
         listed = self.client.get('/api/v1/pcs').data['data'][0]
         self.assertEqual(listed['credential_state'], 'pending_pairing')
+        self.assertTrue(listed['initial_installation'])
+        self.assertEqual(listed['installation_expires_at'], grant.expires_at)
         self.assertNotIn(data['pairing_code'], str(listed))
         self.assertFalse(AgentRegistration.objects.get().is_active)
 
@@ -59,14 +61,50 @@ class PairingTests(APITestCase):
         self.assertEqual(self.redeem(data['pairing_code']).status_code, 400)
         self.assertIn('no-store', response['Cache-Control'])
 
-    def test_expired_wrong_and_reissued_codes_cannot_be_used(self):
+    def test_expired_enrollment_releases_room_for_a_new_pc(self):
         data = self.enroll()
         PCPairingCode.objects.update(expires_at=timezone.now() - timedelta(seconds=1))
         self.assertEqual(self.redeem(data['pairing_code']).status_code, 400)
-        _, new, _ = issue_pairing_code(data['agent_id'])
-        self.assertEqual(self.redeem(data['pairing_code']).status_code, 400)
+        self.assertEqual(self.client.post(f"/api/v1/pcs/{data['agent_id']}/vinculacion").status_code, 409)
+        self.assertEqual(self.client.get('/api/v1/pcs').data['data'], [])
+        self.assertFalse(AgentRegistration.objects.filter(pk=data['agent_id']).exists())
+        self.assertFalse(PCPairingCode.objects.exists())
+        room = next(row for row in self.client.get('/api/v1/pcs/salas').data['data'] if row['box'] == self.room.box)
+        self.assertIsNone(room['existing_pc_id'])
+        fresh = self.enroll()
+        self.assertNotEqual(fresh['agent_id'], data['agent_id'])
         self.assertEqual(self.redeem('AAAAA').status_code, 400)
-        self.assertEqual(self.redeem(new).status_code, 200)
+        self.assertEqual(self.redeem(fresh['pairing_code']).status_code, 200)
+
+    def test_direct_enrollment_replaces_expired_draft_without_refresh(self):
+        old = self.enroll()
+        PCPairingCode.objects.update(expires_at=timezone.now() - timedelta(seconds=1))
+        fresh = self.enroll()
+        self.assertNotEqual(fresh['agent_id'], old['agent_id'])
+        self.assertFalse(AgentRegistration.objects.filter(pk=old['agent_id']).exists())
+
+    def test_cancelling_initial_installation_deletes_only_the_provisional_pc(self):
+        data = self.enroll()
+        path = f"/api/v1/pcs/{data['agent_id']}/cancelar-instalacion"
+        self.assertEqual(self.client.post(path).status_code, 200)
+        self.assertFalse(AgentRegistration.objects.filter(pk=data['agent_id']).exists())
+        self.assertTrue(SmileRoom.objects.filter(pk=self.room.pk).exists())
+        self.assertEqual(self.redeem(data['pairing_code']).status_code, 400)
+
+        installed = self.enroll()
+        self.assertEqual(self.redeem(installed['pairing_code']).status_code, 200)
+        self.assertEqual(self.client.post(f"/api/v1/pcs/{installed['agent_id']}/cancelar-instalacion").status_code, 409)
+        self.assertTrue(AgentRegistration.objects.get(pk=installed['agent_id']).is_active)
+
+    def test_expired_reinstallation_keeps_the_existing_pc_and_credential(self):
+        agent, key = create_agent(name='PC instalado', box=self.room.box)
+        issue_pairing_code(agent.pk)
+        PCPairingCode.objects.update(expires_at=timezone.now() - timedelta(seconds=1))
+        listed = self.client.get('/api/v1/pcs').data['data'][0]
+        self.assertEqual(listed['agent_id'], str(agent.pk))
+        self.assertFalse(listed['initial_installation'])
+        self.assertFalse(listed['installation_pending'])
+        self.assertEqual(authenticate_agent_header(('Agent ' + key).encode()).registry_id, str(agent.pk))
 
     def test_revocation_cancels_pending_code(self):
         data = self.enroll()

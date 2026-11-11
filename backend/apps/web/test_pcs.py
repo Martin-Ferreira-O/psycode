@@ -113,7 +113,7 @@ class PCPanelTests(APITestCase):
         self.assertEqual(confirmed.status_code, 200)
         self.assertTrue(AgentRegistration.objects.get(pk=grant.agent_id).is_active)
 
-    def test_missing_checksum_does_not_block_enrollment_or_renewal_after_expiry(self):
+    def test_missing_checksum_does_not_block_a_new_enrollment_after_expiry(self):
         release = self.publish_installer()
         (release / (INSTALLER_NAME + '.sha256')).unlink()
         self.client.force_authenticate(self.admin)
@@ -124,9 +124,10 @@ class PCPanelTests(APITestCase):
         self.assertEqual(response.status_code, 201)
         pc_id = response.data['data']['agent_id']
         PCPairingCode.objects.filter(agent_id=pc_id).update(expires_at=timezone.now() - timedelta(seconds=1))
-        renewed = self.client.post(f'/api/v1/pcs/{pc_id}/vinculacion', {}, format='json')
-        self.assertEqual(renewed.status_code, 200)
-        self.assertEqual(renewed.data['data']['agent_id'], pc_id)
+        replacement = self.client.post('/api/v1/pcs/alta', {'name': 'PC nuevo', 'room_id': str(self.room.pk)}, format='json')
+        self.assertEqual(replacement.status_code, 201)
+        self.assertNotEqual(replacement.data['data']['agent_id'], pc_id)
+        self.assertFalse(AgentRegistration.objects.filter(pk=pc_id).exists())
         self.assertEqual(AgentRegistration.objects.count(), 2)
 
     def test_replacing_current_switches_the_version_without_serving_stale_links(self):

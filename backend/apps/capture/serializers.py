@@ -2,6 +2,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from rest_framework import serializers
 from backend.common.boxes import BOX_PATTERN
+from .models import AgentConfiguration
 
 
 class FragmentSerializer(serializers.Serializer):
@@ -62,4 +63,17 @@ class AgentRegistrationCreateSerializer(serializers.Serializer):
                 "El nombre del PC es obligatorio."
             )
 
+        return value
+
+class AgentConfigurationSerializer(serializers.ModelSerializer):
+    desired_config = serializers.JSONField(required=True)
+
+    class Meta:
+        model = AgentConfiguration
+        fields = ["config_id", "version", "desired_config", "effective_config", "state", "error_code", "created_at", "updated_at"]
+        read_only_fields = ["config_id", "version", "effective_config", "state", "error_code", "created_at", "updated_at"]
+
+    def validate_desired_config(self, value):
+        if not isinstance(value, dict):
+            raise serializers.ValidationError("La configuración deseada debe ser un diccionario JSON válido.")
         return value

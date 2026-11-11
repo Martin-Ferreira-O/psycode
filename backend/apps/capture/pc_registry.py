@@ -3,6 +3,7 @@ import hashlib
 import secrets
 
 from django.db import transaction
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
 from .models import AgentRegistration
@@ -15,8 +16,8 @@ def _generate_credential(agent_id):
 
 @transaction.atomic
 def create_agent(*, name, box):
-    from .pairing import registration_lock, check_available_box
-    registration_lock()
+    from .pairing import check_available_box, discard_abandoned_enrollments
+    discard_abandoned_enrollments()
     check_available_box(box)
     agent = AgentRegistration(name=name, box=box)
     token, agent.token_sha256 = _generate_credential(agent.agent_id)
@@ -40,7 +41,9 @@ def _invalidate_connection(agent, cause):
 @transaction.atomic
 def revoke_agent(agent):
     from .models import PCPairingCode
-    current = AgentRegistration.objects.select_for_update().get(pk=agent.pk)
+    from .pairing import registration_lock
+    registration_lock()
+    current = get_object_or_404(AgentRegistration.objects.select_for_update(), pk=agent.pk)
     PCPairingCode.objects.filter(agent=current).delete()
     _invalidate_connection(current, "CREDENTIAL_REVOKED")
     current.legacy_enabled = False
@@ -53,7 +56,9 @@ def revoke_agent(agent):
 @transaction.atomic
 def renew_agent(agent):
     from .models import PCPairingCode
-    current = AgentRegistration.objects.select_for_update().get(pk=agent.pk)
+    from .pairing import registration_lock
+    registration_lock()
+    current = get_object_or_404(AgentRegistration.objects.select_for_update(), pk=agent.pk)
     PCPairingCode.objects.filter(agent=current).delete()
     _invalidate_connection(current, "CREDENTIAL_RENEWED")
     current.legacy_enabled = False

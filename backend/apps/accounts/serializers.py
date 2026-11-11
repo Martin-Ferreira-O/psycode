@@ -42,6 +42,22 @@ class PasswordResetConfirmSerializer(StrictSerializer):
 
 
 
+class AdminUsersQuerySerializer(serializers.Serializer):
+    limit = serializers.IntegerField(default=10, min_value=1, max_value=100)
+    offset = serializers.IntegerField(default=0, min_value=0, max_value=2_147_483_647)
+
+    def to_internal_value(self, data):
+        errors = {}
+        for key in data:
+            if key not in self.fields:
+                errors[key] = ["Parámetro de consulta no reconocido."]
+            elif hasattr(data, "getlist") and len(data.getlist(key)) != 1:
+                errors[key] = ["Parámetro de consulta repetido."]
+        if errors:
+            raise serializers.ValidationError(errors)
+        return super().to_internal_value(data)
+
+
 class AdminUserCreateSerializer(StrictSerializer):
     usuario = StrictStringField(max_length=150)
     nombre = StrictStringField(max_length=150)

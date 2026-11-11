@@ -11,15 +11,27 @@ import subprocess
 import sys
 import tempfile
 import time
+from contextlib import ExitStack
 from datetime import datetime, timedelta, timezone
 
 ROOT=Path(__file__).resolve().parents[2]
+
+def stop_process(process):
+    if process.poll() is not None:
+        return
+    process.terminate()
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait()
+
 
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('--agent-wheel',required=True,type=Path)
     args=parser.parse_args();wheel=args.agent_wheel.resolve()
     assert wheel.is_file()
-    with tempfile.TemporaryDirectory(prefix='psycode-cross-') as temporary:
+    with tempfile.TemporaryDirectory(prefix='psycode-cross-') as temporary, ExitStack() as resources, ExitStack() as processes:
         root=Path(temporary);env=os.environ.copy()
         token='cross-agent.'+'s'*43
         agents={'cross-agent':{'box':'box-3','token_sha256':hashlib.sha256(token.encode()).hexdigest()}}
@@ -30,6 +42,8 @@ def main():
         import django
         django.setup()
         from django.core.management import call_command
+        from django.db import connections
+        resources.callback(connections.close_all)
         call_command('migrate',verbosity=0,interactive=False)
         # Datos de agenda sintéticos por HTTP; otro proceso coordina desde SQL.
         agent_env=root/'agent-env'
@@ -40,18 +54,19 @@ def main():
         with socket.socket() as sock:
             sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
         base=f'http://127.0.0.1:{port}'
-        log=(root/'server.log').open('w+')
+        log=resources.enter_context((root/'server.log').open('w+'))
         server=subprocess.Popen([sys.executable,'-m','uvicorn','backend.config.asgi:application',
             '--host','127.0.0.1','--port',str(port),'--log-level','warning','--timeout-graceful-shutdown','2'],
             cwd=ROOT,env=env,stdout=log,stderr=log)
+        processes.callback(stop_process, server)
         with socket.socket() as sock:
             sock.bind(('127.0.0.1',0));port2=sock.getsockname()[1]
         alternate=f'http://127.0.0.1:{port2}'
-        second_log=(root/'server2.log').open('w+')
+        second_log=resources.enter_context((root/'server2.log').open('w+'))
         second_server=subprocess.Popen([sys.executable,'-m','uvicorn','backend.config.asgi:application',
             '--host','127.0.0.1','--port',str(port2),'--log-level','warning','--timeout-graceful-shutdown','2'],
             cwd=ROOT,env=env,stdout=second_log,stderr=second_log)
-        agent=None
+        processes.callback(stop_process, second_server)
         try:
             import httpx
             for _ in range(100):
@@ -95,9 +110,10 @@ def main():
             from backend.apps.capture.models import CaptureSession, FragmentJob
             sid=CaptureSession.objects.get(box='box-3').pk
             coordinate();assert CaptureSession.objects.get(box='box-3').pk==sid
-            agent_log=(root/'agent.log').open('w+')
+            agent_log=resources.enter_context((root/'agent.log').open('w+'))
             agent=subprocess.Popen([str(apython),str(ROOT/'tests/cross/agent_probe.py'),base,token,str(root/'state'),alternate],
                                    cwd=root,env=env,stdout=agent_log,stderr=agent_log)
+            processes.callback(stop_process, agent)
             for _ in range(200):
                 agent_log.flush();agent_log.seek(0);content=agent_log.read()
                 if '"stage": "uploaded"' in content:break
@@ -145,9 +161,10 @@ def main():
             assert response.status_code==201,response.text
             coordinate()
             sid2=CaptureSession.objects.get(box='box-3',state='iniciada').pk
-            runtime_log=(root/'runtime.log').open('w+')
+            runtime_log=resources.enter_context((root/'runtime.log').open('w+'))
             agent=subprocess.Popen([str(apython),str(ROOT/'tests/cross/runtime_probe.py'),base,token,str(root/'runtime-state')],
                 cwd=root,env=env,stdout=runtime_log,stderr=runtime_log)
+            processes.callback(stop_process, agent)
             for _ in range(200):
                 if CaptureSession.objects.get(pk=sid2).state=='activa':break
                 if agent.poll() is not None:
@@ -176,19 +193,11 @@ def main():
                 'lost HTTPS responses after commit for each agent','separate WS/HTTP processes','SQL agenda and coordinator restart','lost ACK after commit',
                 'reconnect','idempotent uploads','stop and final sequence','queue to simulated unknown-speaker analysis','historical v1 HTTP and ACK tests','autonomous runtime with simulated OBS/FFmpeg','lease replacement across two ASGI processes','isolated agent without Django/backend/MongoDB','native delivered Smile JSON through HTTP to authorization']}))
         finally:
-            if agent is not None and agent.poll() is None:agent.terminate();agent.wait(timeout=5)
-            for process in (server,second_server):
-                process.terminate()
-                try:process.wait(timeout=5)
-                except subprocess.TimeoutExpired:process.kill();process.wait()
-            second_log.seek(0)
-            if second_log.read():
-                second_log.seek(0);print(second_log.read(),file=sys.stderr)
-            second_log.close()
-            log.seek(0)
-            server_log = log.read()
-            if server_log:
-                print(server_log, file=sys.stderr)
-            log.close()
+            processes.close()
+            for server_log in (second_log, log):
+                server_log.seek(0)
+                content = server_log.read()
+                if content:
+                    print(content, file=sys.stderr)
 
 if __name__=='__main__':main()

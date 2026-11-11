@@ -39,15 +39,44 @@
     background: #f8fafc;
 }
 
+.seccion-historial {
+    container: historial-alertas / inline-size;
+}
+
 .panel-filtros {
     display: grid;
-    grid-template-columns: minmax(260px, 2fr) repeat(4, minmax(145px, 1fr)) auto;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 15px;
     margin-bottom: 24px;
     padding: 22px;
     border: 1px solid #dce3eb;
     border-radius: 15px;
     background: #ffffff;
+}
+
+.panel-filtros > .campo-busqueda,
+.panel-filtros > .boton-secundario {
+    grid-column: 1 / -1;
+}
+
+.panel-filtros > .boton-secundario {
+    min-height: 47px;
+    align-self: end;
+    justify-self: end;
+}
+
+.panel-filtros > .campo {
+    min-width: 0;
+}
+
+.entrada-busqueda-alertas {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.entrada-busqueda-alertas input {
+    flex: 1 1 160px;
 }
 
 .campo label {
@@ -62,6 +91,7 @@
 .campo input,
 .campo select {
     width: 100%;
+    min-width: 0;
     min-height: 47px;
     border: 1px solid #cbd5e1;
     border-radius: 9px;
@@ -436,13 +466,20 @@ body.modal-abierto {
     background: #f4f7fa;
 }
 
-@media (max-width: 1100px) {
+@container historial-alertas (min-width: 820px) {
     .panel-filtros {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 
-    .boton-secundario {
-        align-self: auto;
+    .panel-filtros > .campo-busqueda,
+    .panel-filtros > .boton-secundario {
+        grid-column: auto;
+    }
+}
+
+@container historial-alertas (min-width: 1040px) {
+    .panel-filtros {
+        grid-template-columns: minmax(260px, 2fr) repeat(4, minmax(140px, 1fr)) auto;
     }
 }
 
@@ -455,6 +492,10 @@ body.modal-abierto {
     .panel-filtros,
     .detalle-grid {
         grid-template-columns: 1fr;
+    }
+
+    .panel-filtros > .boton-secundario {
+        justify-self: stretch;
     }
 
     .paginacion {
@@ -681,5 +722,42 @@ body.modal-abierto {
 @media (max-width: 650px) {
     .opciones-evaluacion {
         grid-template-columns: 1fr;
+    }
+}
+
+@media (min-width: 951px) {
+
+    #modalDetalle.modal {
+        box-sizing: border-box;
+
+        padding:
+            24px
+            24px
+            24px
+            344px;
+    }
+
+    #modalDetalle .modal-contenido {
+        margin-left: auto;
+        margin-right: auto;
+    }
+}
+
+@media (max-width: 950px) {
+
+    #modalDetalle.modal {
+        padding: 24px;
+    }
+}
+
+@media (max-width: 700px) {
+
+    #modalDetalle.modal {
+        padding: 12px;
+    }
+
+    #modalDetalle .modal-contenido {
+        width: 100%;
+        max-width: 100%;
     }
 }

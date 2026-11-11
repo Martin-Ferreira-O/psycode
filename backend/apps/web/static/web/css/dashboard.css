@@ -1216,3 +1216,580 @@
     stroke-linecap: round;
     stroke-linejoin: round;
 }
+
+
+.acciones-dashboard {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-left: auto;
+    flex-wrap: wrap;
+}
+
+.boton-exportar-excel {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+
+    min-height: 42px;
+    padding: 0 16px;
+
+    border: 1px solid #198754;
+    border-radius: 11px;
+
+    background: #198754;
+    color: #ffffff;
+
+    font: inherit;
+    font-weight: 600;
+
+    cursor: pointer;
+    white-space: nowrap;
+
+    transition:
+        background 0.2s ease,
+        border-color 0.2s ease,
+        transform 0.2s ease;
+}
+
+.boton-exportar-excel:hover {
+    background: #146c43;
+    border-color: #146c43;
+}
+
+.boton-exportar-excel:active {
+    transform: translateY(1px);
+}
+
+.boton-exportar-excel:disabled {
+    cursor: not-allowed;
+    opacity: 0.65;
+}
+
+.icono-descarga-excel {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.celda-accion-alerta {
+    text-align: center;
+    vertical-align: middle;
+}
+
+.boton-detalle-icono {
+    width: 38px;
+    height: 38px;
+
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    padding: 0;
+
+    border: 1px solid #cbd8e6;
+    border-radius: 11px;
+
+    background: #f7fafc;
+    color: #315d7d;
+
+    cursor: pointer;
+
+    box-shadow: 0 2px 6px rgba(30, 55, 90, 0.06);
+
+    transition:
+        background 0.18s ease,
+        color 0.18s ease,
+        border-color 0.18s ease,
+        transform 0.18s ease,
+        box-shadow 0.18s ease;
+}
+
+.boton-detalle-icono:hover {
+    background: #eaf3f8;
+    color: #1f506f;
+    border-color: #9fbdd0;
+
+    transform: translateX(2px);
+
+    box-shadow: 0 5px 12px rgba(30, 55, 90, 0.10);
+}
+
+.boton-detalle-icono:active {
+    transform: translateX(1px);
+}
+
+.boton-detalle-icono:focus-visible {
+    outline: 3px solid rgba(49, 93, 125, 0.25);
+    outline-offset: 2px;
+}
+
+.icono-ver-detalle {
+    width: 18px;
+    height: 18px;
+
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.contenido-dashboard,
+.resumen-dashboard,
+.panel-indicadores,
+.panel-grafico-dashboard,
+.seccion-historial,
+.panel-alertas,
+.panel-filtros,
+.tabla-contenedor {
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+@media (max-width: 950px) {
+
+    .contenido-dashboard {
+        margin-left: 0;
+        width: 100%;
+        padding: 24px;
+        box-sizing: border-box;
+    }
+
+    .resumen-dashboard {
+        grid-template-columns: 1fr;
+        gap: 20px;
+    }
+
+    .panel-indicadores,
+    .panel-grafico-dashboard {
+        width: 100%;
+        min-width: 0;
+    }
+
+    .panel-filtros {
+        grid-template-columns:
+            repeat(2, minmax(0, 1fr));
+    }
+
+    .campo,
+    .campo input,
+    .campo select {
+        min-width: 0;
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+    .tabla-contenedor {
+        width: 100%;
+        max-width: 100%;
+        overflow-x: auto;
+        overflow-y: hidden;
+
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior-x: contain;
+    }
+
+    .seccion-historial .tabla-alertas {
+        width: 100%;
+        min-width: 850px;
+    }
+
+    .grafico-dashboard {
+        width: 100%;
+        max-width: 100%;
+        overflow-x: auto;
+
+        -webkit-overflow-scrolling: touch;
+    }
+}
+
+@media (max-width: 700px) {
+
+    html,
+    body {
+        max-width: 100%;
+        overflow-x: hidden;
+    }
+
+    .aplicacion {
+        width: 100%;
+        max-width: 100%;
+        overflow-x: hidden;
+    }
+
+    .contenido-dashboard {
+        width: 100%;
+        max-width: 100%;
+
+        padding: 18px 14px;
+
+        margin-left: 0;
+
+        box-sizing: border-box;
+    }
+
+    .cabecera-dashboard {
+        width: 100%;
+        min-height: auto;
+
+        padding-right: 0;
+
+        flex-direction: column;
+        align-items: stretch;
+
+        gap: 16px;
+    }
+
+    .cabecera-dashboard > div:first-child {
+        min-width: 0;
+    }
+
+    .cabecera-dashboard h1 {
+        margin: 0;
+
+        font-size: 25px;
+        line-height: 1.2;
+
+        overflow-wrap: anywhere;
+    }
+
+    .subtitulo-dashboard {
+        margin-top: 7px;
+
+        font-size: 14px;
+        line-height: 1.5;
+    }
+
+    .usuario-dashboard {
+        position: static;
+
+        width: 100%;
+        max-width: 100%;
+
+        margin-top: 0;
+
+        box-sizing: border-box;
+    }
+
+    .resumen-dashboard {
+        width: 100%;
+
+        grid-template-columns: 1fr;
+
+        gap: 16px;
+    }
+
+    .panel-indicadores,
+    .panel-grafico-dashboard {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+
+        box-sizing: border-box;
+    }
+
+    .titulo-bloque {
+        align-items: flex-start;
+    }
+
+    .titulo-bloque > div {
+        min-width: 0;
+    }
+
+    .titulo-bloque h2,
+    .cabecera-grafico-dashboard h2 {
+        font-size: 18px;
+        line-height: 1.25;
+    }
+
+    .tarjetas-resumen {
+        grid-template-columns: 1fr;
+
+        gap: 12px;
+    }
+
+    .tarjeta-resumen {
+        width: 100%;
+        min-width: 0;
+
+        box-sizing: border-box;
+    }
+
+    .grafico-dashboard {
+        width: 100%;
+        max-width: 100%;
+
+        overflow-x: auto;
+        overflow-y: hidden;
+
+        -webkit-overflow-scrolling: touch;
+    }
+    .cabecera-historial {
+        width: 100%;
+
+        flex-direction: column;
+        align-items: stretch;
+
+        gap: 14px;
+    }
+
+    .cabecera-historial > div:first-child {
+        min-width: 0;
+    }
+
+    .acciones-dashboard {
+        width: 100%;
+
+        margin-left: 0;
+
+        display: grid;
+        grid-template-columns:
+            repeat(2, minmax(0, 1fr));
+
+        gap: 10px;
+    }
+
+    .acciones-dashboard .boton-principal,
+    .acciones-dashboard .boton-exportar-excel {
+        width: 100%;
+        min-width: 0;
+
+        padding-left: 10px;
+        padding-right: 10px;
+
+        box-sizing: border-box;
+    }
+
+    .panel-filtros {
+        width: 100%;
+
+        display: grid;
+        grid-template-columns: 1fr;
+
+        gap: 12px;
+
+        box-sizing: border-box;
+    }
+
+    .campo {
+        width: 100%;
+        min-width: 0;
+    }
+
+    .campo input,
+    .campo select {
+        display: block;
+
+        width: 100%;
+        min-width: 0;
+        max-width: 100%;
+
+        box-sizing: border-box;
+    }
+
+    .entrada-busqueda-alertas {
+        width: 100%;
+
+        display: grid;
+        grid-template-columns: 1fr;
+
+        gap: 8px;
+    }
+
+    .entrada-busqueda-alertas input,
+    .entrada-busqueda-alertas button {
+        width: 100%;
+        min-width: 0;
+
+        box-sizing: border-box;
+    }
+
+    #limpiarFiltros {
+        width: 100%;
+    }
+
+    .panel-alertas {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+
+        overflow: hidden;
+
+        box-sizing: border-box;
+    }
+
+    .panel-cabecera {
+        min-width: 0;
+    }
+
+    .panel-cabecera h2,
+    .panel-cabecera p {
+        overflow-wrap: anywhere;
+    }
+
+    .tabla-contenedor {
+        display: block;
+
+        width: 100%;
+        max-width: 100%;
+
+        overflow-x: auto;
+        overflow-y: hidden;
+
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior-x: contain;
+    }
+
+    .seccion-historial .tabla-alertas {
+        width: 760px;
+        min-width: 760px;
+
+        table-layout: fixed;
+    }
+
+    .seccion-historial .tabla-alertas th,
+    .seccion-historial .tabla-alertas td {
+        padding: 13px 10px;
+
+        font-size: 13px;
+    }
+
+    .seccion-historial .tabla-alertas th {
+        font-size: 12px;
+    }
+
+    .boton-detalle-icono {
+        width: 38px;
+        min-width: 38px;
+
+        height: 38px;
+        min-height: 38px;
+    }
+
+    .paginacion {
+        width: 100%;
+
+        flex-direction: column;
+        align-items: stretch;
+
+        gap: 14px;
+    }
+
+    #textoPaginacion {
+        width: 100%;
+        text-align: center;
+    }
+
+    .botones-paginacion {
+        width: 100%;
+
+        display: flex;
+        align-items: center;
+        justify-content: center;
+
+        gap: 7px;
+
+        flex-wrap: wrap;
+    }
+
+    #numerosPagina {
+        display: flex;
+        flex-wrap: wrap;
+
+        justify-content: center;
+
+        gap: 5px;
+    }
+
+    .modal {
+        padding: 12px;
+
+        box-sizing: border-box;
+    }
+
+    .modal-contenido {
+        width: 100%;
+        max-width: 100%;
+
+        max-height: calc(100dvh - 24px);
+
+        overflow-y: auto;
+        overflow-x: hidden;
+
+        box-sizing: border-box;
+    }
+
+    .modal-cabecera {
+        gap: 12px;
+    }
+
+    .modal-cabecera > div {
+        min-width: 0;
+    }
+
+    .modal-cabecera h2 {
+        overflow-wrap: anywhere;
+    }
+
+    .detalle-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .detalle-item {
+        min-width: 0;
+    }
+
+    .detalle-item strong {
+        overflow-wrap: anywhere;
+        word-break: break-word;
+    }
+
+    .opciones-evaluacion {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 480px) {
+
+    .contenido-dashboard {
+        padding: 16px 12px;
+    }
+
+    .cabecera-dashboard h1 {
+        font-size: 23px;
+    }
+
+    .acciones-dashboard {
+        grid-template-columns: 1fr;
+    }
+
+    .acciones-dashboard .boton-principal,
+    .acciones-dashboard .boton-exportar-excel {
+        width: 100%;
+    }
+
+    .seccion-historial .tabla-alertas {
+        width: 720px;
+        min-width: 720px;
+    }
+
+    .botones-paginacion {
+        justify-content: space-between;
+    }
+
+    #paginaAnterior,
+    #paginaSiguiente {
+        flex: 1;
+        min-width: 95px;
+    }
+}

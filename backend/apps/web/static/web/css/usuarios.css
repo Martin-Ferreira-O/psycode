@@ -61,9 +61,14 @@
 
 .tabla-usuarios {
     width: 100%;
-    min-width: 0;
+    min-width: 46rem;
     table-layout: fixed;
     border-collapse: collapse;
+}
+
+#tablaUsuariosContenedor:focus-visible {
+    outline: 2px solid #547795;
+    outline-offset: -2px;
 }
 
 .tabla-usuarios th,
@@ -141,13 +146,13 @@
 
 .tabla-usuarios th:nth-child(5),
 .tabla-usuarios td:nth-child(5) {
-    width: 10%;
+    width: 6.5rem;
     text-align: center;
 }
 
 .tabla-usuarios th:nth-child(6),
 .tabla-usuarios td:nth-child(6) {
-    width: 12%;
+    width: 6.5rem;
     text-align: center;
 }
 
@@ -335,6 +340,18 @@
     outline: 3px solid rgba(23, 56, 88, 0.18);
     outline-offset: 2px;
 }
+.paginacion-usuarios {
+    border-top: 1px solid #e7edf3;
+}
+
+.paginacion-usuarios[hidden] {
+    display: none;
+}
+
+.paginacion-usuarios button {
+    min-height: 44px;
+}
+
 .pie-usuarios {
     padding: 19px 20px;
 
@@ -794,11 +811,6 @@
 }
 
 @media (max-width: 1100px) {
-    .tabla-usuarios {
-        width: 100%;
-        min-width: 0;
-    }
-
     .panel-cabecera-usuarios {
         align-items: flex-start;
     }
@@ -811,10 +823,6 @@
 
     .boton-crear-usuario {
         width: 100%;
-    }
-
-    .tabla-usuarios {
-        min-width: 900px;
     }
 
     .fila-formulario-usuario {

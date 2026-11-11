@@ -250,7 +250,7 @@ function textoActor(evento) {
 
     const actor = evento.actor;
 
-    if (typeof actor === "string" && actor.trim() && actor !== "Usuario") {
+    if (typeof actor === "string" && actor.trim()) {
         return actor;
     }
 

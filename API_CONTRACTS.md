@@ -270,9 +270,16 @@ SCRUM-42 y SCRUM-43. Gestión de cuentas sobre SQLite y Django REST Framework me
 
 ### GET /api/v1/auth/admin/users
 
-Sin cuerpo ni parámetros en v1. Retorna la colección completa de usuarios.
+Sin cuerpo. Retorna la colección completa cuando se consulta sin parámetros.
+La colección se ordena de la cuenta más reciente a la más antigua, con el identificador como desempate.
 
-Respuesta 200:
+Enviar `limit` u `offset` activa la paginación. `limit` admite enteros de 1 a 100 y por defecto es 10.
+`offset` admite enteros de 0 a 2147483647 y por defecto es 0.
+En ese caso, `data` contiene `items` (las cuentas de la página), `total` (todas las cuentas),
+`limit` y `offset`. Un desplazamiento posterior a la última cuenta devuelve `items: []`.
+Los parámetros desconocidos, repetidos o fuera de rango devuelven HTTP 400.
+
+Respuesta 200 sin parámetros:
 
 ~~~json
 {
@@ -551,9 +558,11 @@ la versión actualizada del servidor.
 
 Los clientes anteriores pueden continuar usando `primary_email` y `backup_email`
 y omitir los campos nuevos: no restablecen la modalidad ni la activación del
-respaldo. Deben tolerar los campos adicionales de respuesta. Esta entrega deja
-el contrato disponible para las tareas de frontend; el formulario actual sigue
-sin controles para las nuevas preferencias.
+respaldo. Deben tolerar los campos adicionales de respuesta.
+
+El formulario de Configuración operativa permite elegir entre la lista de
+distribución y los supervisores activos. El correo de respaldo tiene controles
+propios para configurar la dirección y activar o desactivar el envío.
 
 ## 2. Alertas y evaluaciones
 

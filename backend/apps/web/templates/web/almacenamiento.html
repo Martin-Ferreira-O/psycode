@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="{% static 'web/css/styles.css' %}">
     <link rel="stylesheet" href="{% static 'web/css/dashboard.css' %}?v=5">
     <link rel="stylesheet" href="{% static 'web/css/estados.css' %}">
-    <link rel="stylesheet" href="{% static 'web/css/configuracion_operativa.css' %}">
+    <link rel="stylesheet" href="{% static 'web/css/configuracion_operativa.css' %}?v=3">
     <link rel="stylesheet" href="{% static 'web/css/almacenamiento.css' %}">
 </head>
 <body>
@@ -16,7 +16,10 @@
     {% include "web/components/sidebar.html" with seccion_activa="configuracion_operativa" %}
     <main class="contenido-dashboard">
         <header class="cabecera-dashboard">
-            <div><a href="{% url 'web:configuracion_operativa' %}">Configuración operativa</a>
+            <div>
+                <a class="boton-navegacion-configuracion" href="{% url 'web:configuracion_operativa' %}">
+                    Volver a Configuración operativa
+                </a>
                 <h1>Almacenamiento del servidor</h1>
                 <p class="descripcion-pagina">Consulta el espacio y libera material de procesamiento que ya cumplió su conservación.</p>
             </div>

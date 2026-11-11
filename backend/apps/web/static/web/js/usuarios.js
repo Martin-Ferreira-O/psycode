@@ -1,9 +1,15 @@
 const URL_USUARIOS = "/api/v1/auth/admin/users";
+const USUARIOS_POR_PAGINA = 10;
 
 const elementosUsuarios = {
     tabla: document.querySelector("#tablaUsuarios"),
     tablaContenedor: document.querySelector("#tablaUsuariosContenedor"),
+    titulo: document.querySelector("#tituloUsuariosRegistrados"),
     resultado: document.querySelector("#resultadoUsuarios"),
+    paginacion: document.querySelector("#paginacionUsuarios"),
+    pagina: document.querySelector("#paginaUsuarios"),
+    anterior: document.querySelector("#usuariosAnterior"),
+    siguiente: document.querySelector("#usuariosSiguiente"),
     estadoCarga: document.querySelector("#estadoCargaUsuarios"),
     estadoError: document.querySelector("#estadoErrorUsuarios"),
     mensajeError: document.querySelector("#mensajeErrorUsuarios"),
@@ -34,7 +40,9 @@ const elementosUsuarios = {
     botonConfirmarEstado: document.querySelector("#botonConfirmarEstado")
 };
 
-let usuarios = [];
+let offsetUsuarios = 0;
+let offsetSolicitadoUsuarios = 0;
+let solicitudUsuarios = 0;
 let usuarioEnEdicion = null;
 let usuarioCambioEstado = null;
 let usuarioSesionId = null;
@@ -175,6 +183,7 @@ function mostrarCargaUsuarios() {
     ocultar(elementosUsuarios.estadoError);
     ocultar(elementosUsuarios.estadoVacio);
     ocultar(elementosUsuarios.tablaContenedor);
+    ocultar(elementosUsuarios.paginacion);
     if (elementosUsuarios.resultado) elementosUsuarios.resultado.textContent = "Cargando usuarios...";
 }
 
@@ -182,6 +191,7 @@ function mostrarErrorUsuarios(mensaje) {
     ocultar(elementosUsuarios.estadoCarga);
     ocultar(elementosUsuarios.estadoVacio);
     ocultar(elementosUsuarios.tablaContenedor);
+    ocultar(elementosUsuarios.paginacion);
     mostrar(elementosUsuarios.estadoError);
 
     if (elementosUsuarios.mensajeError) elementosUsuarios.mensajeError.textContent = mensaje;
@@ -197,7 +207,7 @@ function mostrarListaVacia() {
     if (elementosUsuarios.resultado) elementosUsuarios.resultado.textContent = "0 usuarios registrados";
 }
 
-function mostrarTablaUsuarios() {
+function mostrarTablaUsuarios(total) {
     ocultar(elementosUsuarios.estadoCarga);
     ocultar(elementosUsuarios.estadoError);
     ocultar(elementosUsuarios.estadoVacio);
@@ -205,8 +215,15 @@ function mostrarTablaUsuarios() {
 
     if (elementosUsuarios.resultado) {
         elementosUsuarios.resultado.textContent =
-            usuarios.length === 1 ? "1 usuario registrado" : `${usuarios.length} usuarios registrados`;
+            total === 1 ? "1 usuario registrado" : `${total} usuarios registrados`;
     }
+
+    const pagina = Math.floor(offsetUsuarios / USUARIOS_POR_PAGINA) + 1;
+    const totalPaginas = Math.ceil(total / USUARIOS_POR_PAGINA);
+    elementosUsuarios.pagina.textContent = `Página ${pagina} de ${totalPaginas}`;
+    elementosUsuarios.anterior.disabled = pagina <= 1;
+    elementosUsuarios.siguiente.disabled = pagina >= totalPaginas;
+    elementosUsuarios.paginacion.hidden = totalPaginas <= 1;
 }
 
 function crearCelda(texto = "") {
@@ -283,7 +300,7 @@ function crearAccionesUsuario(usuario) {
     return celda;
 }
 
-function renderizarUsuarios() {
+function renderizarUsuarios(usuarios, total) {
     limpiarElemento(elementosUsuarios.tabla);
 
     if (!usuarios.length) {
@@ -309,20 +326,35 @@ function renderizarUsuarios() {
         elementosUsuarios.tabla.appendChild(fila);
     }
 
-    mostrarTablaUsuarios();
+    mostrarTablaUsuarios(total);
 }
 
-async function cargarUsuarios() {
+async function cargarUsuarios(offset = offsetUsuarios, enfocar = false) {
+    const idSolicitud = ++solicitudUsuarios;
+    offsetSolicitadoUsuarios = offset;
     mostrarCargaUsuarios();
 
     try {
-        const response = await apiRequest(URL_USUARIOS, { method: "GET" });
-        if (!response) return;
+        let datos;
+        while (true) {
+            const parametros = new URLSearchParams({ limit: USUARIOS_POR_PAGINA, offset });
+            const response = await apiRequest(`${URL_USUARIOS}?${parametros}`, { method: "GET" });
+            if (!response || idSolicitud !== solicitudUsuarios) return;
 
-        const datos = await leerRespuestaUsuarios(response);
-        usuarios = Array.isArray(datos) ? datos : [];
-        renderizarUsuarios();
+            datos = await leerRespuestaUsuarios(response);
+            if (idSolicitud !== solicitudUsuarios) return;
+            if (!Array.isArray(datos?.items) || !Number.isInteger(datos.total) || datos.total < 0) {
+                throw new Error("Respuesta de usuarios inválida.");
+            }
+            if (datos.total === 0 || offset < datos.total) break;
+
+            offset = Math.floor((datos.total - 1) / USUARIOS_POR_PAGINA) * USUARIOS_POR_PAGINA;
+        }
+
+        offsetUsuarios = datos.total === 0 ? 0 : offset;
+        renderizarUsuarios(datos.items, datos.total);
     } catch (error) {
+        if (idSolicitud !== solicitudUsuarios) return;
         console.error("ERROR USUARIOS:", error);
 
         if (error?.estado === 403) {
@@ -332,6 +364,8 @@ async function cargarUsuarios() {
         }
 
         mostrarErrorUsuarios(mensajeSegunEstado(error?.estado));
+    } finally {
+        if (enfocar && idSolicitud === solicitudUsuarios) elementosUsuarios.titulo.focus();
     }
 }
 
@@ -466,11 +500,12 @@ async function guardarUsuario(evento) {
     elementosUsuarios.botonGuardar.textContent = "Guardando...";
 
     try {
-        if (usuarioEnEdicion) await editarUsuario();
+        const editando = Boolean(usuarioEnEdicion);
+        if (editando) await editarUsuario();
         else await crearUsuario();
 
         cerrarModalUsuario();
-        await cargarUsuarios();
+        await cargarUsuarios(editando ? offsetUsuarios : 0, true);
     } catch (error) {
         mostrarErrorFormulario(obtenerMensajeValidacion(error));
     } finally {
@@ -522,7 +557,7 @@ async function confirmarCambioEstado() {
 
         await leerRespuestaUsuarios(response);
         cerrarConfirmacionEstado();
-        await cargarUsuarios();
+        await cargarUsuarios(offsetUsuarios, true);
     } catch (error) {
         cerrarConfirmacionEstado();
         mostrarErrorUsuarios(obtenerMensajeValidacion(error));
@@ -544,7 +579,9 @@ function manejarEscape(evento) {
 }
 
 elementosUsuarios.botonCrear?.addEventListener("click", abrirModalCrear);
-elementosUsuarios.botonReintentar?.addEventListener("click", cargarUsuarios);
+elementosUsuarios.botonReintentar?.addEventListener("click", () => cargarUsuarios(offsetSolicitadoUsuarios, true));
+elementosUsuarios.anterior.addEventListener("click", () => cargarUsuarios(offsetUsuarios - USUARIOS_POR_PAGINA, true));
+elementosUsuarios.siguiente.addEventListener("click", () => cargarUsuarios(offsetUsuarios + USUARIOS_POR_PAGINA, true));
 elementosUsuarios.formulario?.addEventListener("submit", guardarUsuario);
 elementosUsuarios.botonCancelar?.addEventListener("click", cerrarModalUsuario);
 elementosUsuarios.botonCerrar?.addEventListener("click", cerrarModalUsuario);

@@ -7,10 +7,13 @@ const etiquetas = {
     neutro: "Neutro",
 };
 
+const URL_EXPORTAR_ALERTAS = "/api/v1/alerts/export";
+
 const elementos = {
     total: document.querySelector("#totalAlertas"),
     pendientes: document.querySelector("#totalPendientes"),
     revisadas: document.querySelector("#totalRevisadas"),
+    formularioBusqueda: document.querySelector("#formularioBusquedaAlertas"),
     buscar: document.querySelector("#buscar"),
     box: document.querySelector("#filtroBox"),
     estado: document.querySelector("#filtroEstado"),
@@ -18,6 +21,7 @@ const elementos = {
     hasta: document.querySelector("#fechaHasta"),
     limpiar: document.querySelector("#limpiarFiltros"),
     actualizar: document.querySelector("#botonActualizar"),
+    descargarExcel: document.querySelector("#descargarExcelDashboard"),
     tabla: document.querySelector("#tablaAlertas"),
     tablaContenedor: document.querySelector("#tablaContenedor"),
     estadoVacio: document.querySelector("#estadoVacio"),
@@ -45,7 +49,7 @@ let solicitudLista = 0;
 let solicitudDetalle = 0;
 let solicitudResumen = null;
 let resumenCargado = false;
-let temporizadorBusqueda;
+let busquedaAplicada = "";
 let alertaSeleccionada = null;
 let periodoGrafico = "mes";
 let solicitudGrafico = 0;
@@ -389,24 +393,21 @@ function construirUrlAlertas(offsetSolicitado) {
         offset: String(offsetSolicitado),
     });
 
-    const busqueda =
-        elementos.buscar.value.trim();
-
     const codigoUuid =
         Object.entries(codigosAlerta)
             .find(
                 ([, codigo]) =>
                     codigo.toLowerCase() ===
-                    busqueda.toLowerCase()
+                    busquedaAplicada.toLowerCase()
             )?.[0];
 
     const estado =
         elementos.estado.value;
 
-    if (busqueda) {
+    if (busquedaAplicada) {
         parametros.set(
             "q",
-            codigoUuid || busqueda
+            codigoUuid || busquedaAplicada
         );
     }
 
@@ -446,6 +447,67 @@ function construirUrlAlertas(offsetSolicitado) {
     return `/api/v1/alerts?${parametros.toString()}`;
 }
 
+function configurarBotonAccionAlerta(boton, alerta) {
+    const pendiente =
+        alerta.estado_evaluacion === "pendiente";
+
+    boton.replaceChildren();
+
+    boton.type = "button";
+    boton.dataset.alerta = alerta.alerta_id;
+
+    if (pendiente) {
+        boton.className = "boton-revisar";
+        boton.textContent = "Revisar";
+
+        boton.setAttribute(
+            "aria-label",
+            `Revisar alerta ${codigoAlertaVisible(alerta.alerta_id)}`
+        );
+
+        boton.removeAttribute("title");
+
+        return;
+    }
+
+    boton.className = "boton-detalle-icono";
+
+    boton.setAttribute(
+        "aria-label",
+        `Ver detalle de alerta ${codigoAlertaVisible(alerta.alerta_id)}`
+    );
+
+    boton.title = "Ver detalle";
+
+    boton.innerHTML = `
+        <svg
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+            class="icono-ver-detalle"
+        >
+            <path d="M5 12h14"></path>
+            <path d="m13 6 6 6-6 6"></path>
+        </svg>
+    `;
+}
+
+function construirUrlExportacionAlertas() {
+    const urlListado = new URL(
+        construirUrlAlertas(0),
+        window.location.origin
+    );
+
+    urlListado.pathname = URL_EXPORTAR_ALERTAS;
+
+    urlListado.searchParams.delete("limit");
+    urlListado.searchParams.delete("offset");
+
+    const query = urlListado.searchParams.toString();
+
+    return query
+        ? `${URL_EXPORTAR_ALERTAS}?${query}`
+        : URL_EXPORTAR_ALERTAS;
+}
 async function cargarAlertas(offsetSolicitado = 0) {
     const idSolicitud = ++solicitudLista;
 
@@ -571,8 +633,7 @@ function renderizarTabla() {
         `encontrada${totalCoincidencias === 1 ? "" : "s"}`;
 
     if (totalCoincidencias === 0) {
-        const hayFiltros = [
-            elementos.buscar,
+        const hayFiltros = Boolean(busquedaAplicada) || [
             elementos.box,
             elementos.estado,
             elementos.desde,
@@ -665,23 +726,9 @@ function renderizarTabla() {
             const accion =
                 document.createElement("td");
 
-            const boton =
-                document.createElement("button");
-
-            boton.type = "button";
-
-            boton.className =
-                "boton-revisar";
-
-            boton.dataset.alerta =
-                alerta.alerta_id;
-
-            boton.textContent =
-                alerta.estado_evaluacion ===
-                    "pendiente"
-                    ? "Revisar"
-                    : "Ver detalle";
-
+            accion.className = "celda-accion-alerta";
+            const boton = document.createElement("button");
+            configurarBotonAccionAlerta(boton,alerta);
             accion.append(boton);
             fila.append(accion);
             filas.append(fila);
@@ -974,8 +1021,7 @@ function aplicarEvaluacion(
             )
         );
 
-        boton.textContent =
-            "Ver detalle";
+        configurarBotonAccionAlerta(boton,actualizada);
     }
 
     return actualizada;
@@ -1208,22 +1254,94 @@ function aplicarFiltroInicial() {
             estado;
     }
 }
+async function descargarExcelDashboard() {
+    const boton = elementos.descargarExcel;
 
-elementos.buscar.addEventListener(
-    "input",
-    () => {
-        clearTimeout(
-            temporizadorBusqueda
+    try {
+        if (boton) {
+            boton.disabled = true;
+
+            const texto = boton.querySelector("span");
+
+            if (texto) {
+                texto.textContent = "Descargando...";
+            }
+        }
+
+        const response = await apiGet(
+            construirUrlExportacionAlertas()
         );
 
-        temporizadorBusqueda =
-            setTimeout(
-                () =>
-                    cargarAlertas(0),
-                300
+        if (!response) {
+            return;
+        }
+
+        if (response.status === 204) {
+            alert(
+                "No hay registros para exportar con los filtros seleccionados."
             );
+            return;
+        }
+
+        if (!response.ok) {
+            throw new Error(
+                "No fue posible generar el archivo Excel."
+            );
+        }
+
+        const blob = await response.blob();
+
+        const url = URL.createObjectURL(blob);
+
+        const disposition =
+            response.headers.get("Content-Disposition");
+
+        const coincidencia =
+            disposition?.match(/filename="([^"]+)"/);
+
+        const nombreArchivo =
+            coincidencia?.[1]
+            || "dashboard_alertas.xlsx";
+
+        const enlace = document.createElement("a");
+
+        enlace.href = url;
+        enlace.download = nombreArchivo;
+
+        document.body.appendChild(enlace);
+
+        enlace.click();
+
+        enlace.remove();
+
+        URL.revokeObjectURL(url);
+
+    } catch (error) {
+
+        alert(
+            error.message
+            || "No fue posible descargar las alertas."
+        );
+
+    } finally {
+
+        if (boton) {
+            boton.disabled = false;
+
+            const texto = boton.querySelector("span");
+
+            if (texto) {
+                texto.textContent = "Descargar Excel";
+            }
+        }
     }
-);
+}
+
+elementos.formularioBusqueda.addEventListener("submit", (evento) => {
+    evento.preventDefault();
+    busquedaAplicada = elementos.buscar.value.trim();
+    cargarAlertas(0);
+});
 
 [
     elementos.box,
@@ -1244,14 +1362,11 @@ elementos.limpiar.addEventListener(
     "click",
     () => {
         elementos.buscar.value = "";
+        busquedaAplicada = "";
         elementos.box.value = "";
         elementos.estado.value = "";
         elementos.desde.value = "";
         elementos.hasta.value = "";
-
-        clearTimeout(
-            temporizadorBusqueda
-        );
 
         cargarAlertas(0);
     }
@@ -1270,6 +1385,11 @@ elementos.actualizar.addEventListener(
 
         cargarGraficoAlertas();
     }
+);
+
+elementos.descargarExcel?.addEventListener(
+    "click",
+    descargarExcelDashboard
 );
 
 elementos.anterior.addEventListener(
