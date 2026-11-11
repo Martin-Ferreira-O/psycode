@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="{% static 'web/css/styles.css' %}">
     <link rel="stylesheet" href="{% static 'web/css/dashboard.css' %}?v=5">
     <link rel="stylesheet" href="{% static 'web/css/estados.css' %}">
-    <link rel="stylesheet" href="{% static 'web/css/bitacora.css' %}?v=10">
+    <link rel="stylesheet" href="{% static 'web/css/bitacora.css' %}?v=101">
 </head>
 
 <body>
@@ -91,76 +91,127 @@
                 </div>
             </section>
 
-            <section class="resumen-bitacora" aria-label="Tipos de eventos">
-                <div class="tarjeta-resumen">
-                    <span class="tarjeta-resumen-etiqueta">
-                        Registro de alerta
-                    </span>
+           <section class="resumen-bitacora" aria-label="Tipos de eventos">
 
-                    <span>
+                <details class="tarjeta-resumen">
+                    <summary>
+                        <span class="tarjeta-resumen-etiqueta">
+                            Registro de alerta
+                        </span>
+
+                        <span class="flecha-tarjeta" aria-hidden="true"></span>
+                    </summary>
+
+                    <div class="descripcion-tarjeta">
                         Indica cuando el sistema genera y registra una nueva alerta.
-                    </span>
-                </div>
+                    </div>
+                </details>
 
-                <div class="tarjeta-resumen">
-                    <span class="tarjeta-resumen-etiqueta">
-                        Evaluación
-                    </span>
 
-                    <span>
+                <details class="tarjeta-resumen">
+                    <summary>
+                        <span class="tarjeta-resumen-etiqueta">
+                            Evaluación
+                        </span>
+
+                        <span class="flecha-tarjeta" aria-hidden="true"></span>
+                    </summary>
+
+                    <div class="descripcion-tarjeta">
                         Registra la revisión realizada por un usuario sobre una alerta.
-                    </span>
-                </div>
+                    </div>
+                </details>
 
-                <div class="tarjeta-resumen">
-                    <span class="tarjeta-resumen-etiqueta">
-                        Notificación
-                    </span>
 
-                    <span>
+                <details class="tarjeta-resumen">
+                    <summary>
+                        <span class="tarjeta-resumen-etiqueta">
+                            Notificación
+                        </span>
+
+                        <span class="flecha-tarjeta" aria-hidden="true"></span>
+                    </summary>
+
+                    <div class="descripcion-tarjeta">
                         Registra los intentos de envío de una alerta a los destinatarios configurados.
-                    </span>
-                </div>
+                    </div>
+                </details>
 
-                <div class="tarjeta-resumen">
-                    <span class="tarjeta-resumen-etiqueta">
-                        Resumen de notificación
-                    </span>
 
-                    <span>
+                <details class="tarjeta-resumen">
+                    <summary>
+                        <span class="tarjeta-resumen-etiqueta">
+                            Resumen de notificación
+                        </span>
+
+                        <span class="flecha-tarjeta" aria-hidden="true"></span>
+                    </summary>
+
+                    <div class="descripcion-tarjeta">
                         Muestra el resultado general del proceso de envío de una notificación.
-                    </span>
-                </div>
+                    </div>
+                </details>
 
-                <div class="tarjeta-resumen">
-                    <span class="tarjeta-resumen-etiqueta">
-                        Speechmatics
-                    </span>
 
-                    <span>
+                <details class="tarjeta-resumen">
+                    <summary>
+                        <span class="tarjeta-resumen-etiqueta">
+                            Speechmatics
+                        </span>
+
+                        <span class="flecha-tarjeta" aria-hidden="true"></span>
+                    </summary>
+
+                    <div class="descripcion-tarjeta">
                         Registra eventos relacionados con la transcripción y procesamiento del audio.
-                    </span>
-                </div>
+                    </div>
+                </details>
 
-                <div class="tarjeta-resumen">
-                    <span class="tarjeta-resumen-etiqueta">
-                        JEV
-                    </span>
 
-                    <span>
+                <details class="tarjeta-resumen">
+                    <summary>
+                        <span class="tarjeta-resumen-etiqueta">
+                            JEV
+                        </span>
+
+                        <span class="flecha-tarjeta" aria-hidden="true"></span>
+                    </summary>
+
+                    <div class="descripcion-tarjeta">
                         Registra eventos asociados al análisis del contenido procesado por JEV.
-                    </span>
-                </div>
+                    </div>
+                </details>
 
-                <div class="tarjeta-resumen">
-                    <span class="tarjeta-resumen-etiqueta">
-                        Flujo de alerta
-                    </span>
 
-                    <span>
+                <details class="tarjeta-resumen">
+                    <summary>
+                        <span class="tarjeta-resumen-etiqueta">
+                            Flujo de alerta
+                        </span>
+
+                        <span class="flecha-tarjeta" aria-hidden="true"></span>
+                    </summary>
+
+                    <div class="descripcion-tarjeta">
                         Registra las distintas etapas por las que pasa una alerta dentro del sistema.
-                    </span>
-                </div>
+                    </div>
+                </details>
+
+
+                <details class="tarjeta-resumen">
+                    <summary>
+                        <span class="tarjeta-resumen-etiqueta">
+                            Limpieza de almacenamiento
+                        </span>
+
+                        <span class="flecha-tarjeta" aria-hidden="true"></span>
+                    </summary>
+
+                    <div class="descripcion-tarjeta">
+                        Registra las limpiezas ejecutadas, el espacio liberado y los posibles fallos durante la eliminación de datos.
+                    </div>
+                </details>
+
             </section>
 
             <section class="panel-bitacora">
@@ -396,7 +447,6 @@
 
     <div class="panel-detalle-fondo detalle-bitacora" id="detalleFondo" hidden>
         <aside class="panel-detalle-evento" id="panelDetalle" aria-labelledby="tituloDetalleEvento" aria-describedby="explicacionEvento" aria-modal="true" role="dialog" tabindex="-1">
-            <div class="cabecera-detalle-evento"><div><span class="sobrelinea">INSPECCIÓN DEL REGISTRO</span><h2 id="tituloDetalleEvento">Detalle del evento</h2></div><button type="button" class="boton-icono" id="cerrarDetalle" aria-label="Cerrar detalle"><svg aria-hidden="true"><use href="#i-close"/></svg></button></div>
             <div class="detalle-resumen"><span id="detalleResultado" class="etiqueta-resultado">—</span><h3 id="detalleAccion">—</h3><p id="explicacionEvento"></p><span id="detalleFecha">—</span></div>
             <div class="seccion-detalle"><h3>Contexto del evento</h3><div class="contenido-detalle-evento"><div class="dato-detalle"><span>Responsable</span><strong id="detalleActor">—</strong></div><div class="dato-detalle"><span>Canal</span><strong id="detalleCanal">—</strong></div><div class="dato-detalle dato-completo"><span>ID de alerta</span><div class="identificador-detalle"><strong id="detalleAlerta">—</strong><button type="button" class="boton-icono" id="copiarAlerta" aria-label="Copiar ID de alerta"><svg aria-hidden="true"><use href="#i-copy"/></svg></button></div></div></div><button type="button" class="boton-principal boton-ver-alerta" id="verEventosAlerta" hidden>Seguir esta alerta en el período<svg aria-hidden="true"><use href="#i-arrow"/></svg></button><p id="alcanceRelacion" class="nota-detalle" hidden>Consulta la misma alerta en todas las categorías y resultados. Se conserva el período y el orden.</p></div>
             <section class="seccion-detalle" id="seccionAlmacenamiento" hidden><h3>Limpieza de almacenamiento</h3><p id="detalleAlmacenamiento"></p></section>
