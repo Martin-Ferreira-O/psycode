@@ -14,7 +14,8 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     let estado = 503;
     let peticiones = 0;
     let liberar;
-    let cuerpo = { success: true, data: { items: [] } };
+    let cuerpo = { success: true, data: { items: [], total: 0 } };
+    let registros;
     try {
         await page.route('**/api/v1/auth/me', route => route.fulfill({
             status: 200, contentType: 'application/json',
@@ -50,9 +51,19 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 
         estado = 503;
         liberar = null;
-        await page.route('**/api/v1/alerts?revisadas=true', async route => {
+        await page.route(url => url.pathname === '/api/v1/alerts' && url.searchParams.get('revisadas') === 'true', async route => {
             if (liberar === null) await new Promise(resolve => { liberar = resolve; });
-            await route.fulfill({ status: estado, contentType: 'application/json', body: JSON.stringify(cuerpo) });
+            let respuesta = cuerpo;
+            if (registros) {
+                const parametros = new URL(route.request().url()).searchParams;
+                const limit = Number(parametros.get('limit'));
+                const offset = Number(parametros.get('offset'));
+                assert.equal(limit, 10);
+                respuesta = { success: true, data: {
+                    items: registros.slice(offset, offset + limit), total: registros.length, limit, offset,
+                } };
+            }
+            await route.fulfill({ status: estado, contentType: 'application/json', body: JSON.stringify(respuesta) });
         });
         await page.goto(`${base}/evaluaciones`);
         const panel = page.locator('#estadoVacioEvaluaciones');
@@ -76,7 +87,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
             assert.equal(await page.locator('.boton-reintentar').count(), 0);
         }
         estado = 200;
-        cuerpo = { success: true, data: { items: [{
+        cuerpo = { success: true, data: { total: 1, items: [{
             alerta_id: 'alerta-sintetica', box: 'box-1', tipo_riesgo: 'riesgo_suicida',
             nivel_severidad: 1, fecha_hora: '2026-09-12T15:00:00Z',
             estado_evaluacion: 'correcta', evaluacion: { evaluacion: 'correcta' },
@@ -88,6 +99,43 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         await page.evaluate(() => cargarEvaluaciones());
         assert.equal(await page.locator('#tablaEvaluaciones tr').count(), 1, 'conserva datos ante fallo');
         assert.equal(await page.locator('#tablaEvaluacionesContenedor').isVisible(), false, 'no presenta datos anteriores como actuales');
+
+        estado = 200;
+        const anterior = page.locator('#evaluacionesAnterior');
+        const siguiente = page.locator('#evaluacionesSiguiente');
+        const filas = page.locator('#tablaEvaluaciones tr');
+        for (const [total, ancho] of [[100, 1366], [500, 320]]) {
+            registros = Array.from({ length: total }, (_, index) => ({
+                ...cuerpo.data.items[0],
+                alerta_id: `33333333-3333-4333-8333-${String(index + 1).padStart(12, '0')}`,
+            }));
+            await page.setViewportSize({ width: ancho, height: 800 });
+            await page.evaluate(() => cargarEvaluaciones());
+            assert.equal(await anterior.isDisabled(), true);
+            assert.equal(await filas.first().locator('td').count(), 6);
+            const etiquetas = await filas.first().locator('.etiqueta-campo-evaluacion:visible').count();
+            assert.equal(etiquetas, ancho === 320 ? 5 : 0);
+            assert.equal(await page.locator('#tablaEvaluacionesContenedor').evaluate(tabla =>
+                tabla.scrollWidth === tabla.clientWidth && document.documentElement.scrollWidth === window.innerWidth
+            ), true, `sin desplazamiento horizontal a ${ancho}px`);
+
+            const visibles = [];
+            const paginas = Math.ceil(total / 10);
+            for (let pagina = 1; pagina <= paginas; pagina++) {
+                await page.getByText(`Página ${pagina} de ${paginas}`, { exact: true }).waitFor();
+                assert.equal(await filas.count(), 10);
+                visibles.push(...await filas.locator('button').evaluateAll(botones => botones.map(boton => boton.dataset.alerta)));
+                if (pagina < paginas) await siguiente.click();
+            }
+            assert.deepEqual(visibles, registros.map(alerta => alerta.alerta_id));
+            assert.equal(await siguiente.isDisabled(), true);
+            assert.equal(await page.locator('#resultadoEvaluaciones').innerText(), `Mostrando ${total - 9}–${total} de ${total} evaluaciones`);
+            await anterior.click();
+            await page.getByText(`Página ${paginas - 1} de ${paginas}`, { exact: true }).waitFor();
+            console.log(`Registro de evaluaciones: ${total} registros, ${paginas} páginas sin duplicados a ${ancho}px.`);
+        }
+        await page.setViewportSize({ width: 1280, height: 720 });
+        registros = undefined;
         estado = 401;
         await page.evaluate(() => cargarEvaluaciones());
         await page.waitForURL(`${base}/`);
