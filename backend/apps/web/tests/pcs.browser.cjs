@@ -22,6 +22,11 @@ const ok = data => ({ status: 200, contentType: 'application/json', body: JSON.s
         const [download] = await Promise.all([page.waitForEvent('download'), link.click()]);
         assert.match(download.suggestedFilename(), /^PsycodeAgent-Setup-\d+\.\d+\.\d+-x64\.exe$/);
         assert.equal(createHash('sha256').update(fs.readFileSync(await download.path())).digest('hex'), installerHash);
+        const [checksum] = await Promise.all([
+            page.waitForEvent('download'), container.getByRole('link', { name: 'Descargar SHA-256' }).click()
+        ]);
+        assert.equal(checksum.suggestedFilename(), download.suggestedFilename() + '.sha256');
+        assert.equal(fs.readFileSync(await checksum.path(), 'utf8').trim(), `${installerHash}  ${download.suggestedFilename()}`);
     };
     const login = async (tab, username) => {
         await tab.goto(base);
@@ -221,6 +226,22 @@ finally: c.close()
         pcs[0].name = 'PC Consulta · Box 3';
         await page.locator('#actualizarPCs').click();
         await page.getByRole('heading', { name: pcs[0].name, exact: true }).waitFor();
+        // Diagnóstico de Smile: el botón queda bloqueado mientras hay una solicitud en curso.
+        pcs[0].smile_sources = ['smile'];
+        pcs[0].smile_check_supported = true;
+        await page.route(`**/api/v1/pcs/${pcs[0].agent_id}/smile/prueba`, async route => {
+            assert.deepEqual(route.request().postDataJSON(), { source: 'smile' });
+            await route.fulfill(ok({ source: 'smile', state: 'queued' }));
+        });
+        await page.locator('#actualizarPCs').click();
+        const smileButton = page.getByRole('button', { name: 'Probar colector', exact: true });
+        await smileButton.click();
+        await page.getByText('Esperando al colector…', { exact: true }).waitFor();
+        assert.equal(await smileButton.isDisabled(), true);
+        pcs[0].smile_check = { source: 'smile', state: 'finished', result: 'ok' };
+        await page.locator('#actualizarPCs').click();
+        await page.getByText('Acceso a Smile y selector de salas verificados.', { exact: true }).waitFor();
+        assert.equal(await smileButton.isEnabled(), true);
         // Historial: página 2, filtros y recuperación estimada/desconocida, sin confundir procedencia.
         let historyMode = 'data', historyRequests = [];
         await page.route('**/historial?*', async route => {
@@ -261,6 +282,19 @@ finally: c.close()
         historyMode = 'data'; await page.locator('#limpiarHistorialPC').click();
         await page.locator('.pcs-incidente').first().waitFor();
         if (output) await page.screenshot({ path: `${output}/pcs-historial.png`, fullPage: true });
+        for (const viewport of [{ width: 320, height: 568 }, { width: 667, height: 375 }]) {
+            await page.setViewportSize(viewport);
+            const dialog = page.locator('#dialogoHistorialPC');
+            assert.equal(await dialog.evaluate(el => el.scrollWidth <= el.clientWidth), true,
+                `Historial sin desbordamiento a ${viewport.width}×${viewport.height}`);
+            const next = page.locator('#siguienteHistorialPC');
+            await next.scrollIntoViewIfNeeded();
+            const bounds = await next.boundingBox();
+            assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= viewport.width &&
+                bounds.y >= 0 && bounds.y + bounds.height <= viewport.height,
+                'Paginación accesible al desplazar el diálogo');
+        }
+        await page.setViewportSize({ width: 1440, height: 1100 });
         // Escape y restitución del foco en el botón de origen.
         await page.keyboard.press('Escape');
         assert.equal(await historyButton.evaluate(x => x === document.activeElement), true);
@@ -282,6 +316,6 @@ finally: c.close()
         mode = 'empty'; await page.locator('#actualizarPCs').click();
         await page.locator('#estadoPCs[data-estado="vacio"]').waitFor();
         assert.deepEqual(errors, []);
-        console.log('PCs: registro sin catálogo, disponibilidad independiente, instalación recuperable HTTPS + WSS, revocación, permisos, filtros, actualización automática con foco preservado, teclado y 4 tamaños OK.');
+        console.log('PCs: registro, salas, instalación HTTPS + WSS, revocación, permisos, Smile, filtros, foco, teclado y tamaños móviles y de escritorio OK.');
     } finally { await browser.close(); }
 })().catch(e => { console.error(e); process.exitCode = 1; });

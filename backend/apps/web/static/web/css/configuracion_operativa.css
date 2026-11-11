@@ -1,4 +1,4 @@
-﻿.panel-configuracion {
+.panel-configuracion {
     max-width: 1000px;
     margin-left: auto;
     margin-right: auto;
@@ -27,7 +27,7 @@
 
 .configuracion-cabecera h2 {
     margin: 0;
-    color: #173858;
+    color: var(--azul-oscuro);
     font-size: 22px;
 }
 
@@ -43,9 +43,9 @@
     gap: 4px;
     min-width: 210px;
     padding: 12px 16px;
-    border: 1px solid #bfd3e6;
+    border: 1px solid var(--borde);
     border-radius: 10px;
-    background: #eef5fb;
+    background: var(--azul-claro);
 }
 
 .zona-horaria span,
@@ -55,7 +55,7 @@
 }
 
 .zona-horaria strong {
-    color: #173858;
+    color: var(--azul-oscuro);
     font-size: 15px;
 }
 
@@ -64,12 +64,12 @@
     margin: 0;
     padding: 22px 0;
     border: 0;
-    border-top: 1px solid #edf1f5;
+    border-top: 1px solid var(--borde);
 }
 
 .grupo-configuracion legend {
     padding: 0 12px 0 0;
-    color: #173858;
+    color: var(--azul-oscuro);
     font-size: 17px;
     font-weight: 700;
 }
@@ -96,25 +96,25 @@
 .dia-semana span {
     display: inline-flex;
     min-width: 78px;
-    min-height: 42px;
+    min-height: 44px;
     align-items: center;
     justify-content: center;
     padding: 8px 12px;
     border: 1px solid var(--borde);
     border-radius: 9px;
-    color: #425466;
-    background: #fff;
+    color: var(--texto);
+    background: var(--blanco);
     font-weight: 600;
 }
 
 .dia-semana input:checked + span {
-    border-color: #2b5278;
-    background: #e8f0f7;
-    color: #173858;
+    border-color: var(--azul);
+    background: var(--azul-claro);
+    color: var(--azul-oscuro);
 }
 
 .dia-semana input:focus-visible + span {
-    outline: 3px solid rgba(43, 82, 120, 0.25);
+    outline: 3px solid var(--foco);
     outline-offset: 2px;
 }
 
@@ -131,32 +131,34 @@
     flex-direction: column;
     gap: 10px;
     padding: 16px;
-    border: 2px solid #cbd5e1;
+    border: 2px solid var(--borde);
     border-radius: 12px;
-    background: #ffffff;
+    background: var(--blanco);
     transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .opcion-destinatario--activa {
-    border-color: #173858;
-    background: #f4f8fc;
+    border-color: var(--azul-oscuro);
+    background: var(--azul-claro);
     box-shadow: 0 4px 12px rgba(23, 56, 88, 0.08);
 }
 
 .opcion-destinatario-cabecera {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 10px;
     cursor: pointer;
-    color: #173858;
+    color: var(--azul-oscuro);
     font-weight: 700;
 }
 
 .opcion-destinatario-cabecera input[type="radio"] {
     width: 18px;
     height: 18px;
+    flex-shrink: 0;
     margin: 0;
-    accent-color: #173858;
+    accent-color: var(--azul-oscuro);
     cursor: pointer;
 }
 
@@ -168,15 +170,15 @@
 .insignia-opcion-activa {
     padding: 3px 10px;
     border-radius: 999px;
-    background: #173858;
-    color: #ffffff;
+    background: var(--azul-oscuro);
+    color: var(--blanco);
     font-size: 12px;
     font-weight: 600;
 }
 
 .orientacion-destinatario {
     margin: 0;
-    color: #475569;
+    color: var(--texto-secundario);
     font-size: 14px;
     line-height: 1.5;
 }
@@ -184,7 +186,7 @@
 .contenedor-correo-distribucion {
     margin-top: 4px;
     padding-top: 10px;
-    border-top: 1px solid #dbe5f0;
+    border-top: 1px solid var(--borde);
 }
 
 .campos-horario,
@@ -198,23 +200,25 @@
 .campo-configuracion {
     display: grid;
     gap: 8px;
-    color: #263548;
+    color: var(--texto);
     font-weight: 600;
 }
 
 .campo-configuracion input {
     width: 100%;
+    min-width: 0;
     min-height: 46px;
     padding: 10px 12px;
-    border: 1px solid #cbd5e1;
+    border: 1px solid var(--borde);
     border-radius: 8px;
-    background: #fff;
+    background: var(--blanco);
     color: var(--texto);
+    font-size: 16px;
 }
 
 .campo-configuracion input:disabled {
-    background: #f1f5f9;
-    color: #64748b;
+    background: var(--fondo);
+    color: var(--texto-secundario);
     cursor: not-allowed;
 }
 
@@ -223,7 +227,7 @@
     align-items: center;
     gap: 10px;
     margin: 0 0 12px;
-    color: #173858;
+    color: var(--azul-oscuro);
     font-weight: 600;
     cursor: pointer;
 }
@@ -233,74 +237,27 @@
     width: 18px;
     height: 18px;
     margin: 0;
-    accent-color: #173858;
+    accent-color: var(--azul-oscuro);
     cursor: pointer;
 }
 
 .control-respaldo input:focus-visible {
-    outline: 3px solid rgba(43, 82, 120, 0.25);
+    outline: 3px solid var(--foco);
     outline-offset: 3px;
 }
 
 .campo-configuracion input:focus {
-    border-color: #2b5278;
-    outline: 3px solid rgba(43, 82, 120, 0.15);
-}
-
-.mensaje-formulario {
-    margin: 8px 0 14px;
-    color: #991b1b;
-    line-height: 1.5;
+    border-color: var(--azul);
+    outline: 3px solid var(--foco);
 }
 
 .acciones-configuracion {
     padding-top: 18px;
-    border-top: 1px solid #edf1f5;
-}
-
-.boton-guardar-configuracion,
-.boton-navegacion-configuracion {
-    min-height: 46px;
-    padding: 10px 20px;
-    border: 1px solid #173858;
-    border-radius: 8px;
-    font-weight: 600;
-    cursor: pointer;
-}
-
-.boton-guardar-configuracion {
-    background: #173858;
-    color: #fff;
+    border-top: 1px solid var(--borde);
 }
 
 .boton-navegacion-configuracion {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    max-width: 100%;
     margin-bottom: 16px;
-    background: var(--blanco);
-    color: #173858;
-    text-align: center;
-    text-decoration: none;
-}
-
-.boton-navegacion-configuracion:hover {
-    background: #eef5fb;
-}
-
-.boton-navegacion-configuracion:focus-visible {
-    outline: 2px solid #2b5278;
-    outline-offset: 3px;
-}
-
-.boton-guardar-configuracion:hover {
-    background: #214d72;
-}
-
-.boton-guardar-configuracion:disabled {
-    cursor: wait;
-    opacity: 0.7;
 }
 
 @media (min-width: 1280px) {
@@ -338,9 +295,5 @@
     .campos-horario,
     .campos-correos {
         grid-template-columns: 1fr;
-    }
-
-    .boton-guardar-configuracion {
-        width: 100%;
     }
 }

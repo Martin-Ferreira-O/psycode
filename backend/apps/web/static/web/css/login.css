@@ -302,7 +302,7 @@ input {
 
 .forgot-link {
   margin-bottom: 8px;
-  color: #367ca8;
+  color: var(--azul);
   font-size: 13px;
   font-weight: 600;
   text-decoration: none;
@@ -337,7 +337,7 @@ input {
 }
 
 .input-shell input::placeholder {
-  color: #9ba9b7;
+  color: var(--texto-secundario);
 }
 
 .input-shell input:hover {
@@ -345,7 +345,7 @@ input {
 }
 
 .input-shell input:focus {
-  border-color: #4a83a9;
+  border-color: var(--foco);
   background: var(--blanco);
   box-shadow: 0 0 0 4px rgba(43, 82, 120, 0.1);
 }
@@ -393,7 +393,7 @@ input {
 }
 
 .toggle-password-btn:focus-visible {
-  outline: 2px solid #4a83a9;
+  outline: 2px solid var(--foco);
   outline-offset: 2px;
 }
 
@@ -407,18 +407,6 @@ input {
   stroke-linejoin: round;
 }
 
-.eye-closed {
-  display: none;
-}
-
-#eye-icon.visible .eye-open {
-  display: none;
-}
-
-#eye-icon.visible .eye-closed {
-  display: block;
-}
-
 input[type="password"]::-ms-reveal,
 input[type="password"]::-ms-clear {
   display: none;
@@ -430,91 +418,11 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   pointer-events: none;
 }
 
-.btn-primary {
-  width: 100%;
-  min-height: 54px;
-  margin-top: 8px;
-  padding: 0 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 9px;
-  border: none;
-  border-radius: 11px;
-  background:
-    linear-gradient(
-      135deg,
-      var(--azul-oscuro) 0%,
-      #1b496b 42%,
-      #2d739d 100%
-    );
-  color: var(--blanco);
-  box-shadow: 0 11px 25px rgba(18, 40, 75, 0.18);
-  font-size: 15px;
-  font-weight: 700;
-  cursor: pointer;
-  transition:
-    transform 0.17s ease,
-    box-shadow 0.17s ease,
-    opacity 0.17s ease;
-}
-
-.btn-primary:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 14px 30px rgba(18, 40, 75, 0.24);
-}
-
-.btn-primary:active:not(:disabled) {
-  transform: translateY(0);
-}
-
-.btn-primary:disabled {
-  opacity: 0.92;
-  cursor: wait;
-}
-
-.btn-primary:focus-visible {
-  outline: 3px solid rgba(43, 82, 120, 0.24);
-  outline-offset: 3px;
-}
-
-.btn-text,
-.btn-loader {
+.btn-text {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 10px;
-}
-
-.button-arrow {
-  width: 18px;
-  height: 18px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  transition: transform 0.17s ease;
-}
-
-.btn-primary:hover:not(:disabled) .button-arrow {
-  transform: translateX(3px);
-}
-
-.loader-spinner {
-  width: 17px;
-  height: 17px;
-  flex: 0 0 17px;
-  border: 2px solid rgba(255, 255, 255, 0.34);
-  border-top-color: var(--blanco);
-  border-radius: 50%;
-  animation: girar 0.72s linear infinite;
-}
-
-@keyframes girar {
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 .login-card-footer {
@@ -557,17 +465,6 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   color: #166534;
 }
 
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
-  padding: 20px;
-  align-items: center;
-  justify-content: center;
-  background: rgba(13, 39, 65, 0.58);
-  backdrop-filter: blur(6px);
-}
-
 .modal-card {
   width: 100%;
   max-width: 500px;
@@ -600,43 +497,6 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   font-weight: 700;
   letter-spacing: 0.07em;
   text-transform: uppercase;
-}
-
-.close-btn {
-  width: 38px;
-  height: 38px;
-  flex: 0 0 38px;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  border-radius: 9px;
-  background: #eff4f7;
-  color: #61788c;
-  cursor: pointer;
-  transition:
-    background 0.15s ease,
-    color 0.15s ease;
-}
-
-.close-btn:hover {
-  background: #e4edf3;
-  color: var(--azul-oscuro);
-}
-
-.close-btn:focus-visible {
-  outline: 2px solid #4a83a9;
-  outline-offset: 2px;
-}
-
-.close-btn svg {
-  width: 18px;
-  height: 18px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2;
-  stroke-linecap: round;
 }
 
 .modal-body {
@@ -861,7 +721,7 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
 }
 
 .password-reset-card .checklist-item.valid {
-  color: #15803d;
+  color: var(--verde);
 }
 
 .password-reset-card .reset-back-link {
@@ -873,22 +733,13 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   min-height: 32px;
 }
 
-.password-reset-card .toggle-password-btn[aria-pressed="true"] .eye-open {
-  display: none;
-}
-
-.password-reset-card .toggle-password-btn[aria-pressed="true"] .eye-closed {
-  display: block;
-}
-
 .password-reset-card .input-shell input:disabled {
   background: var(--azul-claro);
   color: var(--texto-secundario);
   cursor: not-allowed;
 }
 
-.password-reset-card .toggle-password-btn:disabled,
-.password-reset-card .btn-primary:disabled:not([aria-busy="true"]) {
+.password-reset-card .toggle-password-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }

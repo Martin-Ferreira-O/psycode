@@ -14,9 +14,9 @@ function contexto() {
         sessionStorage: { clear() {} },
         window: { addEventListener() {}, location: { pathname: '/evaluaciones', replace: p => redirecciones.push(p) } },
     });
-    for (const archivo of ['solicitudes.js', 'estados.js', 'api.js']) {
-        vm.runInContext(readFileSync(join(__dirname, '../static/web/js', archivo), 'utf8'), context);
-    }
+    const module = readFileSync(join(__dirname, '../../../../frontend/src/api.js'), 'utf8');
+    vm.runInContext(module.replace(/^export \{[^}]+\};\s*$/m, ''), context);
+    vm.runInContext('retirarTokensAntiguos()', context);
     return { context, tokens, redirecciones };
 }
 

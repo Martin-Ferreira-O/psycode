@@ -8,6 +8,13 @@ jobs:
         python: ['3.12', '3.13']
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --prefix frontend
+      - run: npm run build --prefix frontend
       - uses: astral-sh/setup-uv@v6
         with:
           python-version: ${{ matrix.python }}
@@ -15,7 +22,4 @@ jobs:
       - run: uv run --no-sync python scripts/check_boundaries.py
       - run: uv run --no-sync python manage.py test --settings=backend.config.test_settings --noinput
       - run: uv run --no-sync python manage.py makemigrations --check --dry-run --settings=backend.config.test_settings
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      - run: node --test backend/apps/web/tests/*.test.cjs
+      - run: npm test --prefix frontend

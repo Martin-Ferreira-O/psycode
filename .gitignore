@@ -18,3 +18,6 @@ htmlcov/
 
 # Informes y paquetes de entrega generados localmente
 /entregables/
+
+/frontend/node_modules/
+/backend/apps/web/static/web/react/

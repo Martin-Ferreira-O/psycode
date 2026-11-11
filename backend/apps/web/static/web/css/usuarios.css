@@ -1,1100 +1,219 @@
-.panel-usuarios {
-    margin-top: 22px;
-}
-
 .panel-cabecera-usuarios {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    justify-content: space-between;
     gap: 24px;
 }
 
-.boton-crear-usuario {
-    display: inline-flex;
-    min-width: 154px;
-    height: 44px;
-    align-items: center;
-    justify-content: center;
-
-    box-sizing: border-box;
-    border: 1px solid #173858;
-    border-radius: 8px;
-
-    background: #173858;
-    color: #ffffff;
-
-    padding: 0 18px;
-
-    font-family: "Segoe UI", Arial, sans-serif;
-    font-size: 15px;
-    font-weight: 600;
-
-    cursor: pointer;
-
-    transition:
-        background 0.15s ease,
-        border-color 0.15s ease,
-        box-shadow 0.15s ease,
-        transform 0.15s ease;
+.panel-cabecera-usuarios > #botonCrearUsuario {
+    margin-inline-start: auto;
 }
 
-.boton-crear-usuario:hover {
-    background: #214d72;
-    border-color: #214d72;
+.panel-cabecera-usuarios h2 {
+    scroll-margin-block-start: 1rem;
 }
 
-.boton-crear-usuario:active {
-    transform: translateY(1px);
-}
-
-.boton-crear-usuario:focus-visible {
-    outline: 3px solid rgba(23, 56, 88, 0.22);
-    outline-offset: 3px;
-}
-
-.tabla-usuarios {
-    width: 100%;
-    min-width: 46rem;
-    table-layout: fixed;
-    border-collapse: collapse;
-}
-
-#tablaUsuariosContenedor:focus-visible {
-    outline: 2px solid #547795;
-    outline-offset: -2px;
-}
-
-.tabla-usuarios th,
-.tabla-usuarios td {
-    box-sizing: border-box;
-    padding: 16px 10px;
-
-    font-family: "Segoe UI", Arial, sans-serif;
-    vertical-align: middle;
-}
-
-.tabla-usuarios th {
-    height: 56px;
-
-    background: #f5f8fb;
-    color: #52677c;
-
-    font-size: 14px;
-    font-weight: 700;
-    letter-spacing: 0.2px;
-
-    text-transform: uppercase;
-    white-space: normal;
-}
-
-.tabla-usuarios tbody tr {
-    background: #ffffff;
-    transition: background 0.15s ease;
-}
-
-.tabla-usuarios tbody tr:hover {
-    background: #f8fafc;
-}
-
-.tabla-usuarios tbody td {
-    min-height: 72px;
-
-    color: #263548;
-
-    font-size: 15px;
-    font-weight: 400;
-
-    border-top: 1px solid #edf1f5;
-}
-
-.tabla-usuarios tbody td strong {
-    color: #173858;
-    font-size: 15px;
-    font-weight: 600;
-}
-
-.tabla-usuarios th:nth-child(1),
-.tabla-usuarios td:nth-child(1) {
-    width: 15%;
-    text-align: left;
-}
-
-.tabla-usuarios th:nth-child(2),
-.tabla-usuarios td:nth-child(2) {
-    width: 21%;
-    text-align: left;
-}
-
-.tabla-usuarios th:nth-child(3),
-.tabla-usuarios td:nth-child(3) {
-    width: auto;
-    text-align: left;
-}
-
-.tabla-usuarios th:nth-child(4),
-.tabla-usuarios td:nth-child(4) {
-    width: 9rem;
-    text-align: center;
-}
-
-.tabla-usuarios th:nth-child(5),
-.tabla-usuarios td:nth-child(5) {
-    width: 6.5rem;
-    text-align: center;
-}
-
-.tabla-usuarios th:nth-child(6),
-.tabla-usuarios td:nth-child(6) {
-    width: 6.5rem;
-    text-align: center;
-}
-
-.tabla-usuarios th:nth-child(4),
-.tabla-usuarios td:nth-child(4),
-.tabla-usuarios th:nth-child(5),
-.tabla-usuarios td:nth-child(5),
-.tabla-usuarios th:nth-child(6),
-.tabla-usuarios td:nth-child(6) {
-    padding-left: 6px;
-    padding-right: 6px;
+.tabla-usuarios td:nth-child(-n + 3) {
+    overflow-wrap: anywhere;
 }
 
 .tabla-usuarios td:nth-child(1),
-.tabla-usuarios td:nth-child(2),
+.tabla-usuarios td:nth-child(2) {
+    min-width: 12ch;
+}
+
 .tabla-usuarios td:nth-child(3) {
-    overflow-wrap: anywhere;
-    word-break: break-word;
-    line-height: 1.35;
+    min-width: 18ch;
 }
 
-.tabla-usuarios td:nth-child(4),
-.tabla-usuarios td:nth-child(5),
-.tabla-usuarios td:nth-child(6) {
-    white-space: nowrap;
-}
-
-.tabla-usuarios td:nth-child(4) .etiqueta-rol {
-    display: inline-flex;
-
-    width: 100%;
-
-    height: 34px;
-    min-height: 34px;
-
-    align-items: center;
-    justify-content: center;
-
-    box-sizing: border-box;
-
-    border-radius: 999px;
-
-    padding: 0 12px;
-
-    font-family: "Segoe UI", Arial, sans-serif;
-    font-size: 15px;
-    font-weight: 400;
-    line-height: 1;
-
-    white-space: nowrap;
-    text-align: center;
-}
-
-.etiqueta-rol.admin {
-    border: 1px solid #bfd0e2;
-    background: #eaf1f8;
-    color: #294e70;
-}
-
-.etiqueta-rol.supervisor {
-    border: 1px solid #d3dbe5;
-    background: #f2f5f8;
-    color: #52677c;
-}
-.etiqueta-usuario-estado {
-    display: inline-flex;
-
-    width: auto;
-    min-width: 82px;
-
-    height: 34px;
-    min-height: 34px;
-
-    align-items: center;
-    justify-content: center;
-
-    box-sizing: border-box;
-
-    border-radius: 999px;
-
-    padding: 0 12px;
-
-    font-family: "Segoe UI", Arial, sans-serif;
-    font-size: 15px;
-    font-weight: 400;
-    line-height: 1;
-
-    white-space: nowrap;
-    text-align: center;
-}
-
-.etiqueta-usuario-estado.activo {
-    border: 1px solid #aed7be;
-    background: #e6f5ec;
-    color: #24643f;
-}
-
-.etiqueta-usuario-estado.inactivo {
-    border: 1px solid #d6dce3;
-    background: #f1f3f5;
-    color: #657383;
-}
 .acciones-usuario {
     display: flex;
     align-items: center;
-    justify-content: center;
     gap: 8px;
 }
 
-.boton-editar-usuario,
-.boton-estado-usuario {
-    display: inline-flex;
+.tabla-usuarios th:last-child,
+.tabla-usuarios td:last-child {
+    width: 1%;
+}
 
-    height: 42px;
-    min-height: 42px;
-
+.paginacion-usuarios,
+.botones-paginacion-usuarios {
+    display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    justify-content: center;
-
-    box-sizing: border-box;
-
-    border-radius: 7px;
-
-    padding: 0 14px;
-
-    font-family: "Segoe UI", Arial, sans-serif;
-    font-size: 15px;
-    font-weight: 500;
-
-    white-space: nowrap;
-
-    cursor: pointer;
-
-    transition:
-        background 0.15s ease,
-        border-color 0.15s ease,
-        color 0.15s ease,
-        box-shadow 0.15s ease;
+    gap: 8px;
 }
 
-.boton-editar-usuario {
-    min-width: 82px;
-
-    border: 1px solid #b8c8d8;
-
-    background: #ffffff;
-    color: #173858;
-}
-
-.boton-editar-usuario:hover {
-    background: #f2f6fa;
-    border-color: #9fb3c7;
-}
-
-.boton-estado-usuario {
-    min-width: 100px;
-}
-
-.boton-estado-usuario.desactivar {
-    border: 1px solid #e3b9b9;
-
-    background: #fff7f7;
-    color: #993737;
-}
-
-.boton-estado-usuario.desactivar:hover {
-    background: #fdecec;
-    border-color: #dca5a5;
-}
-
-.boton-estado-usuario.activar {
-    border: 1px solid #b8d8c4;
-
-    background: #f3faf6;
-    color: #24643f;
-}
-
-.boton-estado-usuario.activar:hover {
-    background: #e6f5ec;
-    border-color: #aed7be;
-}
-
-.boton-editar-usuario:focus-visible,
-.boton-estado-usuario:focus-visible {
-    outline: 3px solid rgba(23, 56, 88, 0.18);
-    outline-offset: 2px;
-}
 .paginacion-usuarios {
-    border-top: 1px solid #e7edf3;
-}
-
-.paginacion-usuarios[hidden] {
-    display: none;
-}
-
-.paginacion-usuarios button {
-    min-height: 44px;
+    justify-content: space-between;
+    margin-top: 16px;
+    padding-inline: 22px;
+    color: var(--texto-secundario);
 }
 
 .pie-usuarios {
-    padding: 19px 20px;
-
-    border-top: 1px solid #e7edf3;
-
-    color: #64748b;
-
-    font-family: "Segoe UI", Arial, sans-serif;
-    font-size: 14px;
-    font-weight: 400;
-}
-.estado-carga {
-    padding: 44px 24px;
-
-    color: #52677c;
-
-    font-family: "Segoe UI", Arial, sans-serif;
-    font-size: 16px;
-
-    text-align: center;
+    margin-top: 20px;
+    border-top: 1px solid var(--borde);
+    padding: 14px 22px 16px;
+    color: var(--texto-secundario);
 }
 
-.estado-error {
-    margin: 22px;
-    padding: 28px;
-
-    border: 1px solid #efc5c5;
-    border-radius: 10px;
-
-    background: #fff8f8;
-
-    color: #7e3535;
-
-    text-align: center;
+.panel-usuarios > .estado-solicitud {
+    margin-inline: 22px;
 }
 
-.estado-error strong {
-    display: block;
-
-    margin-bottom: 7px;
-
-    font-family: "Segoe UI", Arial, sans-serif;
-    font-size: 17px;
-    font-weight: 600;
-}
-
-.estado-error p {
-    margin: 0 0 18px;
-
-    font-family: "Segoe UI", Arial, sans-serif;
-    font-size: 15px;
-    font-weight: 400;
-}
-
-.boton-reintentar {
-    min-width: 112px;
-    height: 42px;
-
-    border: 1px solid #c9d4df;
-    border-radius: 7px;
-
-    background: #ffffff;
-    color: #173858;
-
-    font-family: "Segoe UI", Arial, sans-serif;
-    font-size: 15px;
-    font-weight: 500;
-
-    cursor: pointer;
-}
-
-.boton-reintentar:hover {
-    background: #f3f6f9;
-}
-
-.boton-reintentar:focus-visible {
-    outline: 3px solid rgba(23, 56, 88, 0.18);
-    outline-offset: 2px;
-}
-.modal-usuario {
-    position: fixed;
-    inset: 0;
-
-    z-index: 1000;
-
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
-    padding: 24px;
-}
-
-.modal-usuario[hidden] {
-    display: none;
-}
-
-.modal-usuario-fondo {
-    position: absolute;
-    inset: 0;
-
-    background: rgba(20, 34, 48, 0.48);
-}
-
-.modal-usuario-contenido {
-    position: relative;
-
-    z-index: 1;
-
-    width: min(620px, 100%);
-    max-height: calc(100vh - 48px);
-
-    overflow-y: auto;
-
-    border: 1px solid #e1e8ef;
-    border-radius: 14px;
-
-    background: #ffffff;
-
-    box-shadow: 0 18px 48px rgba(20, 34, 48, 0.18);
+dialog.modal-usuario-contenido {
+    width: min(800px, calc(100% - 24px));
+    padding: 0;
 }
 
 .modal-usuario-cabecera {
     display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 20px;
-
-    padding: 24px 26px 20px;
-
-    border-bottom: 1px solid #e7edf3;
-}
-
-.modal-usuario-subtitulo {
-    display: block;
-
-    margin-bottom: 4px;
-
-    color: #64748b;
-
-    font-family: "Segoe UI", Arial, sans-serif;
-    font-size: 14px;
-    font-weight: 500;
-}
-
-.modal-usuario-cabecera h2 {
-    margin: 0;
-
-    color: #173858;
-
-    font-family: "Segoe UI", Arial, sans-serif;
-    font-size: 23px;
-    font-weight: 700;
-}
-
-.boton-cerrar-modal {
-    display: inline-flex;
-
-    width: 38px;
-    height: 38px;
-
     align-items: center;
-    justify-content: center;
-
-    flex: 0 0 auto;
-
-    border: 1px solid #d8e0e8;
-    border-radius: 8px;
-
-    background: #ffffff;
-    color: #52677c;
-
-    font-family: Arial, sans-serif;
-    font-size: 25px;
-    font-weight: 400;
-
-    cursor: pointer;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 20px 26px;
+    border-bottom: 1px solid var(--borde);
 }
 
-.boton-cerrar-modal:hover {
-    background: #f4f7fa;
-    color: #173858;
-}
-
-.boton-cerrar-modal:focus-visible {
-    outline: 3px solid rgba(23, 56, 88, 0.18);
-    outline-offset: 2px;
+.modal-usuario-cabecera h2,
+.modal-confirmacion-contenido h2 {
+    margin: 0;
+    color: var(--azul-oscuro);
+    font-size: 22px;
 }
 
 .formulario-usuario {
     padding: 24px 26px 26px;
 }
 
-.campo-formulario {
-    display: flex;
-    flex-direction: column;
-
-    margin-bottom: 19px;
-}
-
-.campo-formulario label {
-    margin-bottom: 7px;
-
-    color: #263548;
-
-    font-family: "Segoe UI", Arial, sans-serif;
-    font-size: 15px;
-    font-weight: 600;
-}
-
-.campo-formulario input,
-.campo-formulario select {
-    width: 100%;
-    height: 44px;
-
-    box-sizing: border-box;
-
-    border: 1px solid #cdd7e1;
-    border-radius: 7px;
-
-    background: #ffffff;
-    color: #263548;
-
-    padding: 0 12px;
-
-    font-family: "Segoe UI", Arial, sans-serif;
-    font-size: 15px;
-    font-weight: 400;
-
-    transition:
-        border-color 0.15s ease,
-        box-shadow 0.15s ease;
-}
-
-.campo-formulario input:hover,
-.campo-formulario select:hover {
-    border-color: #afbfce;
-}
-
-.campo-formulario input:focus,
-.campo-formulario select:focus {
-    border-color: #547795;
-
-    outline: none;
-
-    box-shadow: 0 0 0 3px rgba(84, 119, 149, 0.13);
-}
-
-.campo-formulario input:disabled {
-    background: #f3f5f7;
-    color: #778594;
-
-    cursor: not-allowed;
-}
-
-.campo-formulario small {
-    margin-top: 6px;
-
-    color: #718096;
-
-    font-family: "Segoe UI", Arial, sans-serif;
-    font-size: 13px;
-    font-weight: 400;
-}
-
-.fila-formulario-usuario {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 18px;
-}
-
-.mensaje-formulario-usuario {
-    margin-bottom: 20px;
-    padding: 12px 14px;
-
-    border: 1px solid #efc5c5;
-    border-radius: 7px;
-
-    background: #fff7f7;
-    color: #8d3434;
-
-    font-family: "Segoe UI", Arial, sans-serif;
-    font-size: 14px;
-    font-weight: 400;
-}
-.acciones-formulario-usuario {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 10px;
-
-    margin-top: 8px;
-    padding-top: 20px;
-
-    border-top: 1px solid #edf1f5;
-}
-
-.boton-secundario-usuario,
-.boton-guardar-usuario,
-.boton-confirmar-usuario {
-    display: inline-flex;
-
-    min-width: 110px;
-    height: 43px;
-
-    align-items: center;
-    justify-content: center;
-
-    box-sizing: border-box;
-
-    border-radius: 7px;
-
-    padding: 0 17px;
-
-    font-family: "Segoe UI", Arial, sans-serif;
-    font-size: 15px;
-    font-weight: 500;
-
-    cursor: pointer;
-
-    transition:
-        background 0.15s ease,
-        border-color 0.15s ease,
-        opacity 0.15s ease;
-}
-
-.boton-secundario-usuario {
-    border: 1px solid #cbd5df;
-
-    background: #ffffff;
-    color: #43576b;
-}
-
-.boton-secundario-usuario:hover {
-    background: #f4f7fa;
-}
-
-.boton-guardar-usuario {
-    border: 1px solid #173858;
-
-    background: #173858;
-    color: #ffffff;
-}
-
-.boton-guardar-usuario:hover {
-    background: #214d72;
-    border-color: #214d72;
-}
-
-.boton-guardar-usuario:disabled,
-.boton-confirmar-usuario:disabled {
-    opacity: 0.6;
-    cursor: wait;
-}
-
-.boton-secundario-usuario:focus-visible,
-.boton-guardar-usuario:focus-visible,
-.boton-confirmar-usuario:focus-visible {
-    outline: 3px solid rgba(23, 56, 88, 0.18);
-    outline-offset: 2px;
-}
-
-.modal-confirmacion-contenido {
-    position: relative;
-
-    z-index: 1;
-
-    width: min(440px, 100%);
-
-    box-sizing: border-box;
-
-    border: 1px solid #e1e8ef;
-    border-radius: 14px;
-
-    background: #ffffff;
-
-    padding: 30px;
-
-    box-shadow: 0 18px 48px rgba(20, 34, 48, 0.18);
-
-    text-align: center;
-}
-
-.icono-confirmacion-usuario {
-    display: flex;
-
-    width: 48px;
-    height: 48px;
-
-    align-items: center;
-    justify-content: center;
-
-    margin: 0 auto 16px;
-
-    border: 1px solid #ebc0c0;
-    border-radius: 50%;
-
-    background: #fdeeee;
-    color: #a23c3c;
-
-    font-family: "Segoe UI", Arial, sans-serif;
-    font-size: 23px;
-    font-weight: 700;
-}
-
-.modal-confirmacion-contenido h2 {
-    margin: 0 0 10px;
-
-    color: #173858;
-
-    font-family: "Segoe UI", Arial, sans-serif;
-    font-size: 21px;
-    font-weight: 700;
-}
-
-.modal-confirmacion-contenido p {
-    margin: 0;
-
-    color: #52677c;
-
-    font-family: "Segoe UI", Arial, sans-serif;
-    font-size: 15px;
-    font-weight: 400;
-    line-height: 1.5;
-}
-
-.acciones-confirmacion-usuario {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-
-    margin-top: 25px;
-}
-
-.boton-confirmar-usuario {
-    border: 1px solid #b44949;
-
-    background: #b44949;
-    color: #ffffff;
-}
-
-.boton-confirmar-usuario:hover {
-    background: #9e3c3c;
-    border-color: #9e3c3c;
-}
-
-.boton-confirmar-usuario.activar {
-    border-color: #32704a;
-
-    background: #32704a;
-}
-
-.boton-confirmar-usuario.activar:hover {
-    border-color: #285f3e;
-
-    background: #285f3e;
-}
-
-@media (max-width: 1100px) {
-    .panel-cabecera-usuarios {
-        align-items: flex-start;
-    }
-}
-
-@media (max-width: 700px) {
-    .panel-cabecera-usuarios {
-        flex-direction: column;
-    }
-
-    .boton-crear-usuario {
-        width: 100%;
-    }
-
-    .fila-formulario-usuario {
-        grid-template-columns: 1fr;
-        gap: 0;
-    }
-
-    .modal-usuario {
-        padding: 14px;
-    }
-
-    .modal-usuario-cabecera,
-    .formulario-usuario {
-        padding-left: 20px;
-        padding-right: 20px;
-    }
-
-    .acciones-formulario-usuario,
-    .acciones-confirmacion-usuario {
-        flex-direction: column-reverse;
-    }
-
-    .boton-secundario-usuario,
-    .boton-guardar-usuario,
-    .boton-confirmar-usuario {
-        width: 100%;
-    }
-}
-
-#grupoUsuario[hidden],
-#grupoPassword[hidden],
-#grupoActivo[hidden] {
-    display: none !important;
-}
-.acciones-usuario {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 18px;
-}
-.boton-icono-usuario {
-    position: relative;
-
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-
-    width: 28px;
-    height: 28px;
-
-    padding: 0;
-
-    border: none;
-    background: transparent;
-
-    color: #52677c;
-
-    cursor: pointer;
-
-    transition:
-        color 0.15s ease,
-        transform 0.15s ease;
-}
-
-.boton-icono-usuario:hover {
-    color: #173858;
-    transform: translateY(-1px);
-}
-.boton-icono-usuario .icono-boton {
-    width: 19px;
-    height: 19px;
-
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 1.8;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-}
-.boton-icono-usuario:first-child {
-    color: #456580;
-}
-
-.boton-icono-usuario:first-child:hover {
-    color: #173858;
-}
-
-.boton-icono-usuario.accion-desactivar {
-    color: #b45a5a;
-}
-
-.boton-icono-usuario.accion-desactivar:hover {
-    color: #963f3f;
-}
-.boton-icono-usuario.accion-activar {
-    color: #3f8058;
-}
-
-.boton-icono-usuario.accion-activar:hover {
-    color: #286541;
-}
-
-.boton-icono-usuario:disabled {
-    color: #b8c0c8;
-
-    cursor: not-allowed;
-    transform: none;
-}
-.boton-icono-usuario:focus-visible {
-    outline: 2px solid #547795;
-    outline-offset: 4px;
-}
-.boton-icono-usuario::after {
-    content: attr(data-tooltip);
-    position: absolute;
-    left: 50%;
-    bottom: calc(100% + 8px);
-    transform:
-        translateX(-50%)
-        translateY(3px);
-    z-index: 20;
-    padding: 6px 9px;
-    border-radius: 5px;
-    background: #263548;
-    color: #ffffff;
-    font-family: "Segoe UI", Arial, sans-serif;
-    font-size: 12px;
-    font-weight: 400;
-    white-space: nowrap;
-    opacity: 0;
-    visibility: hidden;
-    pointer-events: none;
-
-    transition:
-        opacity 0.15s ease,
-        transform 0.15s ease,
-        visibility 0.15s ease;
-}
-.boton-icono-usuario:hover::after,
-.boton-icono-usuario:focus-visible::after {
-    opacity: 1;
-    visibility: visible;
-
-    transform:
-        translateX(-50%)
-        translateY(0);
-}
-
-.acciones-usuario .boton-icono-usuario:last-child::after {
-    left: auto;
-    right: 0;
-    max-width: 180px;
-    white-space: normal;
-    text-align: center;
-    transform: translateY(3px);
-}
-
-.acciones-usuario .boton-icono-usuario:last-child:hover::after,
-.acciones-usuario .boton-icono-usuario:last-child:focus-visible::after {
-    transform: translateY(0);
-}
-
-.acciones-usuario .boton-icono-usuario:last-child::before {
-    left: auto;
-    right: 9px;
-    transform: none;
-}
-
-.boton-icono-usuario::before {
-    content: "";
-
-    position: absolute;
-
-    left: 50%;
-    bottom: calc(100% + 3px);
-
-    transform: translateX(-50%);
-
-    border: 5px solid transparent;
-    border-top-color: #263548;
-
-    opacity: 0;
-    visibility: hidden;
-
-    transition:
-        opacity 0.15s ease,
-        visibility 0.15s ease;
-}
-
-.boton-icono-usuario:hover::before,
-.boton-icono-usuario:focus-visible::before {
-    opacity: 1;
-    visibility: visible;
-}
-.modal-usuario-contenido {
-    width: min(800px, calc(100vw - 32px));
-    max-height: calc(100dvh - 32px);
-    overflow-y: auto;
-}
-
-.formulario-usuario {
+.campos-formulario-usuario {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 18px 20px;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+}
+
+.campo-formulario {
+    display: grid;
+    align-content: start;
+    gap: 7px;
+    min-width: 0;
 }
 
 .campo-ancho-completo {
     grid-column: 1 / -1;
 }
 
-.campo-formulario {
-    min-width: 0;
+.campo-formulario label {
+    font-weight: 600;
 }
 
-.grupo-password {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 20px;
+.campo-formulario input,
+.campo-formulario select {
+    width: 100%;
+    min-height: 44px;
+    border: 1px solid var(--borde);
+    border-radius: 8px;
+    padding: 0 12px;
+    background: var(--blanco);
+    color: var(--texto);
+    font-size: 16px;
+}
+
+.campo-formulario input:focus-visible,
+.campo-formulario select:focus-visible {
+    border-color: var(--azul);
+}
+
+.campo-formulario small {
+    color: var(--texto-secundario);
+    font-size: 13px;
 }
 
 .campo-password {
     position: relative;
-    width: 100%;
 }
 
 .campo-password input {
-    width: 100%;
-    box-sizing: border-box;
-    padding-right: 46px;
+    padding-inline-end: 52px;
 }
 
-.boton-ver-password {
+.campo-password .boton-ver-password {
     position: absolute;
-    top: 50%;
-    right: 12px;
-    transform: translateY(-50%);
-    width: 32px;
-    height: 32px;
-    padding: 0;
-    border: 0;
-    background: transparent;
+    inset: 0 1px 0 auto;
+    margin: auto 0;
+}
+
+.acciones-formulario-usuario,
+.acciones-confirmacion-usuario {
     display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    color: #52657a;
-}
-
-.boton-ver-password:hover {
-    color: #173f67;
-}
-
-.boton-ver-password svg {
-    width: 20px;
-    height: 20px;
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 1.8;
-    stroke-linecap: round;
-    stroke-linejoin: round;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 20px;
 }
 
 .acciones-formulario-usuario {
-    margin-top: 2px;
+    padding-top: 20px;
+    border-top: 1px solid var(--borde);
 }
 
-@media (max-width: 700px) {
-    .modal-usuario-contenido {
-        width: calc(100vw - 24px);
+dialog.modal-confirmacion-contenido {
+    width: min(440px, calc(100% - 24px));
+    text-align: center;
+}
+
+.icono-confirmacion-usuario {
+    display: grid;
+    place-items: center;
+    width: 48px;
+    height: 48px;
+    margin: 0 auto 14px;
+    border-radius: 50%;
+    background: var(--rojo-claro);
+    color: var(--rojo);
+}
+
+.icono-confirmacion-usuario.activar {
+    background: var(--verde-claro);
+    color: var(--verde);
+}
+
+.modal-confirmacion-contenido p {
+    color: var(--texto-secundario);
+    overflow-wrap: anywhere;
+}
+
+.acciones-confirmacion-usuario {
+    justify-content: center;
+}
+
+@media (max-width: 600px) {
+    .paginacion-usuarios,
+    .pie-usuarios {
+        padding-inline: 16px;
     }
 
+    .panel-usuarios > .estado-solicitud {
+        margin-inline: 16px;
+    }
+
+    .campos-formulario-usuario {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .modal-usuario-cabecera,
     .formulario-usuario {
-        grid-template-columns: 1fr;
+        padding: 16px;
     }
 
-    .grupo-password {
-        grid-template-columns: 1fr;
-    }
-
-    .campo-ancho-completo {
-        grid-column: auto;
+    .acciones-formulario-usuario > button,
+    .acciones-confirmacion-usuario > button {
+        flex: 1 1 auto;
     }
 }

@@ -1,8 +1,0 @@
-{% if installer_version %}
-<div class="pcs-instalador">
-    <a class="pcs-boton" href="{% url 'operational:pcs_windows_installer' installer_version %}" target="_blank" rel="noopener">Descargar instalador para Windows x64</a>
-    <p class="pcs-ayuda">Versión {{ installer_version }} · <a href="{% url 'operational:pcs_windows_checksum' installer_version %}" target="_blank" rel="noopener">Descargar SHA-256</a></p>
-</div>
-{% else %}
-<p class="pcs-aviso" role="status">El instalador de Windows x64 no está disponible. Si ya tienes Psycode Agent instalado, puedes vincularlo desde el asistente.</p>
-{% endif %}

@@ -1,0 +1,20 @@
+{% load static %}
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    {% if config.page == "password_reset_confirm" %}<meta name="referrer" content="no-referrer">{% endif %}
+    <title>{{ title }}</title>
+    {% for stylesheet in stylesheets %}<link rel="stylesheet" href="{% static stylesheet %}">
+    {% endfor %}
+    <link rel="stylesheet" href="{% static 'web/css/ui.css' %}">
+</head>
+<body>
+    <div id="psycode-root">
+        <noscript>Activa JavaScript para usar Psycode.</noscript>
+    </div>
+    {{ config|json_script:"psycode-config" }}
+    <script type="module" src="{% static 'web/react/app.js' %}"></script>
+</body>
+</html>

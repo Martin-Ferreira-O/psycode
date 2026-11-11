@@ -43,7 +43,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         await page.goto(`${base}/bitacora`);
         await page.locator('#tablaEventos tr').first().waitFor();
         assert.equal(await page.locator('#tablaEventos tr').count(), 4);
-        assert.equal(await page.locator('.resumen-bitacora .tarjeta-resumen').count(), 7);
+        assert.equal(await page.locator('.resumen-bitacora .tarjeta-resumen').count(), 8);
         assert.equal(await page.locator('select#filtroAccion').count(), 1);
         assert.equal(await page.locator('.cabecera-dashboard h1').innerText(), 'Bitácora del sistema');
         assert.match(await page.locator('#tablaEventos tr').first().innerText(), /Resumen.*Fallo parcial/s);
@@ -105,7 +105,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         assert.equal(await page.locator('#detalleActor').innerText(), 'Sistema');
         await page.keyboard.press('Escape');
         await page.locator('#filtroAccion').selectOption('notifications.result');
-        await page.locator('#formFiltros').evaluate(form => form.requestSubmit());
+        await page.getByRole('button', { name: 'Aplicar filtros' }).click();
         await page.waitForFunction(() => document.querySelectorAll('#tablaEventos tr').length === 2);
         await page.locator('#tablaEventos tr').nth(1).getByRole('button').click();
         assert.match(await page.locator('#detalleResultado').innerText(), /Sin destinatarios válidos/);
@@ -114,10 +114,10 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         await page.setViewportSize({ width: 390, height: 844 });
         await checkBadges();
         await page.locator('#tablaEventos tr').first().getByRole('button').click();
-        await page.locator('#panelDetalle').evaluate(async panel => {
+        await page.getByRole('dialog').evaluate(async panel => {
             await Promise.all(panel.getAnimations().map(animation => animation.finished));
         });
-        const bounds = await page.locator('#panelDetalle').boundingBox();
+        const bounds = await page.getByRole('dialog').boundingBox();
         assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 391, JSON.stringify(bounds));
 
         // SCRUM-86: presentación del nombre del actor.

@@ -2,48 +2,80 @@
 // Ver docs/CONSERVACION-Y-ALMACENAMIENTO.md. Requiere Playwright y Chromium.
 const assert = require('node:assert/strict');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
+
 (async () => {
-    const browser = await chromium.launch({ headless: true, executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium' });
+    const browser = await chromium.launch({ headless: true, executablePath: process.env.CHROMIUM_PATH });
     const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
     const base = process.env.FRONTEND_TEST_URL || 'http://127.0.0.1:8766';
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     try {
         await page.goto(base);
-        const login = await page.evaluate(async () => {
-            const csrf = document.cookie.split('; ').find(x => x.startsWith('csrftoken=')).slice(10);
-            return (await fetch('/api/v1/auth/login', { method: 'POST', headers: {
-                'Content-Type': 'application/json', 'X-Psycode-Browser': '1', 'X-CSRFToken': csrf
-            }, body: JSON.stringify({ usuario: 'storage-browser', password: 'Synthetic-browser-2026!' }) })).status;
-        });
-        assert.equal(login, 200);
-        await page.goto(`${base}/configuracion-operativa/almacenamiento`);
-        await page.locator('#datosAlmacenamiento:not([hidden])').waitFor();
-        assert.match(await page.locator('#espacioProtegido').innerText(), /1 archivo/);
-        await page.getByRole('button', { name: 'Liberar espacio', exact: true }).click();
-        await page.getByRole('dialog').waitFor();
-        assert.match(await page.locator('#resumenVistaPrevia').innerText(), /1 archivo/);
-        await page.getByRole('button', { name: 'Cancelar', exact: true }).click();
-        assert.equal(await page.getByRole('dialog').count(), 0);
-        assert.equal(await page.locator('#vistaPreviaLimpieza').evaluate(x => x.open), false);
-        await page.getByRole('button', { name: 'Liberar espacio', exact: true }).click();
-        await page.getByRole('dialog').waitFor();
+        await page.getByLabel('Correo institucional o usuario').fill('storage-browser');
+        await page.getByLabel('Contraseña', { exact: true }).fill('Synthetic-browser-2026!');
+        await page.getByRole('button', { name: 'Ingresar al sistema' }).click();
+        await page.waitForURL('**/dashboard');
+
+        await page.getByRole('link', { name: 'Configuración operativa' }).click();
+        await page.getByRole('link', { name: 'Almacenamiento del servidor', exact: true }).click();
+        await page.waitForURL('**/api/v1/almacenamiento/panel');
+
+        const protegidos = page.getByText('Archivos protegidos', { exact: true }).locator('..').locator('dd');
+        const liberables = page.getByText('Liberable ahora', { exact: true }).locator('..').locator('dd');
+        const liberar = page.getByRole('button', { name: 'Liberar espacio', exact: true });
+        const dialogo = page.getByRole('dialog', { name: 'Vista previa de limpieza' });
+        await protegidos.waitFor();
+        assert.match(await protegidos.innerText(), /1 archivo/);
+
+        await liberar.click();
+        await dialogo.waitFor();
+        assert.match(await dialogo.innerText(), /Se podrán liberar .* en 1 archivo/);
+        const cancelar = dialogo.getByRole('button', { name: 'Cancelar', exact: true });
+        assert.equal(await cancelar.evaluate(element => element === document.activeElement), true);
+        await page.keyboard.press('Escape');
+        await dialogo.waitFor({ state: 'hidden' });
+        assert.equal(await liberar.evaluate(element => element === document.activeElement), true);
+
+        await page.route('**/api/v1/almacenamiento/vista-previa', async route => {
+            const response = await route.fetch();
+            const body = await response.json();
+            body.data.expires_in_seconds = 1;
+            await route.fulfill({ response, json: body });
+        }, { times: 1 });
+        await liberar.click();
+        await dialogo.getByRole('alert').filter({ hasText: /vista previa venció/ }).waitFor();
+        assert.equal(await dialogo.getByRole('button', { name: 'Confirmar limpieza' }).isDisabled(), true);
+        await dialogo.getByRole('button', { name: 'Cancelar' }).click();
+        await dialogo.waitFor({ state: 'hidden' });
+
+        await liberar.click();
+        await dialogo.waitFor();
         await page.screenshot({ path: '/tmp/psycode-storage-preview.png', fullPage: true });
-        await page.getByRole('button', { name: 'Confirmar limpieza', exact: true }).click();
-        await page.locator('#estadoAlmacenamiento').filter({ hasText: /1 archivo eliminado/ }).waitFor();
-        assert.match(await page.locator('#espacioLiberable').innerText(), /^0 B$/);
-        assert.match(await page.locator('#espacioProtegido').innerText(), /1 archivo/);
+        await dialogo.getByRole('button', { name: 'Confirmar limpieza', exact: true }).click();
+        await page.getByRole('status').filter({ hasText: /1 archivo eliminado/ }).waitFor();
+        await dialogo.waitFor({ state: 'hidden' });
+        assert.match(await liberables.innerText(), /^0 B$/);
+        assert.match(await protegidos.innerText(), /1 archivo/);
         await page.screenshot({ path: '/tmp/psycode-storage-desktop.png', fullPage: true });
-        // Fallo de transporte no habilita una confirmación sin vista previa.
+
+        // Un fallo de transporte impide confirmar sin una vista previa válida.
         await page.route('**/api/v1/almacenamiento/vista-previa', route => route.fulfill({ status: 503, body: 'PRIVATE' }));
-        await page.getByRole('button', { name: 'Liberar espacio', exact: true }).click();
-        await page.locator('#estadoAlmacenamiento').filter({ hasText: /No se pudo/ }).waitFor();
-        assert.equal(await page.locator('body').innerText().then(x => x.includes('PRIVATE')), false);
-        assert.equal(await page.locator('#vistaPreviaLimpieza').evaluate(x => x.open), false);
-        await page.setViewportSize({ width: 390, height: 844 });
-        await page.screenshot({ path: '/tmp/psycode-storage-mobile.png', fullPage: true });
-        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
+        await liberar.click();
+        await page.getByRole('alert').filter({ hasText: /No se pudo/ }).waitFor();
+        assert.doesNotMatch(await page.locator('body').innerText(), /PRIVATE/);
+        assert.equal(await dialogo.count(), 0);
+
+        for (const width of [320, 390, 768, 1024, 1440]) {
+            await page.setViewportSize({ width, height: 844 });
+            await liberar.scrollIntoViewIfNeeded();
+            assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, `Desbordamiento a ${width}px`);
+            assert.equal(await liberar.isVisible(), true);
+            if (width === 390) await page.screenshot({ path: '/tmp/psycode-storage-mobile.png', fullPage: true });
+        }
+
         assert.deepEqual(errors, []);
-        console.log('Almacenamiento: preview, cancelación, confirmación real, protecciones, error y responsive OK');
-    } finally { await browser.close(); }
+        console.log('Almacenamiento: acceso, vista previa, cancelación, foco, vencimiento, confirmación real, protecciones, error y diseño responsive OK');
+    } finally {
+        await browser.close();
+    }
 })().catch(error => { console.error(error); process.exitCode = 1; });

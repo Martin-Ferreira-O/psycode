@@ -33,6 +33,8 @@ fi
 mkdir -p "$release"
 git -C repository archive "$revision" | tar -x -C "$release"
 cd "$release"
+npm ci --include=dev --prefix frontend
+npm run build --prefix frontend
 uv sync --locked --no-dev --python 3.12
 if [[ -L .local ]]; then
   rm .local
