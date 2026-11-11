@@ -16,6 +16,7 @@ from .browser_sessions import REFRESH_COOKIE, clear_browser_session, is_browser_
 from .rate_limits import consume_auth_attempt
 from .serializers import (
     AdminUserCreateSerializer,
+    AdminUsersQuerySerializer,
     AdminUserUpdateSerializer,
     LoginSerializer,
     PasswordResetConfirmSerializer,
@@ -26,12 +27,13 @@ from .serializers import (
 
 class AccountsView(APIView):
     service_factory = None  # Inyectada por config; no importar composición desde la app.
+    query_methods = ()
 
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)
         if is_browser_request(request):
             SessionAuthentication().enforce_csrf(request)
-        if request.query_params:
+        if request.query_params and request.method not in self.query_methods:
             raise serializers.ValidationError({"query": ["Esta operación no acepta parámetros de consulta."]})
         if request.method in {"GET", "HEAD"} and request.body:
             raise serializers.ValidationError({"body": ["GET no acepta cuerpo."]})
@@ -149,10 +151,17 @@ class ProtectedAccountsView(AccountsView):
 
 
 class AdminUsersListView(ProtectedAccountsView):
+    query_methods = ("GET", "HEAD")
+
     def get(self, request):
         actor_id = getattr(request.user, "pk", None)
         try:
-            data = self.service_factory().list_users(actor=request.user)
+            pagination = {}
+            if request.query_params:
+                serializer = AdminUsersQuerySerializer(data=request.query_params)
+                serializer.is_valid(raise_exception=True)
+                pagination = serializer.validated_data
+            data = self.service_factory().list_users(actor=request.user, **pagination)
             AuditWriter.record("admin.users.list", "success", actor_id=actor_id)
             return success_response(data, "Lista de usuarios")
         except Exception as exc:

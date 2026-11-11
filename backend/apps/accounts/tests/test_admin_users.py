@@ -50,7 +50,40 @@ class AdminUserManagementTests(APITestCase):
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.admin_token}")
         res = self.client.get(self.url_users)
         self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertIsInstance(res.data["data"], list)
         self.assertGreaterEqual(len(res.data["data"]), 2)
+
+    def test_listado_paginado_usuarios(self):
+        User.objects.bulk_create(
+            User(username=f"cuenta_{i}", email=f"cuenta_{i}@example.test")
+            for i in range(98)
+        )
+        User.objects.update(date_joined=self.admin_user.date_joined)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.admin_token}")
+        esperados = list(User.objects.order_by("-pk").values_list("username", flat=True))
+        recibidos = []
+        for offset in range(0, 100, 10):
+            res = self.client.get(self.url_users, {"offset": offset})
+            self.assertEqual(res.status_code, status.HTTP_200_OK)
+            data = res.data["data"]
+            self.assertEqual((data["total"], data["limit"], data["offset"]), (100, 10, offset))
+            self.assertEqual(len(data["items"]), 10)
+            recibidos.extend(item["usuario"] for item in data["items"])
+        self.assertEqual(recibidos, esperados)
+
+        res = self.client.get(self.url_users, {"limit": 10, "offset": 100})
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data["data"], {"items": [], "total": 100, "limit": 10, "offset": 100})
+
+    def test_rechaza_parametros_de_paginacion_invalidos(self):
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.admin_token}")
+        for query in ("limit=0", "limit=101", "offset=-1", "offset=2147483648", "limit=10&limit=20", "pagina=1"):
+            with self.subTest(query=query):
+                res = self.client.get(f"{self.url_users}?{query}")
+                self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+        res = self.client.post(f"{self.url_users}?limit=10", {}, format="json")
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_actualizacion_usuario(self):
         """Actualizar nombre y rol de un usuario."""
@@ -100,6 +133,8 @@ class AdminUserManagementTests(APITestCase):
         # Intentar listar
         res_get = self.client.get(self.url_users)
         self.assertEqual(res_get.status_code, status.HTTP_403_FORBIDDEN)
+        res_paginado = self.client.get(self.url_users, {"limit": 10, "offset": 0})
+        self.assertEqual(res_paginado.status_code, status.HTTP_403_FORBIDDEN)
 
         # Intentar crear
         payload = {
