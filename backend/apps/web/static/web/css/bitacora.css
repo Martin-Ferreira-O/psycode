@@ -1153,6 +1153,26 @@
     .bitacora-eventos .tabla-bitacora th:first-child, .bitacora-eventos .tabla-bitacora td:first-child { padding-left: 18px; }
 }
 @media (max-width: 600px) {
+    .cabecera-panel-bitacora {
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .acciones-cabecera-bitacora {
+        width: 100%;
+        margin-left: 0;
+        justify-content: flex-start;
+        flex-wrap: wrap;
+    }
+
+    .filtros-bitacora {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .acciones-filtros {
+        flex-wrap: wrap;
+    }
+
     .bitacora-eventos { overflow: visible; }
 .bitacora-eventos .tabla-bitacora, .bitacora-eventos .tabla-bitacora tbody { display: block; }
 .bitacora-eventos .tabla-bitacora thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
