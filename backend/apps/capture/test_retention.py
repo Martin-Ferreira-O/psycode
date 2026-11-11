@@ -196,6 +196,28 @@ class RetentionTests(IngestionFixtures, TestCase):
         self.assertEqual(second['event_id'], str(run.pk))
         self.assertEqual(flush_storage_audit(collection), 0)
 
+    def test_audit_outbox_omits_only_empty_automatic_successes(self):
+        from unittest.mock import Mock
+        from .storage_audit import flush_storage_audit
+
+        def finished_run(**overrides):
+            values = dict(source='automatic', outcome='success')
+            values.update(overrides)
+            return StorageCleanupRun.objects.create(started_at=self.received, finished_at=self.after, **values)
+
+        empty = finished_run()
+        published = [finished_run(source='manual'), finished_run(outcome='failure'),
+                     finished_run(protected=1), finished_run(provider_deleted=1)]
+        collection = Mock()
+        with patch('backend.apps.capture.storage_audit.AuditWriter.emit') as emit:
+            self.assertEqual(flush_storage_audit(collection), len(published))
+            self.assertEqual(flush_storage_audit(collection), 0)
+        self.assertCountEqual([call.args[0]['event_id'] for call in emit.call_args_list],
+                              [str(run.pk) for run in published])
+        self.assertEqual(collection.update_one.call_count, len(published))
+        empty.refresh_from_db()
+        self.assertIsNotNone(empty.audit_sent_at)
+
     def test_continuous_cleanup_waits_when_sql_is_unavailable(self):
         waits = []
 

@@ -9,6 +9,8 @@ from backend.common.audit import AuditWriter
 ACTIONS = ("alerts.register", "alerts.evaluate", "notifications.send", "notifications.result",
            "analysis.speechmatics", "analysis.jev", "alerts.flow", "storage.cleanup")
 OUTCOMES = ("success", "failure", "skipped")
+STORAGE_AUDIT_COUNTS = ("freed_bytes", "removed", "failures", "protected", "checkpoints")
+STORAGE_PROVIDER_AUDIT_COUNTS = ("provider_deleted", "provider_failures")
 ERROR_CODES = frozenset({
     "SPEECHMATICS_FAILED", "SPEECHMATICS_DELETE_PENDING", "JEV_FAILED",
     "SPEECHMATICS_UNCERTAIN", "ANALYSIS_CONTEXT_LOST", "NOTIFICATION_UNCERTAIN",

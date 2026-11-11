@@ -40,9 +40,11 @@ pendiente. Cada pasada acota este trabajo a tres peticiones con plazo individual
 de tres segundos. No se accede a archivos de terceros ni vídeos completos de OBS.
 
 `StorageCleanupRun` es la bitácora SQL durable, con origen automático/manual,
-actor, bytes, archivos, fallos, protecciones y contextos retirados. Su outbox publica
-`storage.cleanup` en la bitácora Mongo con el mismo UUID y upsert idempotente;
-si Mongo cae, conserva el evento y vuelve a publicarlo. No contiene texto clínico,
+actor, bytes, archivos, fallos, protecciones y contextos retirados. Las pasadas
+automáticas exitosas con todos los contadores en cero se conservan solo en SQL.
+El outbox publica los demás eventos `storage.cleanup` en Mongo con el mismo UUID
+y upsert idempotente. Si Mongo cae, conserva el evento y vuelve a publicarlo.
+El evento contiene solo metadatos técnicos, sin texto clínico,
 nombres de archivos, rutas ni secretos. Una caída de SQL después de unlink deja
 la intención pendiente; se reconcilia sin contabilizar espacio dos veces.
 
