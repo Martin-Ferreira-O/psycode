@@ -26,6 +26,9 @@ from backend.common.errors import ServiceError
 from backend.apps.agenda.collector_check import CAPABILITY as SMILE_CHECK_CAPABILITY, sources_for
 
 
+CONFIG_CAPABILITY = "agent.config.v1"
+
+
 def serial(value):
     if isinstance(value, (UUID, datetime)):
         return value.isoformat() if isinstance(value, datetime) else str(value)
@@ -272,12 +275,15 @@ async def agent_websocket(scope, receive, send):
         await db(control.open)
         opened = True
         smile_check = SMILE_CHECK_CAPABILITY in p["capabilities"] and bool(await db(sources_for, identity))
+        config_supported = identity.managed and CONFIG_CAPABILITY in p["capabilities"]
         await db(control.register_hello, p["agent_version"], smile_check)
         await db(register_server_reconnect, identity)
         capabilities = ["audio.v1", "audio.v2", "agenda.excel.v1", "agenda.smile-json.v1",
                         "agent.events.v1", "sessions.capture-ended.v1"]
         if smile_check:
             capabilities.append(SMILE_CHECK_CAPABILITY)
+        if config_supported:
+            capabilities.append(CONFIG_CAPABILITY)
         await emit("ready", {"box": identity.box, "server_time": timezone.now().isoformat(),
             "capabilities": capabilities,
             "heartbeat_interval": settings.CAPTURE_HEARTBEAT_SECONDS}, hello["message_id"])
@@ -292,8 +298,9 @@ async def agent_websocket(scope, receive, send):
             if time.monotonic() >= next_poll:
                 for command in await db(control.poll):
                     await emit("command", command)
-                for config in await db(control.poll_configs):
-                    await emit("config_sync", config)
+                if config_supported:
+                    for config in await db(control.poll_configs):
+                        await emit("config_sync", config)
                 next_poll = time.monotonic() + settings.CAPTURE_COMMAND_INTERVAL_SECONDS
             done, _ = await asyncio.wait([pending], timeout=max(0, next_poll - time.monotonic()))
             if not done:

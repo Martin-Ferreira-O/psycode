@@ -10,22 +10,23 @@ from django.utils import timezone
 from rest_framework.test import APITestCase
 
 from .authentication import authenticate_agent_header
-from .models import AgentConnectivityEvent, AgentRegistration, AgentStatus, ServerConnectivityOutage, RuntimeLease
+from .models import (AgentConfiguration, AgentConnectivityEvent, AgentRegistration, AgentStatus,
+                     ConfigurationState, RuntimeLease, ServerConnectivityOutage)
 from .pc_registry import create_agent, revoke_agent, renew_agent
 from .protocol import envelope
-from .websocket import RemoteControl, agent_websocket, db
+from .websocket import CONFIG_CAPABILITY, RemoteControl, agent_websocket, db
 
 
 class SocketLifecycleTests(TransactionTestCase):
     def setUp(self):
         self.agent, self.token = create_agent(name="PC sintético", box="box-3")
 
-    def exercise(self, messages=(), invalidate=None):
+    def exercise(self, messages=(), invalidate=None, capabilities=()):
         async def run():
             incoming, sent = asyncio.Queue(), []
             await incoming.put({"type": "websocket.connect"})
             await incoming.put({"type": "websocket.receive", "text": json.dumps(envelope(
-                "hello", {"agent_version": "test-96", "capabilities": []}))})
+                "hello", {"agent_version": "test-96", "capabilities": list(capabilities)}))})
             for kind, data in messages:
                 await incoming.put({"type": "websocket.receive", "text": json.dumps(envelope(kind, data))})
             if not invalidate:
@@ -52,6 +53,26 @@ class SocketLifecycleTests(TransactionTestCase):
         self.assertIsNone(self.agent.control_owner)
         self.assertEqual(ServerConnectivityOutage.objects.count(), 1)
         self.assertFalse(RuntimeLease.objects.filter(name="control:box-3").exists())
+
+    def test_pending_config_is_delivered_only_after_capability_negotiation(self):
+        config = AgentConfiguration.objects.create(agent=self.agent, version=1, desired_config={"example": True})
+        sent = self.exercise([("sync", {})])
+        messages = [json.loads(event["text"]) for event in sent if event["type"] == "websocket.send"]
+        self.assertEqual([message["type"] for message in messages], ["ready", "state"])
+        self.assertNotIn(CONFIG_CAPABILITY, messages[0]["payload"]["capabilities"])
+        config.refresh_from_db()
+        self.assertEqual(config.state, ConfigurationState.PENDING)
+
+        ack = {"config_id": str(config.pk), "success": True}
+        sent = self.exercise([("config_ack", ack)], capabilities=[CONFIG_CAPABILITY])
+        messages = [json.loads(event["text"]) for event in sent if event["type"] == "websocket.send"]
+        self.assertEqual([message["type"] for message in messages], ["ready", "config_sync", "config_receipt"])
+        self.assertIn(CONFIG_CAPABILITY, messages[0]["payload"]["capabilities"])
+        self.assertEqual(messages[1]["payload"], {
+            "config_id": str(config.pk), "version": 1, "desired_config": {"example": True},
+        })
+        config.refresh_from_db()
+        self.assertEqual(config.state, ConfigurationState.APPLIED)
 
     def test_revocation_closes_already_accepted_socket(self):
         sent = self.exercise(invalidate=revoke_agent)
