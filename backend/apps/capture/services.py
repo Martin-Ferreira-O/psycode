@@ -9,7 +9,7 @@ from backend.common.audit import AuditWriter
 from backend.common.boxes import is_box
 from .domain import CaptureError, Command, Session, TECHNICAL_ERRORS
 from .models import (
-    OPEN_STATES, AcceptedSequence, AgentCommand, CaptureEvent, CaptureSession,
+    AUDIO_TEST_ORIGIN, OPEN_STATES, AcceptedSequence, AgentCommand, CaptureEvent, CaptureSession,
     CommandKind, FragmentJob, SessionState,
 )
 
@@ -228,7 +228,8 @@ class CaptureSessionService:
         return changed
 
     def _load(self, box, session_id):
-        session = CaptureSession.objects.select_for_update().filter(pk=_uuid(session_id), box=_box(box)).first()
+        session = (CaptureSession.objects.select_for_update().filter(pk=_uuid(session_id), box=_box(box))
+                   .exclude(origin=AUDIO_TEST_ORIGIN).first())
         if session is None:
             raise CaptureError("SESSION_NOT_FOUND")
         return session

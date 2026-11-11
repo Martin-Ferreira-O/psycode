@@ -10,7 +10,7 @@ from django.utils import timezone
 from backend.apps.analysis.errors import AnalysisRetry
 from backend.common.errors import PersistenceUnavailable
 from backend.apps.analysis.domain import AnalysisContextLost, AnalysisState, Fragment
-from .models import CaptureSession, FragmentJob, SessionState
+from .models import AUDIO_TEST_ORIGIN, CaptureSession, FragmentJob, SessionState
 from .storage import FragmentError
 
 
@@ -38,6 +38,7 @@ class ClaimedFragmentJob:
     error_code: str = ""
     checkpoint: dict | None = None
     session_start: object = None
+    audio_test: bool = False
 
 
 @dataclass
@@ -118,6 +119,7 @@ class FragmentJobProcessor:
                     context_start=0,
                     session_origin_sample=claimed.temporal.get("session_start_sample", 0),
                     new_audio_start_sample=claimed.temporal.get("new_audio_start_sample"),
+                    audio_test=claimed.audio_test,
                 )
 
                 roles = self.roles_provider(fragment)
@@ -207,6 +209,7 @@ class FragmentJobProcessor:
                 claimed.session_start or claimed.captured_at, path, end=frames,
                 session_origin_sample=claimed.temporal.get("session_start_sample", 0),
                 new_audio_start_sample=claimed.temporal.get("new_audio_start_sample"),
+                audio_test=claimed.audio_test,
             )
             if roles:
                 resolved_roles = self.roles_provider(fragment)
@@ -384,6 +387,7 @@ class FragmentJobProcessor:
 
             for job in jobs:
                 error_code = ""
+                audio_test = job.sequence.session.origin == AUDIO_TEST_ORIGIN
                 blocked = (
                     FragmentJob.objects
                     .filter(
@@ -395,10 +399,12 @@ class FragmentJobProcessor:
                 )
 
                 if blocked:
-                    if self.durable:
+                    if self.durable and not audio_test:
                         continue
                     if FragmentJob.objects.filter(sequence__session_id=job.sequence.session_id,
-                            sequence__number__lt=job.sequence.number, state=FragmentJob.State.FAILED).exists():
+                            sequence__number__lt=job.sequence.number,
+                            state__in=[FragmentJob.State.FAILED, FragmentJob.State.REVIEW]
+                            if audio_test else [FragmentJob.State.FAILED]).exists():
                         # Finalizar fuera de la transacción con la misma limpieza
                         # de archivos y contextos que cualquier otro fallo.
                         error_code = "PREVIOUS_FRAGMENT_FAILED"
@@ -438,6 +444,7 @@ class FragmentJobProcessor:
                     error_code=error_code,
                     checkpoint=job.checkpoint,
                     session_start=job.sequence.session.actual_start,
+                    audio_test=audio_test,
                 )
 
         return None

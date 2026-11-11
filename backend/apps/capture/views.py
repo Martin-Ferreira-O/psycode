@@ -21,8 +21,11 @@ class FragmentUploadView(APIView):
     parser_classes = [FragmentMultiPartParser]
     serializer_class = FragmentSerializer
 
-    def post(self, request):
+    def post(self, request, test_id=None):
         try:
+            if test_id is not None:
+                from .audio_tests import load_test
+                load_test(test_id, request.user)
             serializer = self.serializer_class(data=request.data)
             try:
                 serializer.is_valid(raise_exception=True)
@@ -31,11 +34,14 @@ class FragmentUploadView(APIView):
             data = serializer.validated_data
             if data["box"] != request.user.box:
                 raise exceptions.PermissionDenied()
+            if test_id is not None and test_id != data["session_id"]:
+                raise FragmentError("AUDIO_TEST_CONFLICT", 409)
             result, created = fragment_ingestion_service().receive(
                 box=request.user.box, session_id=data["session_id"], number=data["secuencia"],
                 format=data["formato"], checksum=data["checksum"], captured_at=data["captured_at"],
                 upload=data["archivo"],
-                agent_id=request.user.agent_id,
+                agent_id=request.user.agent_id if test_id is None else "",
+                test_agent=request.user if test_id is not None else None,
                 temporal={k: data[k] for k in ("session_start_sample", "session_end_sample", "new_audio_start_sample",
                     "sample_rate", "chunk_samples", "overlap_samples")} if self.serializer_class is FragmentV2Serializer else None,
             )

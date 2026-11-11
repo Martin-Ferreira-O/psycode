@@ -123,7 +123,7 @@ class AgentRegistrationListCreateView(APIView):
             ).values("captured_at", "accepted_at").first()
             # La sesión/pipeline pertenece al box; la telemetría y audio al PC.
             if agent.box not in pipelines:
-                session = CaptureSession.objects.filter(box=agent.box).order_by(
+                session = CaptureSession.objects.filter(box=agent.box, audiotest__isnull=True).order_by(
                     "-scheduled_start", "-authorized_at", "-session_id",
                 ).first()
                 pipeline = None

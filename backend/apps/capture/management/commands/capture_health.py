@@ -4,7 +4,7 @@ from django.core.management.base import BaseCommand
 from django.db.models import Count, F, Q
 from django.utils import timezone
 from backend.apps.capture.models import (
-    OPEN_STATES, AgentConnectivityEvent, AgentStatus, CaptureSession, FragmentJob, RuntimeLease, SessionState,
+    AUDIO_TEST_ORIGIN, OPEN_STATES, AgentConnectivityEvent, AgentStatus, CaptureSession, FragmentJob, RuntimeLease, SessionState,
 )
 from backend.apps.capture.services import CaptureSessionService
 from backend.apps.agenda.models import AgendaBoxRevision, AgendaCollection
@@ -25,14 +25,15 @@ class Command(BaseCommand):
             | Q(sequences__fragment_job__state__in=[
                 FragmentJob.State.PENDING, FragmentJob.State.PROCESSING, FragmentJob.State.REVIEW,
             ])
-        ).distinct().order_by('box', 'authorized_at', 'pk')
+        ).exclude(origin=AUDIO_TEST_ORIGIN).distinct().order_by('box', 'authorized_at', 'pk')
         lifecycles = [service.inspection(s.box, s.pk, now=now) for s in sessions]
+        clinical_jobs = FragmentJob.objects.exclude(sequence__session__origin=AUDIO_TEST_ORIGIN)
         backlog = {
             'reception_pending': sum(s['reception'] == 'pending' for s in lifecycles),
             'reception_intervention': sum(s['reception'] == 'intervention_required' for s in lifecycles),
             'capture_stop_unconfirmed': sum(s['capture'] == 'stop_unconfirmed' for s in lifecycles),
-            'processing_intervention_jobs': FragmentJob.objects.filter(state=FragmentJob.State.REVIEW).count(),
-            'processing_pending_jobs': FragmentJob.objects.filter(
+            'processing_intervention_jobs': clinical_jobs.filter(state=FragmentJob.State.REVIEW).count(),
+            'processing_pending_jobs': clinical_jobs.filter(
                 state__in=[FragmentJob.State.PENDING, FragmentJob.State.PROCESSING]).count(),
             **{level: sum(s['backlog_alert'] == level for s in lifecycles) for level in ('notice', 'warning', 'critical')},
         }
