@@ -143,6 +143,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 
         const alerta = { ...cuerpo.data.items[0], estado_evaluacion: 'pendiente', evaluacion: null };
         let evaluacion = null;
+        const consultasHistorial = [];
         await page.route('**/api/v1/alerts**', async route => {
             const url = new URL(route.request().url());
             let data;
@@ -155,6 +156,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
             } else if (url.pathname.endsWith('/' + alerta.alerta_id)) {
                 data = { ...alerta, ...(evaluacion ? { evaluacion, estado_evaluacion: 'correcta' } : {}) };
             } else {
+                if (url.searchParams.get('limit') === '10') consultasHistorial.push(url.searchParams);
                 const items = url.searchParams.has('q') ? [] : [alerta];
                 data = { items, total: items.length, limit: Number(url.searchParams.get('limit') || 10), offset: 0 };
             }
@@ -162,14 +164,36 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         });
         await page.goto(`${base}/dashboard`);
         await page.locator('[data-alerta]').first().waitFor();
-        await page.locator('#buscar').fill('sin coincidencias');
-        await page.locator('#estadoVacio[data-estado="vacio"]').waitFor();
+        const buscar = page.locator('#buscar');
+        const sinResultados = page.locator('#estadoVacio[data-estado="vacio"]');
+        const consultasIniciales = consultasHistorial.length;
+        await buscar.fill('sin');
+        await page.waitForTimeout(400);
+        await buscar.fill('sin coincidencias');
+        await page.waitForTimeout(400);
+        assert.equal(consultasHistorial.length, consultasIniciales, 'escribir texto no consulta el historial');
+        await buscar.press('Enter');
+        await sinResultados.waitFor();
+        assert.equal(consultasHistorial.length, consultasIniciales + 1);
+        assert.equal(consultasHistorial.at(-1).get('q'), 'sin coincidencias');
+
+        await buscar.fill('texto sin confirmar');
+        await page.locator('#filtroBox').selectOption('box-3');
+        await sinResultados.waitFor();
+        assert.equal(consultasHistorial.at(-1).get('box'), 'box-3');
+        assert.equal(consultasHistorial.at(-1).get('q'), 'sin coincidencias', 'el filtro aplica la última búsqueda confirmada');
         await page.locator('#botonActualizar').click();
-        await page.locator('#estadoVacio[data-estado="vacio"]').waitFor();
-        assert.equal(await page.locator('#buscar').inputValue(), 'sin coincidencias');
+        await sinResultados.waitFor();
+        assert.equal(consultasHistorial.at(-1).get('q'), 'sin coincidencias');
+        assert.equal(await buscar.inputValue(), 'texto sin confirmar');
+        await page.getByRole('search', { name: 'Buscar alertas' }).getByRole('button', { name: 'Buscar', exact: true }).click();
+        await sinResultados.waitFor();
+        assert.equal(consultasHistorial.at(-1).get('q'), 'texto sin confirmar');
         assert.match(await page.locator('#estadoVacio').innerText(), /filtros/);
         await page.locator('#limpiarFiltros').click();
         await page.locator('[data-alerta]').first().click();
+        assert.equal(consultasHistorial.at(-1).has('q'), false);
+        assert.equal(await buscar.inputValue(), '');
         const guardar = page.locator('#guardarEvaluacion');
         await guardar.waitFor();
 

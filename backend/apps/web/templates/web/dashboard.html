@@ -9,7 +9,7 @@
 
     <link rel="stylesheet" href="{% static 'web/css/styles.css' %}">
     <link rel="stylesheet" href="{% static 'web/css/dashboard.css' %}?v=5">
-    <link rel="stylesheet" href="{% static 'web/css/alertas.css' %}?v=3">
+    <link rel="stylesheet" href="{% static 'web/css/alertas.css' %}?v=4">
     <link rel="stylesheet" href="{% static 'web/css/estados.css' %}">
 </head>
 
@@ -201,14 +201,17 @@
                 </header>
 
                 <div class="panel-filtros">
-                    <div class="campo campo-busqueda">
+                    <form id="formularioBusquedaAlertas" class="campo campo-busqueda" role="search" aria-label="Buscar alertas">
                         <label for="buscar">Buscar</label>
-                        <input
-                            type="search"
-                            id="buscar"
-                            placeholder="ID, box o tipo de riesgo"
-                        >
-                    </div>
+                        <div class="entrada-busqueda-alertas">
+                            <input
+                                type="search"
+                                id="buscar"
+                                placeholder="ID, box o tipo de riesgo"
+                            >
+                            <button type="submit" class="boton-principal">Buscar</button>
+                        </div>
+                    </form>
 
                     <div class="campo">
                         <label for="filtroBox">Box</label>
@@ -341,6 +344,6 @@
     <script src="{% static 'web/js/components.js' %}?v=5"></script>
     <script src="{% static 'web/js/utils.js' %}?v=2"></script>
     <script src="{% static 'web/js/alertas_detalle.js' %}?v=3"></script>
-    <script src="{% static 'web/js/dashboard.js' %}?v=8"></script>
+    <script src="{% static 'web/js/dashboard.js' %}?v=9"></script>
 </body>
 </html>

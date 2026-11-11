@@ -11,6 +11,7 @@ const elementos = {
     total: document.querySelector("#totalAlertas"),
     pendientes: document.querySelector("#totalPendientes"),
     revisadas: document.querySelector("#totalRevisadas"),
+    formularioBusqueda: document.querySelector("#formularioBusquedaAlertas"),
     buscar: document.querySelector("#buscar"),
     box: document.querySelector("#filtroBox"),
     estado: document.querySelector("#filtroEstado"),
@@ -45,7 +46,7 @@ let solicitudLista = 0;
 let solicitudDetalle = 0;
 let solicitudResumen = null;
 let resumenCargado = false;
-let temporizadorBusqueda;
+let busquedaAplicada = "";
 let alertaSeleccionada = null;
 let periodoGrafico = "mes";
 let solicitudGrafico = 0;
@@ -389,24 +390,21 @@ function construirUrlAlertas(offsetSolicitado) {
         offset: String(offsetSolicitado),
     });
 
-    const busqueda =
-        elementos.buscar.value.trim();
-
     const codigoUuid =
         Object.entries(codigosAlerta)
             .find(
                 ([, codigo]) =>
                     codigo.toLowerCase() ===
-                    busqueda.toLowerCase()
+                    busquedaAplicada.toLowerCase()
             )?.[0];
 
     const estado =
         elementos.estado.value;
 
-    if (busqueda) {
+    if (busquedaAplicada) {
         parametros.set(
             "q",
-            codigoUuid || busqueda
+            codigoUuid || busquedaAplicada
         );
     }
 
@@ -571,8 +569,7 @@ function renderizarTabla() {
         `encontrada${totalCoincidencias === 1 ? "" : "s"}`;
 
     if (totalCoincidencias === 0) {
-        const hayFiltros = [
-            elementos.buscar,
+        const hayFiltros = Boolean(busquedaAplicada) || [
             elementos.box,
             elementos.estado,
             elementos.desde,
@@ -1209,21 +1206,11 @@ function aplicarFiltroInicial() {
     }
 }
 
-elementos.buscar.addEventListener(
-    "input",
-    () => {
-        clearTimeout(
-            temporizadorBusqueda
-        );
-
-        temporizadorBusqueda =
-            setTimeout(
-                () =>
-                    cargarAlertas(0),
-                300
-            );
-    }
-);
+elementos.formularioBusqueda.addEventListener("submit", (evento) => {
+    evento.preventDefault();
+    busquedaAplicada = elementos.buscar.value.trim();
+    cargarAlertas(0);
+});
 
 [
     elementos.box,
@@ -1244,14 +1231,11 @@ elementos.limpiar.addEventListener(
     "click",
     () => {
         elementos.buscar.value = "";
+        busquedaAplicada = "";
         elementos.box.value = "";
         elementos.estado.value = "";
         elementos.desde.value = "";
         elementos.hasta.value = "";
-
-        clearTimeout(
-            temporizadorBusqueda
-        );
 
         cargarAlertas(0);
     }
