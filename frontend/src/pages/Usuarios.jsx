@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { apiGetDatos, describirError } from "../api.js";
 import { solicitarCambioAdministrativo } from "../admin/solicitudes.js";
 import { PageHeader } from "../layout.jsx";
-import { Badge, Button, DataTable, Dialog, Icon, Status } from "../ui.jsx";
+import { Badge, Button, DataTable, Dialog, Icon, Skeleton, SkeletonRows, Status } from "../ui.jsx";
 
 const ENDPOINT = "/api/v1/auth/admin/users";
 const POR_PAGINA = 10;
@@ -39,14 +39,14 @@ async function obtenerUsuarios(offset, signal) {
     throw new DOMException("Solicitud cancelada", "AbortError");
 }
 
-function TablaUsuarios({ usuarios, usuarioActual, editar, confirmar }) {
+function TablaUsuarios({ usuarios, usuarioActual, editar, confirmar, loading }) {
     return (
         <DataTable label="Usuarios registrados" className="tabla-usuarios" wrapperId="tablaUsuariosContenedor" stickyActions>
             <thead>
                 <tr>{COLUMNAS.map((columna) => <th key={columna} scope="col">{columna}</th>)}</tr>
             </thead>
             <tbody id="tablaUsuarios">
-                {usuarios.map((usuario) => {
+                {loading ? <SkeletonRows columns={COLUMNAS.length} /> : usuarios.map((usuario) => {
                     const esAdmin = usuario.rol === "admin";
                     const accion = usuario.activo ? "Desactivar" : "Activar";
                     const propiaCuenta = usuario.id === usuarioActual?.id;
@@ -300,11 +300,12 @@ export default function Usuarios({ user }) {
     return (
         <>
             <PageHeader title="Gestión de usuarios" description="Administra las cuentas y permisos de acceso al sistema." />
-            <section className="panel-alertas panel-usuarios" aria-labelledby="tituloUsuariosRegistrados">
+            <section className="panel-alertas panel-usuarios" aria-labelledby="tituloUsuariosRegistrados" aria-busy={listado.tipo === "carga"}>
                 <div className="panel-cabecera panel-cabecera-usuarios">
                     <div>
                         <h2 id="tituloUsuariosRegistrados" ref={tituloListado} tabIndex={-1}>Usuarios registrados</h2>
                         {datos && <p role="status">{resultado}</p>}
+                        {listado.tipo === "carga" && <p><Skeleton className="ui-skeleton-count" /></p>}
                     </div>
                     {user?.rol === "admin" && listado.error?.estado !== 403 && (
                         <Button id="botonCrearUsuario" variant="primary" onClick={(evento) => abrir("formulario", null, evento.currentTarget)}>
@@ -313,7 +314,7 @@ export default function Usuarios({ user }) {
                     )}
                 </div>
 
-                {listado.tipo === "carga" && <Status type="carga">Cargando usuarios…</Status>}
+                {listado.tipo === "carga" && <TablaUsuarios loading />}
                 {listado.tipo === "error" && (
                     <Status type="error" error={listado.error}
                         messages={{ 403: "No tienes permisos para acceder a la gestión de usuarios." }}

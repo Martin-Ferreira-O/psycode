@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { apiGetDatos, describirError } from "../api.js";
 import { solicitarCambioAdministrativo } from "../admin/solicitudes.js";
 import { PageHeader } from "../layout.jsx";
-import { Button, Status } from "../ui.jsx";
+import { Button, Skeleton, Status } from "../ui.jsx";
 
 const ENDPOINT = "/api/v1/configuracion-operativa";
 const LISTA = "lista_distribucion";
@@ -154,27 +154,39 @@ export default function ConfiguracionOperativa() {
         <>
             <PageHeader title="Configuración operativa"
                 description="Administra los días, el horario clínico y los destinatarios de alertas." />
-            <section className="panel-configuracion panel-configuracion-operativa" aria-label="Horario clínico y alertas">
+            <section className="panel-configuracion panel-configuracion-operativa" aria-labelledby="tituloConfiguracion"
+                aria-busy={!formulario && !errorCarga}>
+                <div className="configuracion-cabecera">
+                    <div>
+                        <h2 id="tituloConfiguracion">Horario clínico y alertas</h2>
+                        <p>La configuración vigente se carga desde el servidor.</p>
+                    </div>
+                    {!errorCarga && <div className="zona-horaria">
+                        <span>Zona horaria utilizada</span>
+                        <strong id="zonaHoraria">{formulario?.timezone ?? <Skeleton className="ui-skeleton-count" />}</strong>
+                    </div>}
+                </div>
+                {!errorCarga && (
+                    <Button variant="secondary" className="boton-navegacion-configuracion" href="/api/v1/almacenamiento/panel">
+                        Almacenamiento del servidor
+                    </Button>
+                )}
                 {errorCarga?.estado === 403
                     ? <Status type="error">{DENEGADO}</Status>
                     : errorCarga
                         ? <Status type="error" error={errorCarga} onRetry={reintentar} />
-                        : !formulario && <Status type="carga">Verificando permisos y cargando configuración…</Status>}
+                        : !formulario && (
+                            <>
+                                {["Días habilitados", "Horario clínico", "Destinatarios de alertas", "Correo de respaldo"].map(title => (
+                                    <fieldset key={title} className="grupo-configuracion">
+                                        <legend>{title}</legend>
+                                        <Skeleton className="ui-skeleton-field" />
+                                    </fieldset>
+                                ))}
+                            </>
+                        )}
                 {formulario && (
                     <>
-                        <div className="configuracion-cabecera">
-                            <div>
-                                <h2 id="tituloConfiguracion">Horario clínico y alertas</h2>
-                                <p>La configuración vigente se carga desde el servidor.</p>
-                            </div>
-                            <div className="zona-horaria">
-                                <span>Zona horaria utilizada</span>
-                                <strong id="zonaHoraria">{formulario.timezone}</strong>
-                            </div>
-                        </div>
-                        <Button variant="secondary" className="boton-navegacion-configuracion" href="/api/v1/almacenamiento/panel">
-                            Almacenamiento del servidor
-                        </Button>
                         <form id="formularioConfiguracion" onSubmit={guardar} noValidate aria-busy={guardando}>
                             <fieldset className="grupo-configuracion" disabled={guardando}>
                                 <legend>Días habilitados</legend>

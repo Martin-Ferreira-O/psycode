@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { flushSync } from 'react-dom';
 import { apiPost, leerRespuesta } from '../api.js';
 import { PageHeader } from '../layout.jsx';
-import { Button } from '../ui.jsx';
+import { Button, Skeleton } from '../ui.jsx';
 import { BoxOptions, EquipoCard, Installer, SalaCard } from '../pcs/cards.jsx';
 import { AccionPCDialog, CrearPCDialog, CredencialPCDialog, HistorialPCDialog } from '../pcs/dialogs.jsx';
 import { PCS_URL, boxNombre, compararEquipos, credencialValida, fecha } from '../pcs/model.js';
@@ -176,13 +176,14 @@ export default function Pcs({ config }) {
     const salasVisibles = salasLibres.filter(sala => coincide(sala.box, `${sala.name} ${boxNombre(sala.box)}`));
     const boxesDisponibles = salasLibres.filter(sala => sala.available && !sala.conflict).map(sala => sala.box);
     const status = estado === 'ok' && !equiposVisibles.length && !salasVisibles.length ? 'vacio' : estado;
+    const cargaInicial = status === 'carga' && !ultimaConsulta;
     const errorRegistro = estado === 'error' || estado === 'denegado';
     let actualizacion = 'Consulta pendiente';
     if (errorRegistro) actualizacion = ultimaConsulta ? `Información sin actualizar desde ${fecha(ultimaConsulta)} · Chile` : 'Sin datos disponibles';
     else if (ultimaConsulta) actualizacion = `Última consulta: ${fecha(ultimaConsulta)} · Actualización automática`;
 
     const statusText = {
-        carga: ultimaConsulta ? 'Actualizando equipos…' : 'Cargando equipos…',
+        carga: 'Actualizando equipos…',
         error: 'No se pudo actualizar el estado. Se conserva la última información disponible y volveremos a intentarlo automáticamente.',
         denegado: 'Solo un administrador puede consultar esta pantalla.',
         vacio: equipos.length || salas.length
@@ -197,7 +198,7 @@ export default function Pcs({ config }) {
                 <div className="pcs-toolbar">
                     <div>
                         <h2 id="tituloRegistro">Equipos de la clínica</h2>
-                        <p id="actualizacionPCs" className="pcs-ayuda">{actualizacion}</p>
+                        <p id="actualizacionPCs" className="pcs-ayuda">{cargaInicial ? <Skeleton className="ui-skeleton-count" /> : actualizacion}</p>
                     </div>
                     <div className="pcs-acciones">
                         <Button id="actualizarPCs" disabled={cargando} onClick={() => cargar()}>Actualizar</Button>
@@ -233,7 +234,7 @@ export default function Pcs({ config }) {
                         No se pudo actualizar la disponibilidad de boxes. Los equipos se consultan por separado; volveremos a intentarlo automáticamente.
                     </p>
                 )}
-                <div id="estadoPCs" className="pcs-estado" role="status" data-estado={errorRegistro ? 'error' : status} hidden={status === 'ok'}>
+                <div id="estadoPCs" className="pcs-estado" role="status" data-estado={errorRegistro ? 'error' : status} hidden={status === 'ok' || cargaInicial}>
                     {statusText[status]}
                 </div>
                 {estado === 'error' && <Button id="reintentarPCs" className="pcs-reintento" disabled={cargando} onClick={() => cargar()}>Reintentar</Button>}
@@ -243,6 +244,14 @@ export default function Pcs({ config }) {
                     </div>
                 )}
                 <div id="listaPCs" className="pcs-lista" ref={listaRef} aria-busy={cargando}>
+                    {cargaInicial && [0, 1, 2].map(card => (
+                        <div key={card} className="ui-loading-panel" aria-hidden="true">
+                            <Skeleton className="ui-skeleton-count" />
+                            <Skeleton />
+                            <Skeleton />
+                            <Skeleton />
+                        </div>
+                    ))}
                     {equiposVisibles.map(pc => (
                         <EquipoCard key={pc.agent_id} pc={pc} testing={testing.includes(pc.agent_id)} onTest={probarSmile}
                             onAction={(target, action, origen) => abrir({ kind: 'accion', pc: target, action }, origen)}

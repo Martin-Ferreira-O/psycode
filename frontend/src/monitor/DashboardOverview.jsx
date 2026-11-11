@@ -1,4 +1,5 @@
 import { apiGetDatos, ErrorSolicitud } from "../api.js";
+import { Skeleton } from "../ui.jsx";
 import { ALERTS_URL } from "./alerts.js";
 import { useResource } from "./resources.js";
 
@@ -105,7 +106,7 @@ export default function DashboardOverview({ summary, chart }) {
                             <div className="tarjeta-resumen-datos">
                                 <span className="resumen-etiqueta">{label}</span>
                                 <strong id={`total${key === "total" ? "Alertas" : key[0].toUpperCase() + key.slice(1)}`} className="resumen-numero">
-                                    {totals ? numberFormatter.format(totals[key]) : "—"}
+                                    {totals ? numberFormatter.format(totals[key]) : summary.loading ? <Skeleton className="ui-skeleton-number" /> : "—"}
                                 </strong>
                                 <span className="resumen-descripcion">{description}</span>
                             </div>
@@ -124,7 +125,14 @@ export default function DashboardOverview({ summary, chart }) {
                     </div>
                 </header>
                 <div id="graficoBarras" className="grafico-dashboard" aria-label="Gráfico de cantidad de alertas registradas" aria-busy={chart.loading}>
-                    {chart.loading && <div className="grafico-cargando" role="status">Cargando gráfico…</div>}
+                    {chart.loading && [42, 66, 52, 79, 57, 71].map((height) => (
+                        <div key={height} className="grupo-barra-dashboard" aria-hidden="true">
+                            <div className="contenedor-barra-dashboard">
+                                <span className="ui-skeleton ui-skeleton-bar" style={{ height: `${height}%` }} />
+                            </div>
+                            <Skeleton />
+                        </div>
+                    ))}
                     {chart.error && <div className="grafico-cargando" role="status">No se pudo cargar el gráfico.</div>}
                     {chart.data?.map(({ start, label, total }) => (
                         <div key={start} className="grupo-barra-dashboard" role="img" aria-label={`${label}: ${total} ${total === 1 ? "alerta" : "alertas"}`}>

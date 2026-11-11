@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { apiGetDatos, cerrarSesion } from "./api.js";
-import { Button, Icon, Status } from "./ui.jsx";
+import { Button, Icon, Skeleton, Status } from "./ui.jsx";
 
 const Session = createContext(null);
 
@@ -39,6 +39,34 @@ export function PageHeader({ title, description, children }) {
             <UserBadge />
             {children && <div className="ui-page-actions">{children}</div>}
         </header>
+    );
+}
+
+const loadingSections = {
+    dashboard: ["Indicadores principales", "Comportamiento mensual", "Historial de alertas"],
+    evaluaciones: ["Evaluaciones registradas"],
+    usuarios: ["Usuarios registrados"],
+    pcs: ["Equipos de la clínica"],
+    bitacora: ["Eventos de la bitácora"],
+    configuracion_operativa: ["Horario clínico y alertas"],
+    almacenamiento: ["Espacio del servidor", "Limpieza periódica"],
+};
+
+export function PageLoading({ config }) {
+    return (
+        <>
+            <PageHeader title={config.heading} />
+            <div className="ui-page-loading" aria-busy="true">
+                {loadingSections[config.page].map(title => (
+                    <section key={title} className="ui-loading-panel">
+                        <h2>{title}</h2>
+                        <Skeleton />
+                        <Skeleton />
+                        <Skeleton />
+                    </section>
+                ))}
+            </div>
+        </>
     );
 }
 
@@ -167,7 +195,7 @@ export function AppLayout({ config, children }) {
                 <a className="saltar-contenido" href="#contenido-principal">Saltar al contenido</a>
                 <Sidebar config={config} user={user} />
                 <main id="contenido-principal" className={`principal ui-main ${contentClass}`} tabIndex={-1}>
-                    {user && !denied ? children(user) : (
+                    {user && !denied ? children(user) : denied || sessionError ? (
                         <div className="ui-session-panel">
                             <PageHeader title={config.heading} />
                             {denied && <Status type="error">{denied}</Status>}
@@ -175,9 +203,8 @@ export function AppLayout({ config, children }) {
                                 setSessionError(null);
                                 setAttempt(value => value + 1);
                             }} />}
-                            {!denied && !sessionError && <Status>Comprobando sesión…</Status>}
                         </div>
-                    )}
+                    ) : <PageLoading config={config} />}
                 </main>
             </div>
         </Session.Provider>

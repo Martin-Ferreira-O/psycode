@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { codigoAlertaVisible, formatearFecha, formatearHora, obtenerEtiquetaEvaluacion, obtenerResultado } from "../format.js";
 import { PageHeader } from "../layout.jsx";
-import { Badge, Button, DataTable, Status } from "../ui.jsx";
+import { Badge, Button, DataTable, Skeleton, SkeletonRows, Status } from "../ui.jsx";
 import AlertDetail, { DetailButton } from "../monitor/AlertDetail.jsx";
 import { ALERTS_URL, ALERT_PAGE_SIZE } from "../monitor/alerts.js";
 import { usePage } from "../monitor/resources.js";
@@ -33,7 +33,7 @@ export default function Evaluaciones() {
     const pageOffset = data?.offset ?? offset;
     const pages = Math.ceil(total / ALERT_PAGE_SIZE);
     const page = Math.floor(pageOffset / ALERT_PAGE_SIZE) + 1;
-    const summary = loading ? "Consultando evaluaciones…"
+    const summary = loading ? <Skeleton className="ui-skeleton-count" />
         : error ? "No se pudieron consultar las evaluaciones."
         : pages > 1 ? `Mostrando ${pageOffset + 1}–${pageOffset + data.items.length} de ${total} evaluaciones`
         : total === 1 ? "1 evaluación registrada" : `${total} evaluaciones registradas`;
@@ -58,10 +58,9 @@ export default function Evaluaciones() {
                         <p id="resultadoEvaluaciones" role="status">{summary}</p>
                     </div>
                 </div>
-                {loading && <Status id="estadoVacioEvaluaciones" type="carga">Cargando evaluaciones…</Status>}
                 {error && <Status id="estadoVacioEvaluaciones" type="error" error={error} messages={{ 404: "No encontramos el registro de evaluaciones solicitado." }} onRetry={retry} />}
                 {data && data.items.length === 0 && <Status id="estadoVacioEvaluaciones" type="vacio">Todavía no existen alertas evaluadas.</Status>}
-                {Boolean(data?.items.length) && (
+                {(loading || Boolean(data?.items.length)) && (
                     <DataTable stickyActions className="monitor-table monitor-table-alerts" label="Evaluaciones registradas" wrapperId="tablaEvaluacionesContenedor">
                         <thead>
                             <tr>
@@ -74,7 +73,7 @@ export default function Evaluaciones() {
                             </tr>
                         </thead>
                         <tbody id="tablaEvaluaciones">
-                            {data.items.map((alert) => {
+                            {loading ? <SkeletonRows columns={6} /> : data.items.map((alert) => {
                                 const result = obtenerResultado(alert);
                                 const date = alert.evaluacion?.fecha_hora;
                                 const code = codigoAlertaVisible(alert.alerta_id);

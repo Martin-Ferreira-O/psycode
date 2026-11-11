@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { apiGetDatos, apiPost, leerRespuesta } from "../api.js";
 import { PageHeader } from "../layout.jsx";
-import { Button, Dialog, Status } from "../ui.jsx";
+import { Button, Dialog, Skeleton, Status } from "../ui.jsx";
 
 const ENDPOINT = "/api/v1/almacenamiento";
 const RESULTADOS = {
@@ -56,55 +56,67 @@ function resumenLimpieza(resultado) {
 
 function DatosAlmacenamiento({ info, ocupado, previsualizar, liberarRef }) {
     const metricas = [
-        ["Ocupado en el volumen", bytes(info.used_bytes)],
-        ["Disponible en el volumen", bytes(info.available_bytes)],
-        ["Material de procesamiento", bytes(info.managed_bytes)],
-        ["Liberable ahora", bytes(info.reclaimable_bytes)],
-        ["Archivos protegidos", `${bytes(info.protected_bytes)} · ${archivos(info.protected_files)}`],
+        ["Ocupado en el volumen", "used_bytes"],
+        ["Disponible en el volumen", "available_bytes"],
+        ["Material de procesamiento", "managed_bytes"],
+        ["Liberable ahora", "reclaimable_bytes"],
+        ["Archivos protegidos", "protected_bytes"],
     ];
-    const ultima = info.last_run;
+    const resumen = (
+        <dl className="metricas-almacenamiento">
+            {metricas.map(([nombre, campo]) => (
+                <div key={campo}>
+                    <dt>{nombre}</dt>
+                    <dd>{info ? bytes(info[campo]) : <Skeleton className="ui-skeleton-count" />}
+                        {info && campo === "protected_bytes" && ` · ${archivos(info.protected_files)}`}
+                    </dd>
+                </div>
+            ))}
+        </dl>
+    );
+    const ultima = info?.last_run;
     const resultado = ultima
         ? `${RESULTADOS[ultima.outcome] || ultima.outcome} · ${bytes(ultima.freed_bytes)} liberados · ${ultima.failures} fallos`
         : "Pendiente";
-    const retraso = info.delay_seconds > 0
+    const retraso = info?.delay_seconds > 0
         ? `${Math.ceil(info.delay_seconds / 60)} minutos de retraso. Revisa el servicio de limpieza.`
         : "Sin retraso";
     const ejecucion = [
         ["Última ejecución", ultima ? fecha(ultima.started_at) : "Aún no se ha ejecutado"],
         ["Resultado", resultado],
-        ["Próxima ejecución prevista", `${fecha(info.next_run_at)} · cada 15 minutos`],
+        ["Próxima ejecución prevista", `${fecha(info?.next_run_at)} · cada 15 minutos`],
         ["Retraso", retraso],
     ];
-    const motivos = Object.entries(info.reasons ?? {})
+    const motivos = Object.entries(info?.reasons ?? {})
         .map(([razon, cantidad]) => `${cantidad}: ${PROTECCIONES[razon] || "protegidos"}`).join(" · ");
     return (
-        <div aria-busy={ocupado}>
-            <dl className="metricas-almacenamiento">
-                {metricas.map(([nombre, valor]) => (
-                    <div key={nombre}><dt>{nombre}</dt><dd>{valor}</dd></div>
-                ))}
-            </dl>
-            <p className="ayuda-configuracion">{motivos || "No hay archivos protegidos en este momento."}</p>
+        <div aria-busy={!info || ocupado}>
+            {resumen}
+            <p className="ayuda-configuracion">{info ? motivos || "No hay archivos protegidos en este momento." : <Skeleton className="ui-skeleton-count" />}</p>
             <p className="ayuda-configuracion">El audio se conserva al menos 24 horas desde su recepción central. Las cargas, los análisis activos y los pendientes recuperables están protegidos. Los fallos requieren revisión y vencen a los 7 días de la última recepción, cuando la recepción está cerrada y no hay análisis activos.</p>
             <p className="ayuda-configuracion">Se conservan alertas, extractos, revisiones, bitácora, usuarios, configuración y agenda. El espacio del volumen incluye otros datos; esta limpieza solo gestiona sus propios fragmentos.</p>
             <h2 className="subtitulo-almacenamiento">Limpieza periódica</h2>
             <dl className="ejecucion-almacenamiento">
                 {ejecucion.map(([nombre, valor]) => (
-                    <Fragment key={nombre}><dt>{nombre}</dt><dd>{valor}</dd></Fragment>
+                    <Fragment key={nombre}><dt>{nombre}</dt><dd>{info ? valor : <Skeleton className="ui-skeleton-count" />}</dd></Fragment>
                 ))}
             </dl>
-            <p className="ayuda-configuracion">
-                {info.pending_deletions} borrados pendientes · {info.intervention_deletions} requieren intervención · {info.stale_active_jobs || 0} análisis demorados · {info.review_jobs} trabajos en revisión · {info.expired_jobs} vencidos · {info.audit_pending} registros pendientes de bitácora.
-            </p>
-            <p className="ayuda-configuracion">
-                {info.encryption?.verified
-                    ? "Cifrado de volúmenes y protección local de claves verificados."
-                    : "Cifrado o protección de claves sin verificar. Revisa la verificación del almacenamiento antes de procesar material sensible."}
-            </p>
-            <div className="acciones-configuracion">
-                <p className="ayuda-configuracion">La vista previa muestra hasta 1000 archivos. Se comprueban nuevamente las protecciones antes de borrar.</p>
-                <Button ref={liberarRef} variant="primary" onClick={previsualizar} disabled={ocupado}>Liberar espacio</Button>
-            </div>
+            {info && (
+                <>
+                    <p className="ayuda-configuracion">
+                        {info.pending_deletions} borrados pendientes · {info.intervention_deletions} requieren intervención · {info.stale_active_jobs || 0} análisis demorados · {info.review_jobs} trabajos en revisión · {info.expired_jobs} vencidos · {info.audit_pending} registros pendientes de bitácora.
+                    </p>
+                    <p className="ayuda-configuracion">
+                        {info.encryption?.verified
+                            ? "Cifrado de volúmenes y protección local de claves verificados."
+                            : "Cifrado o protección de claves sin verificar. Revisa la verificación del almacenamiento antes de procesar material sensible."}
+                    </p>
+                    <div className="acciones-configuracion">
+                        <p className="ayuda-configuracion">La vista previa muestra hasta 1000 archivos. Se comprueban nuevamente las protecciones antes de borrar.</p>
+                        <Button ref={liberarRef} variant="primary" onClick={previsualizar} disabled={ocupado}>Liberar espacio</Button>
+                    </div>
+                </>
+            )}
         </div>
     );
 }
@@ -215,6 +227,7 @@ export default function Almacenamiento() {
 
     const ocupado = operacion !== null;
     const limpiando = operacion === "limpieza";
+    const cargaInicial = !info && aviso?.type === "carga";
     return (
         <>
             <PageHeader title="Almacenamiento del servidor"
@@ -226,8 +239,8 @@ export default function Almacenamiento() {
                     <h2 id="tituloEspacio">Espacio del servidor</h2>
                     <Button variant="secondary" onClick={actualizar} disabled={ocupado}>Actualizar</Button>
                 </div>
-                {aviso && <Status type={aviso.type}>{aviso.texto}</Status>}
-                {info && <DatosAlmacenamiento info={info} ocupado={ocupado} previsualizar={previsualizar} liberarRef={liberarRef} />}
+                {aviso && !cargaInicial && <Status type={aviso.type}>{aviso.texto}</Status>}
+                {(info || cargaInicial) && <DatosAlmacenamiento info={info} ocupado={ocupado} previsualizar={previsualizar} liberarRef={liberarRef} />}
             </section>
             <Dialog open={vistaAbierta} onClose={() => setVista(null)} title="Vista previa de limpieza"
                 className="dialogo-almacenamiento" busy={limpiando}

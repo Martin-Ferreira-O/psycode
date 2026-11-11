@@ -50,6 +50,20 @@ export function DataTable({ label, className = "", wrapperClassName = "", wrappe
     );
 }
 
+export function Skeleton({ className = "" } = {}) {
+    return <span className={`ui-skeleton ${className}`} aria-hidden="true" />;
+}
+
+export function SkeletonRows({ columns, rows = 4 }) {
+    return Array.from({ length: rows }, (_, row) => (
+        <tr key={row} aria-hidden="true">
+            {Array.from({ length: columns }, (_, column) => (
+                <td key={column}><Skeleton /></td>
+            ))}
+        </tr>
+    ));
+}
+
 export function Status({ type = "carga", children, error, messages, onRetry, className = "", ...props }) {
     const [retrying, setRetrying] = useState(false);
     const [retryError, setRetryError] = useState(null);

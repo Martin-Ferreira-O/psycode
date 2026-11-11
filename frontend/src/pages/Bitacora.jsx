@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { PageHeader } from "../layout.jsx";
-import { Button, DataTable, Icon, Status } from "../ui.jsx";
+import { Button, DataTable, Icon, SkeletonRows, Status } from "../ui.jsx";
 import { DetailButton } from "../monitor/AlertDetail.jsx";
 import AuditDetail, { AuditOutcome } from "../monitor/AuditDetail.jsx";
 import ExcelDownload from "../monitor/ExcelDownload.jsx";
@@ -71,7 +71,7 @@ function AuditFilters({ draft, onEdit, onApply, onClear, alertFilterRef }) {
     );
 }
 
-function AuditTable({ events, onOpen }) {
+function AuditTable({ events, onOpen, loading }) {
     return (
         <DataTable stickyActions label="Eventos de la bitácora. Las horas corresponden a Chile." className="monitor-table" wrapperId="contenedorTabla">
             <thead>
@@ -82,7 +82,7 @@ function AuditTable({ events, onOpen }) {
                 </tr>
             </thead>
             <tbody id="tablaEventos">
-                {events.map((event) => {
+                {loading ? <SkeletonRows columns={6} /> : events.map((event) => {
                     const action = actionText(event.action);
                     const date = auditTime(event.timestamp);
                     const phase = { principal: "Principal", respaldo: "Respaldo", resumen: "Resumen de envíos" }[event.notification?.phase];
@@ -174,7 +174,7 @@ export default function Bitacora() {
                     load(defaultAuditFilters);
                 }} />
                 <div aria-busy={loading}>
-                    {loading && <Status type="carga">Cargando eventos de la bitácora…</Status>}
+                    {loading && <AuditTable loading />}
                     {error && <Status type="error" error={error} messages={auditErrorMessages} onRetry={reload} />}
                     {data && !data.items.length && <Status type="vacio">No se encontraron registros para el periodo o filtros seleccionados.</Status>}
                     {Boolean(data?.items.length) && (

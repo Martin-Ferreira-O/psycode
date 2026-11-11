@@ -460,3 +460,49 @@ body:has(.ui-dialog[open]) { overflow: hidden; }
     .ui-button { transition: none; }
     .ui-spinner { animation: none; }
 }
+
+.ui-skeleton {
+    display: inline-block;
+    width: 100%;
+    height: 1em;
+    border-radius: 5px;
+    background: var(--borde);
+    vertical-align: middle;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .ui-skeleton {
+        animation: ui-skeleton-pulse 1.5s ease-in-out 150ms infinite alternate;
+    }
+}
+
+@keyframes ui-skeleton-pulse {
+    to { opacity: .55; }
+}
+
+.ui-skeleton-count { width: min(100%, 8rem); }
+.ui-skeleton-number { width: 2.5em; }
+.ui-skeleton-field { width: min(100%, 22rem); height: 2.5rem; }
+.ui-table td .ui-skeleton { width: 75%; margin-block: .35rem; }
+
+.ui-page-loading {
+    display: grid;
+    gap: 1rem;
+}
+
+.ui-loading-panel {
+    display: grid;
+    gap: .75rem;
+    padding: 1rem;
+    border: 1px solid var(--borde);
+    border-radius: 12px;
+    background: var(--blanco);
+}
+
+.ui-loading-panel h2 { margin: 0; }
+.ui-loading-panel .ui-skeleton:last-child { width: 65%; }
+
+.ui-skeleton-bar {
+    width: min(42px, 62%);
+    border-radius: 8px 8px 3px 3px;
+}

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { codigoAlertaVisible, codigosAlerta, formatearBox, formatearFecha, formatearHora, formatearTipoRiesgo, obtenerEtiquetaEvaluacion } from "../format.js";
 import { PageHeader } from "../layout.jsx";
-import { Badge, Button, DataTable, Status } from "../ui.jsx";
+import { Badge, Button, DataTable, Skeleton, SkeletonRows, Status } from "../ui.jsx";
 import AlertDetail, { DetailButton, SeverityBadge } from "../monitor/AlertDetail.jsx";
 import DashboardOverview, { useDashboardOverview } from "../monitor/DashboardOverview.jsx";
 import ExcelDownload from "../monitor/ExcelDownload.jsx";
@@ -85,7 +85,7 @@ function DashboardFilters({ filters, onFilter, onClear, searchRef }) {
     );
 }
 
-function DashboardAlertTable({ items, onOpen }) {
+function DashboardAlertTable({ items, onOpen, loading }) {
     return (
         <DataTable stickyActions className="monitor-table monitor-table-alerts" wrapperId="tablaContenedor" label="Alertas registradas">
             <thead>
@@ -96,7 +96,7 @@ function DashboardAlertTable({ items, onOpen }) {
                 </tr>
             </thead>
             <tbody id="tablaAlertas">
-                {items.map((alert) => {
+                {loading ? <SkeletonRows columns={8} /> : items.map((alert) => {
                     const id = alert.alerta_id;
                     const code = codigoAlertaVisible(id);
                     const pending = alert.estado_evaluacion === "pendiente";
@@ -246,24 +246,22 @@ export default function Dashboard() {
                     <div className="panel-cabecera">
                         <div>
                             <h2 id="tituloAlertas" ref={titleRef} tabIndex={-1}>Alertas registradas</h2>
-                            <p id="resultadoTexto" role="status">{list.loading ? "Consultando alertas…"
+                            <p id="resultadoTexto" role="status">{list.loading ? <Skeleton className="ui-skeleton-count" />
                                 : list.error ? "No se pudieron consultar las alertas."
                                 : `${total} ${total === 1 ? "alerta encontrada" : "alertas encontradas"}`}</p>
                         </div>
                     </div>
                     <>
-                        {list.loading && <Status id="estadoVacio" type="carga">Cargando alertas…</Status>}
                         {list.error && <Status id="estadoVacio" type="error" error={list.error} messages={{ 404: "No encontramos las alertas solicitadas." }} onRetry={list.reload} />}
                         {list.data && !list.data.items.length && (
                             <Status id="estadoVacio" type="vacio">{query ? "No hay alertas que coincidan con los filtros. Prueba con otros criterios." : "Todavía no hay alertas registradas."}</Status>
                         )}
                     </>
-                    {Boolean(list.data?.items.length) && (
-                        <>
-                            <DashboardAlertTable items={list.data.items.map((alert) => withEvaluation(alert, reviews.get(alert.alerta_id)))} onOpen={openDetail} />
-                            <DashboardPagination data={list.data} onMove={movePage} />
-                        </>
+                    {(list.loading || Boolean(list.data?.items.length)) && (
+                        <DashboardAlertTable loading={list.loading}
+                            items={list.data?.items.map((alert) => withEvaluation(alert, reviews.get(alert.alerta_id)))} onOpen={openDetail} />
                     )}
+                    {Boolean(list.data?.items.length) && <DashboardPagination data={list.data} onMove={movePage} />}
                 </section>
             </section>
             {selected && (

@@ -11,7 +11,7 @@ SCREENS = {
     "evaluaciones": ("Registro de evaluaciones", "Registro de evaluaciones", ("alertas", "evaluaciones")),
     "usuarios": ("Gestión de usuarios", "Gestión de usuarios | Psycode", ("usuarios",)),
     "pcs": ("Gestión de PCs", "Gestión de PCs | Psycode", ("pcs",)),
-    "bitacora": ("Bitácora", "Bitácora | Psycode", ("alertas", "bitacora")),
+    "bitacora": ("Bitácora del sistema", "Bitácora | Psycode", ("alertas", "bitacora")),
     "configuracion_operativa": ("Configuración operativa", "Configuración operativa | Psycode", ("configuracion_operativa",)),
     "almacenamiento": ("Almacenamiento del servidor", "Almacenamiento del servidor | Psycode", ("configuracion_operativa", "almacenamiento")),
 }

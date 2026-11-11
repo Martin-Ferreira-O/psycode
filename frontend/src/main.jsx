@@ -1,7 +1,7 @@
 import { Component, lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import { retirarTokensAntiguos } from "./api.js";
-import { AppLayout } from "./layout.jsx";
+import { AppLayout, PageLoading } from "./layout.jsx";
 import { Status } from "./ui.jsx";
 
 const pages = {
@@ -42,8 +42,11 @@ if (resetToken) window.history.replaceState(null, "", window.location.pathname);
 retirarTokensAntiguos();
 
 function Screen({ user }) {
+    const fallback = config.public
+        ? <div className="ui-session-panel"><Status>Cargando página…</Status></div>
+        : <PageLoading config={config} />;
     return (
-        <Suspense fallback={<div className="ui-session-panel"><Status>Cargando página…</Status></div>}>
+        <Suspense fallback={fallback}>
             <Page config={config} user={user} resetToken={resetToken} />
         </Suspense>
     );

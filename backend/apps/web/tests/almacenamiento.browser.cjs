@@ -24,7 +24,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         const liberables = page.getByText('Liberable ahora', { exact: true }).locator('..').locator('dd');
         const liberar = page.getByRole('button', { name: 'Liberar espacio', exact: true });
         const dialogo = page.getByRole('dialog', { name: 'Vista previa de limpieza' });
-        await protegidos.waitFor();
+        await liberar.waitFor();
         assert.match(await protegidos.innerText(), /1 archivo/);
 
         await liberar.click();
