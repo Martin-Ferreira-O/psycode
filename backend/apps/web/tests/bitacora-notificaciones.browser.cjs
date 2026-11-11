@@ -122,7 +122,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 
         // SCRUM-86: presentación del nombre del actor.
         const usuarioId = randomUUID(), eliminadoId = randomUUID();
-        const historicoId = randomUUID(), sinActorId = randomUUID();
+        const usuarioLiteralId = randomUUID(), sinActorId = randomUUID();
         const maliciosoId = randomUUID();
         const nombreUsuario = 'Ana & José';
         const textoMalicioso = '<img src=x onerror=alert(1)>';
@@ -133,7 +133,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
                 actor: 'Sistema' },
             { ...historic, event_id: randomUUID(), actor_id: eliminadoId,
                 actor: `Usuario (${eliminadoId})` },
-            { ...historic, event_id: randomUUID(), actor_id: historicoId,
+            { ...historic, event_id: randomUUID(), actor_id: usuarioLiteralId,
                 actor: 'Usuario' },
             { ...historic, event_id: randomUUID(), actor_id: sinActorId },
             { ...historic, event_id: randomUUID(), actor_id: maliciosoId,
@@ -148,7 +148,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
             [nombreUsuario, `${nombreUsuario} · ${usuarioId}`],
             ['Sistema', 'Sistema'],
             [`Usuario (${eliminadoId})`, `Usuario (${eliminadoId})`],
-            [`Usuario (${historicoId})`, `Usuario (${historicoId})`],
+            ['Usuario', `Usuario · ${usuarioLiteralId}`],
             [`Usuario (${sinActorId})`, `Usuario (${sinActorId})`],
             [textoMalicioso, `${textoMalicioso} · ${maliciosoId}`]
         ];

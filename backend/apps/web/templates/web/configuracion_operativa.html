@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="{% static 'web/css/styles.css' %}">
     <link rel="stylesheet" href="{% static 'web/css/dashboard.css' %}?v=5">
     <link rel="stylesheet" href="{% static 'web/css/estados.css' %}">
-    <link rel="stylesheet" href="{% static 'web/css/configuracion_operativa.css' %}">
+    <link rel="stylesheet" href="{% static 'web/css/configuracion_operativa.css' %}?v=2">
 </head>
 <body>
     <div class="aplicacion">
@@ -25,7 +25,7 @@
                 {% include "web/components/usuario_sesion.html" %}
             </header>
 
-            <section class="panel-configuracion" aria-labelledby="tituloConfiguracion">
+            <section class="panel-configuracion panel-configuracion-operativa" aria-labelledby="tituloConfiguracion">
                 <div
                     id="estadoConfiguracion"
                     class="estado-solicitud"

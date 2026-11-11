@@ -1130,7 +1130,7 @@
 .bitacora-eventos .tabla-bitacora { min-width: 0; }
 .bitacora-eventos .celda-fecha { min-width: 0; white-space: normal; }
 .bitacora-eventos :is(.etiqueta-evento, .etiqueta-canal) { width: auto; height: auto; min-height: 0; padding: 0; border: 0; border-radius: 0; background: transparent; justify-content: flex-start; white-space: normal; font-weight: 600 !important; }
-.bitacora-eventos .etiqueta-canal { display: block; font-weight: 400 !important; }
+.bitacora-eventos .etiqueta-canal { display: block; font-weight: 400 !important; line-height: 1.4; }
 .bitacora-eventos .etiqueta-resultado, .detalle-bitacora .etiqueta-resultado { width: auto; height: auto; min-height: 0; border: 0; white-space: normal; font-weight: 600 !important; }
 .bitacora-eventos .id-recortado { max-width: 100%; white-space: normal; overflow: visible; }
 .bitacora-eventos .boton-detalle-evento { padding: 10px; min-height: 44px; }

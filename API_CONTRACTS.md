@@ -551,9 +551,11 @@ la versión actualizada del servidor.
 
 Los clientes anteriores pueden continuar usando `primary_email` y `backup_email`
 y omitir los campos nuevos: no restablecen la modalidad ni la activación del
-respaldo. Deben tolerar los campos adicionales de respuesta. Esta entrega deja
-el contrato disponible para las tareas de frontend; el formulario actual sigue
-sin controles para las nuevas preferencias.
+respaldo. Deben tolerar los campos adicionales de respuesta.
+
+El formulario de Configuración operativa permite elegir entre la lista de
+distribución y los supervisores activos. El correo de respaldo tiene controles
+propios para configurar la dirección y activar o desactivar el envío.
 
 ## 2. Alertas y evaluaciones
 
