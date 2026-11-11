@@ -2,9 +2,10 @@
 from django.shortcuts import get_object_or_404
 from django.utils.decorators import method_decorator
 from rest_framework import exceptions, status
-from rest_framework.permissions import IsAuthenticated, IsAdminUser
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
+from backend.apps.operational.views import IsActiveAdmin
 from backend.common.responses import success_response
 from backend.config.composition import fragment_ingestion_service
 from .authentication import BoxAgentAuthentication
@@ -55,7 +56,7 @@ class FragmentV2UploadView(FragmentUploadView):
     serializer_class = FragmentV2Serializer
 
 class AgentConfigurationView(APIView):
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [IsAuthenticated, IsActiveAdmin]
 
     def get(self, request, agent_id):
         agent = get_object_or_404(AgentRegistration, pk=agent_id)

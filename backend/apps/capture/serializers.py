@@ -2,6 +2,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from rest_framework import serializers
 from backend.common.boxes import BOX_PATTERN
+from .models import AgentConfiguration
 
 
 class FragmentSerializer(serializers.Serializer):
@@ -64,9 +65,9 @@ class AgentRegistrationCreateSerializer(serializers.Serializer):
 
         return value
 
-from backend.apps.capture.models import AgentConfiguration
-
 class AgentConfigurationSerializer(serializers.ModelSerializer):
+    desired_config = serializers.JSONField(required=True)
+
     class Meta:
         model = AgentConfiguration
         fields = ["config_id", "version", "desired_config", "effective_config", "state", "error_code", "created_at", "updated_at"]

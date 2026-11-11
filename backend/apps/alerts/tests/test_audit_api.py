@@ -83,6 +83,20 @@ class AuditApiTests(SimpleTestCase):
 
 
 class AuditQueryTests(SimpleTestCase):
+    def test_empty_automatic_storage_successes_are_filtered_before_pagination(self):
+        repo = AlertsRepository()
+        with patch.object(repo, '_events') as events:
+            col = events.return_value
+            repo.list_events({'action': 'storage.cleanup', 'order': 'desc', 'offset': 5, 'limit': 10})
+        query = {'action': 'storage.cleanup', '$nor': [{
+            'action': 'storage.cleanup', 'outcome': 'success', 'error_code': {'$in': [None, '']},
+            'storage.source': 'automatic', 'storage.freed_bytes': 0, 'storage.removed': 0,
+            'storage.failures': 0, 'storage.protected': 0, 'storage.checkpoints': 0,
+            'storage.provider_deleted': {'$in': [0, None]}, 'storage.provider_failures': {'$in': [0, None]},
+        }]}
+        col.count_documents.assert_called_once_with(query)
+        col.find.assert_called_once_with(query, {'_id': 0})
+
     def test_mongo_filters_and_stable_sort(self):
         repo = AlertsRepository()
         col = MagicMock()
