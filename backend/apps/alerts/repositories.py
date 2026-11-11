@@ -13,7 +13,7 @@ from backend.common.errors import PersistenceUnavailable
 from .documents import alerta_a_documento, documento_a_alerta, evaluacion_a_documento
 from .domain import Alerta, DomainError, Evaluacion, EstadoEvaluacion, normalizar_uuid, validar_alerta
 from .exceptions import AlertAlreadyExists, AlertNotFound, EvaluationAlreadyRegistered
-from .mongo import schema_path
+from .mongo import ensure_alert_schema, schema_path
 from .ports import AlertQueryFilters, AlertQueryPort, AlertWritePort
 
 
@@ -43,25 +43,27 @@ class AlertsRepository(AlertWritePort, AlertQueryPort):
         return get_database()
 
     def _alerts(self):
-        self.ensure_schema()
-        return self._db()["alerts"]
+        return self.ensure_schema()["alerts"]
 
     def _events(self):
-        self.ensure_schema()
-        return self._db()["audit_events"]
+        return self.ensure_schema()["audit_events"]
 
     def ensure_schema(self):
-        if self._schema_ready:
-            return
         try:
-            db = self._db()
-            self._apply_collection(db, "alerts.validator.json", "alerts.indexes.json")
-            self._apply_collection(db, "audit_events.validator.json", "audit_events.indexes.json")
+            if self._injected is None:
+                return ensure_alert_schema(self._apply_schema)
+            if not self._schema_ready:
+                self._apply_schema(self._injected)
+                self._schema_ready = True
+            return self._injected
         except PersistenceUnavailable:
             raise
         except PyMongoError:
             raise PersistenceUnavailable() from None
-        self._schema_ready = True
+
+    def _apply_schema(self, db):
+        self._apply_collection(db, "alerts.validator.json", "alerts.indexes.json")
+        self._apply_collection(db, "audit_events.validator.json", "audit_events.indexes.json")
 
     def _apply_collection(self, db, validator_file, indexes_file):
         spec = json.loads(schema_path(validator_file).read_text(encoding="utf-8"))
