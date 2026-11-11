@@ -8,6 +8,7 @@ import re
 from rest_framework.exceptions import ValidationError
 from backend.common.boxes import is_box, registrable_boxes
 from backend.apps.capture.legacy_registry import sync_legacy_registry, historical_ids
+from backend.apps.capture.pairing import discard_abandoned_enrollments
 from backend.apps.capture.server_connectivity import reconcile_connection
 
 from rest_framework.permissions import BasePermission, IsAuthenticated
@@ -99,6 +100,7 @@ class AgentRegistrationListCreateView(APIView):
     ]
 
     def get(self, request):
+        discard_abandoned_enrollments()
         sync_legacy_registry()
         now = timezone.now()
         data, pipelines = [], {}
@@ -106,8 +108,9 @@ class AgentRegistrationListCreateView(APIView):
             if agent.control_owner:
                 reconcile_connection(agent)
             pairing = getattr(agent, "pairing", None)
+            pending = bool(pairing and not pairing.activated_at and pairing.expires_at > now)
             credential_state = ("active" if agent.is_active else
-                "pending_pairing" if pairing and not pairing.activated_at and pairing.expires_at > now else
+                "pending_pairing" if pending else
                 "pairing_expired" if pairing and not pairing.activated_at else
                 "pending_pairing" if not agent.token_sha256 else "revoked")
             diagnostics = agent.diagnostics or {}
@@ -139,7 +142,9 @@ class AgentRegistrationListCreateView(APIView):
                 "active": agent.is_active, "created_at": agent.created_at,
                 "updated_at": agent.updated_at, "revoked_at": agent.revoked_at,
                 "credential_state": credential_state,
-                "installation_pending": bool(pairing and not pairing.activated_at and pairing.expires_at > now),
+                "installation_pending": pending,
+                "initial_installation": agent.is_provisional,
+                "installation_expires_at": pairing.expires_at if pending else None,
                 "smile_room_id": str(agent.smile_room_id) if agent.smile_room_id else None,
                 "room_available": agent.smile_room.available if agent.smile_room_id else True,
                 "version": diagnostics.get("agent_version"),
@@ -391,6 +396,7 @@ class SmileRoomListView(APIView):
     def get(self, request):
         from backend.apps.agenda.models import SmileRoom
         from django.conf import settings
+        discard_abandoned_enrollments()
         sync_legacy_registry()
         data, by_box = [], {}
         for candidate in AgentRegistration.objects.values('agent_id', 'name', 'smile_room_id', 'box'):

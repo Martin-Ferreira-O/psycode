@@ -8,7 +8,8 @@
     let historialPC = null, pagina = 1, totalPaginas = 0, filtros = {}, consultaHistorial = null;
     const origenes = new Map();
     const pruebasSmile = new Set();
-    let ultimaConsulta = null, temporizador = null, consultaPCs = null, consultaSalas = null, salasConsultadas = false;
+    let ultimaConsulta = null, temporizador = null, vencimientoCredencial = null;
+    let consultaPCs = null, consultaSalas = null, salasConsultadas = false;
     const nodos = (tag, texto, clase) => {
         const el = document.createElement(tag);
         if (texto != null) el.textContent = texto;
@@ -127,23 +128,49 @@
             renderizar();
         }
     }
+    function cabeceraTarjeta(box, nombre, estado, estilo = '') {
+        const header = nodos('header', null, 'pc-tarjeta-cabecera');
+        const identity = nodos('div', null, 'pc-identidad');
+        identity.append(nodos('span', boxNombre(box).toUpperCase(), 'pc-box'), nodos('h3', nombre, 'pc-nombre'));
+        header.append(identity, nodos('span', estado, `pc-badge ${estilo}`));
+        return header;
+    }
+    function botonRenovar(pc, instalacion) {
+        const texto = instalacion ? 'Generar otro código' : 'Reinstalar o reemplazar';
+        const botonAccion = boton(texto, () => confirmar(pc, 'renovar'));
+        botonAccion.setAttribute('aria-label', instalacion ? `${texto} para ${pc.name}` : `${texto} ${pc.name}`);
+        botonAccion.disabled = pc.room_available === false;
+        return botonAccion;
+    }
+    function tarjetaPendiente(article, pc) {
+        const footer = nodos('footer', null, 'pc-tarjeta-pie pc-pendiente-acciones');
+        const cancelar = boton('Cancelar instalación', () => confirmar(pc, 'cancelar-instalacion'), 'pcs-peligro');
+        cancelar.setAttribute('aria-label', `Cancelar instalación de ${pc.name}`);
+        footer.append(botonRenovar(pc, true), cancelar);
+        const nota = pc.installation_expires_at
+            ? `El técnico puede vincular el PC hasta el ${fecha(pc.installation_expires_at)} (Chile).`
+            : 'El técnico debe vincular el PC con el código temporal.';
+        article.append(cabeceraTarjeta(pc.box, pc.name, 'Pendiente de instalación', 'pendiente'),
+            nodos('p', nota, 'pc-nota'), footer);
+        return article;
+    }
     function tarjeta(pc) {
         const article = nodos('article', null, 'pc-tarjeta');
         article.dataset.agentId = pc.agent_id;
-        const header = nodos('header', null, 'pc-tarjeta-cabecera');
-        const identity = nodos('div', null, 'pc-identidad');
-        identity.append(nodos('span', boxNombre(pc.box).toUpperCase(), 'pc-box'), nodos('h3', pc.name, 'pc-nombre'));
-        const badges = nodos('div', null, 'pc-badges');
+        article.dataset.box = pc.box;
+        if (pc.initial_installation) return tarjetaPendiente(article, pc);
 
         const pendiente = pc.credential_state === 'pending_pairing';
         const vencido = pc.credential_state === 'pairing_expired';
         const instalacion = pendiente || vencido;
-        badges.append(nodos('span', instalacion ? 'Pendiente de instalación' : !pc.active ? 'Acceso deshabilitado' : pc.connection === 'online' ? 'Conectado' : 'Sin comunicación', `pc-badge ${!pc.active && !instalacion ? 'revocado' : pc.connection === 'online' ? 'online' : ''}`));
-        header.append(identity, badges);
+        const estadoPC = vencido ? 'Código vencido' : pendiente ? 'Pendiente de instalación' : !pc.active ? 'Acceso deshabilitado' : pc.connection === 'online' ? 'Conectado' : 'Sin comunicación';
+        const estilo = instalacion ? 'pendiente' : !pc.active ? 'revocado' : pc.connection === 'online' ? 'online' : '';
+        const header = cabeceraTarjeta(pc.box, pc.name, estadoPC, estilo);
         const details = nodos('dl', null, 'pc-datos');
         dato(details, 'Versión del agente', pc.version || 'Sin datos');
         dato(details, 'Última comunicación · Chile', fecha(pc.last_seen_at));
         dato(details, pc.connection === 'online' ? 'Captura informada por el PC' : 'Última captura informada', !informado(pc, 'capturing') ? 'Sin datos' : pc.capturing === true ? 'Capturando' : pc.capturing === false ? 'Sin captura' : 'Sin datos');
+        dato(details, 'Último audio recibido de este PC', fecha(pc.last_audio?.accepted_at));
 
         const flow = nodos('section', null, 'pc-flujo-bloque');
         flow.append(nodos('h4', `Flujo de ${boxNombre(pc.box)}`));
@@ -156,8 +183,8 @@
         dato(capacity, 'Pendientes del PC', informado(pc, 'pending') && numero(pc.pending) ? String(pc.pending) : 'Sin datos');
         dato(capacity, 'Disco libre', espacio(pc.free_bytes));
         dato(capacity, 'Autonomía estimada', duracion(pc.remaining_seconds));
-        article.append(header, details, nodos('p', `Último audio recibido de este PC · ${fecha(pc.last_audio?.accepted_at)}`, 'pc-ultimo-audio'), flow, capacity);
-        if (pc.connection !== 'online' && pc.active) article.append(nodos('p', `Última comunicación: ${fecha(pc.last_seen_at)}. Comprueba que el PC esté encendido y tenga Internet. La aplicación intentará reconectarse automáticamente; conserva su instalación.`, 'pc-nota'));
+        article.append(header, details, flow, capacity);
+        if (pc.connection !== 'online' && pc.active) article.append(nodos('p', 'Comprueba que el PC esté encendido y tenga Internet. La reconexión es automática.', 'pc-nota'));
         if (instalacion) article.append(nodos('p', vencido ? 'La instalación no se completó a tiempo. El técnico puede preparar otro código para este mismo PC.' : 'El técnico debe completar la instalación en el computador de este box.', 'pc-nota'));
         if (pc.room_available === false) article.append(nodos('p', 'La sala está deshabilitada. Solicita una revisión técnica antes de utilizarla.', 'pcs-aviso pc-aviso'));
         if (pc.connection === 'online' && pc.obs === 'unavailable') article.append(nodos('p', 'La aplicación de captura no responde. Comprueba que OBS esté abierto en la cuenta de Windows configurada. Si continúa, solicita asistencia técnica.', 'pcs-aviso pc-aviso'));
@@ -185,14 +212,10 @@
         history.setAttribute('aria-label', `Ver historial de ${pc.name}`);
         const actions = nodos('details', null, 'pc-mantenimiento');
         actions.append(nodos('summary', 'Instalación y acceso'));
-        const renovarTexto = instalacion ? 'Generar otro código' : 'Reinstalar o reemplazar';
-        const renew = boton(renovarTexto, () => confirmar(pc, 'renovar'));
-        renew.setAttribute('aria-label', instalacion ? `${renovarTexto} para ${pc.name}` : `${renovarTexto} ${pc.name}`);
-        renew.disabled = pc.room_available === false;
         const revoke = boton('Deshabilitar acceso', () => confirmar(pc, 'revocar'), 'pcs-peligro');
         revoke.setAttribute('aria-label', `Deshabilitar acceso de ${pc.name}`);
         revoke.disabled = !pc.active && !pc.installation_pending;
-        actions.append(renew, revoke);
+        actions.append(botonRenovar(pc, instalacion), revoke);
         if (pc.installation_pending) actions.append(boton('Cancelar instalación pendiente', () => confirmar(pc, 'cancelar-instalacion')));
         footer.append(history, actions);
         article.append(footer);
@@ -215,33 +238,52 @@
     }
     function tarjetaSala(sala) {
         const card = nodos('article', null, 'pc-tarjeta pc-sala');
-        card.append(nodos('span', boxNombre(sala.box).toUpperCase(), 'pc-box'), nodos('h3', sala.name, 'pc-nombre'),
-            nodos('span', sala.conflict ? 'Requiere revisión técnica' : !sala.available ? 'Sala deshabilitada' : 'Sin PC registrado', 'pc-badge'));
-        card.append(nodos('p', sala.conflict ? 'Se encontraron varios equipos asociados a este box. Solicita una revisión técnica.' : 'Registra el computador que se utilizará en este box. El técnico completará su instalación.', 'pcs-ayuda'));
+        card.dataset.box = sala.box;
+        const estadoSala = sala.conflict ? 'Requiere revisión técnica' : !sala.available ? 'Sala deshabilitada' : 'Sin PC registrado';
+        card.append(cabeceraTarjeta(sala.box, sala.name, estadoSala, sala.conflict ? 'pendiente' : ''));
+        const nota = sala.conflict ? 'Hay varios equipos asociados a este box. Solicita una revisión técnica.'
+            : !sala.available ? 'Solicita una revisión técnica para habilitar la sala.'
+            : 'Genera un código para vincular el computador de este box.';
+        card.append(nodos('p', nota, 'pc-nota'));
         const link = boton('Crear nuevo PC', () => abrirVinculacion(sala), 'pcs-primario');
         link.setAttribute('aria-label', `Crear nuevo PC en ${boxNombre(sala.box)}`);
         link.disabled = !sala.available || sala.conflict;
-        card.append(link);
+        const footer = nodos('footer', null, 'pc-tarjeta-pie');
+        footer.append(link);
+        card.append(footer);
         return card;
+    }
+    function compararEquipos(a, b) {
+        const conectadoA = a.connection === 'online';
+        const conectadoB = b.connection === 'online';
+        if (conectadoA !== conectadoB) return conectadoA ? -1 : 1;
+        if (conectadoA) return 0;
+
+        const fechaA = Date.parse(a.last_seen_at);
+        const fechaB = Date.parse(b.last_seen_at);
+        if (Number.isNaN(fechaA)) return Number.isNaN(fechaB) ? 0 : 1;
+        if (Number.isNaN(fechaB)) return -1;
+        return fechaB - fechaA;
     }
     function renderizar() {
         const activo = document.activeElement;
-        const tarjetaActiva = activo?.closest('[data-agent-id]');
+        const tarjetaActiva = activo?.closest('.pc-tarjeta');
         const mantenerFoco = tarjetaActiva && $('listaPCs').contains(activo)
-            ? { id: tarjetaActiva.dataset.agentId, tag: activo.tagName, label: activo.getAttribute('aria-label') || activo.textContent } : null;
+            ? { ...tarjetaActiva.dataset, tag: activo.tagName, label: activo.getAttribute('aria-label') || activo.textContent } : null;
         const abiertos = new Set([...$('listaPCs').querySelectorAll('[data-agent-id] details[open]')].map(el => el.closest('[data-agent-id]').dataset.agentId));
         const query = $('buscarPC').value.trim().toLocaleLowerCase('es');
         const box = $('boxPC').value;
         const matches = (b, text) => (!box || b === box) && text.toLocaleLowerCase('es').includes(query);
-        const visibles = equipos.filter(pc => matches(pc.box, `${pc.name} ${pc.agent_id} ${boxNombre(pc.box)}`));
+        const visibles = equipos.filter(pc => matches(pc.box, `${pc.name} ${pc.agent_id} ${boxNombre(pc.box)}`)).sort(compararEquipos);
         const libres = salas.filter(sala => !equipos.some(pc => pc.box === sala.box) && matches(sala.box, `${sala.name} ${boxNombre(sala.box)}`));
         const cards = [...visibles.map(tarjeta), ...libres.map(tarjetaSala)];
         $('listaPCs').replaceChildren(...cards);
         for (const card of cards) if (abiertos.has(card.dataset.agentId)) card.querySelector('details')?.setAttribute('open', '');
         if (mantenerFoco) {
-            const card = cards.find(item => item.dataset.agentId === mantenerFoco.id);
+            const card = cards.find(item => item.dataset.box === mantenerFoco.box && item.dataset.agentId === mantenerFoco.agentId);
             const destino = card && [...card.querySelectorAll('button, summary')].find(el => el.tagName === mantenerFoco.tag && (el.getAttribute('aria-label') || el.textContent) === mantenerFoco.label);
-            (destino || $('contenidoPCs')).focus({ preventScroll: true });
+            const alternativa = cards.find(item => item.dataset.box === mantenerFoco.box)?.querySelector('button:enabled, summary');
+            (destino || alternativa || $('contenidoPCs')).focus({ preventScroll: true });
         }
         for (const id of ['boxPC', 'boxHistorialPC']) {
                 const select = $(id), actual = select.value;
@@ -318,10 +360,22 @@
         if (typeof data.pairing_code !== 'string' || !/^[A-HJ-NP-Z2-9]{5}$/.test(data.pairing_code)) throw new Error('missing code');
         $('equipoCredencialPC').textContent = data.name.trim().toLocaleLowerCase('es') === boxNombre(data.box).toLocaleLowerCase('es') ? data.name : `${data.name} · ${boxNombre(data.box)}`;
         $('servidorCredencialPC').textContent = window.location.origin;
+        $('avisoReinstalacionPC').hidden = Boolean(data.initial_installation);
         $('secretoPC').value = data.pairing_code;
+        $('copiarCredencialPC').disabled = false;
         $('vencimientoCodigoPC').textContent = `Válido hasta ${fecha(data.expires_at)} · Chile`;
+        $('ayudaVencimientoPC').textContent = data.initial_installation
+            ? 'Si el código vence antes de vincular el PC, el box volverá a quedar disponible.'
+            : 'Si el código vence, puedes preparar otro desde «Instalación y acceso» en la tarjeta del PC.';
         $('estadoCopiaPC').textContent = '';
         abrir('dialogoCredencialPC', $('copiarCredencialPC'));
+        vencimientoCredencial = setTimeout(() => {
+            borrarCredencial();
+            $('copiarCredencialPC').disabled = true;
+            $('estadoCopiaPC').textContent = '';
+            $('vencimientoCodigoPC').textContent = 'El código venció.';
+            cargarPCs({ automatica: true });
+        }, Math.max(0, Date.parse(data.expires_at) - Date.now()));
     }
     $('formularioPC').addEventListener('submit', async e => {
         e.preventDefault();
@@ -346,10 +400,20 @@
         const otroCodigo = ['pending_pairing', 'pairing_expired'].includes(pc.credential_state);
         const tituloRenovacion = otroCodigo ? 'Generar otro código' : 'Reinstalar o reemplazar PC';
         $('tituloAccionPC').textContent = accion === 'cancelar-instalacion' ? 'Cancelar instalación pendiente' : accion === 'renovar' ? tituloRenovacion : 'Deshabilitar acceso';
-        $('descripcionAccionPC').textContent = accion === 'cancelar-instalacion'
-            ? `Se cancelará la instalación pendiente de ${pc.name}. Su acceso actual y su historial se conservan.` : accion === 'renovar'
-            ? `Prepara un código para que el técnico instale o recupere ${pc.name}. El acceso actual se mantiene hasta que la nueva instalación se confirme. Su identidad, box e historial se conservan. Una caída de Internet se recupera automáticamente y no requiere esta acción.`
-            : `Se deshabilitará inmediatamente el acceso de ${pc.name} y se cancelarán sus instalaciones pendientes. No podrá enviar audio ni recibir órdenes hasta que un técnico complete una nueva instalación. Su identidad e historial se conservan.`;
+        $('volverAccionPC').textContent = accion === 'cancelar-instalacion' ? 'Volver' : 'Cancelar';
+        let descripcion;
+        if (accion === 'cancelar-instalacion') {
+            descripcion = pc.initial_installation
+                ? `Se invalidará el código de ${pc.name} y el box quedará disponible para registrar un PC.`
+                : `Se cancelará la instalación pendiente de ${pc.name}. Su acceso actual y su historial se conservan.`;
+        } else if (accion === 'renovar') {
+            descripcion = pc.initial_installation
+                ? `Se generará un nuevo código para vincular ${pc.name}. El código anterior dejará de funcionar.`
+                : `Prepara un código para que el técnico instale o recupere ${pc.name}. El acceso actual se mantiene hasta que la nueva instalación se confirme. Su identidad, box e historial se conservan. Una caída de Internet se recupera automáticamente y no requiere esta acción.`;
+        } else {
+            descripcion = `Se deshabilitará inmediatamente el acceso de ${pc.name} y se cancelarán sus instalaciones pendientes. No podrá enviar audio ni recibir órdenes hasta que un técnico complete una nueva instalación. Su identidad e historial se conservan.`;
+        }
+        $('descripcionAccionPC').textContent = descripcion;
         $('confirmarAccionPC').textContent = accion === 'cancelar-instalacion' ? 'Cancelar instalación' : accion === 'renovar' ? (otroCodigo ? 'Generar código' : 'Preparar instalación') : 'Deshabilitar acceso';
         mensaje('errorAccionPC', ''); abrir('dialogoAccionPC');
     }
@@ -363,7 +427,9 @@
             if (accion === 'renovar') mostrarCredencial(data);
             completada = true; $('dialogoAccionPC').close();
         } catch (error) {
-            mensaje('errorAccionPC', error.estado === 403 ? 'Tu usuario no tiene permiso de administrador.' : 'No se confirmó la operación. Actualiza el listado para comprobar el estado. Si no recibiste el código, genera otro.');
+            mensaje('errorAccionPC', error.estado === 403 ? 'Tu usuario no tiene permiso de administrador.'
+                : error.estado === 404 || error.estado === 409 ? 'La instalación cambió. Cierra este diálogo y actualiza el listado para consultar su estado.'
+                : 'No se confirmó la operación. Actualiza el listado para comprobar el estado. Si no recibiste el código, genera otro.');
         } finally {
             mutando = false; bloqueo('dialogoAccionPC', false);
             if (completada) { if (accion === 'renovar') $('copiarCredencialPC').focus(); await cargarPCs(); }
@@ -375,7 +441,10 @@
     });
     $('cerrarCredencialPC').addEventListener('click', () => { borrarCredencial(); $('dialogoCredencialPC').close(); });
     $('dialogoCredencialPC').addEventListener('cancel', borrarCredencial);
-    function borrarCredencial() { $('secretoPC').value = ''; }
+    function borrarCredencial() {
+        clearTimeout(vencimientoCredencial);
+        $('secretoPC').value = '';
+    }
     $('dialogoCredencialPC').addEventListener('close', borrarCredencial);
     window.addEventListener('pagehide', () => { borrarCredencial(); if ($('dialogoCredencialPC').open) $('dialogoCredencialPC').close(); });
 

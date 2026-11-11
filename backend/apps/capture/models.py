@@ -184,6 +184,10 @@ class AgentRegistration(models.Model):
     control_owner = models.UUIDField(null=True, blank=True, editable=False)
 
     @property
+    def is_provisional(self):
+        return not self.token_sha256 and self.revoked_at is not None and self.legacy_agent_id is None
+
+    @property
     def is_active(self):
         if self.revoked_at is not None:
             return False

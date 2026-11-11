@@ -7,7 +7,7 @@
     <title>Gestión de PCs | Psycode</title>
     <link rel="stylesheet" href="{% static 'web/css/styles.css' %}">
     <link rel="stylesheet" href="{% static 'web/css/dashboard.css' %}">
-    <link rel="stylesheet" href="{% static 'web/css/pcs.css' %}">
+    <link rel="stylesheet" href="{% static 'web/css/pcs.css' %}?v=2">
 </head>
 <body class="pagina-pcs">
 <a class="saltar-contenido" href="#contenidoPCs">Saltar al contenido</a>
@@ -57,15 +57,15 @@
 <dialog id="dialogoAccionPC" class="pcs-dialogo" aria-labelledby="tituloAccionPC" aria-describedby="descripcionAccionPC">
     <h2 id="tituloAccionPC"></h2><p id="descripcionAccionPC"></p>
     <p id="errorAccionPC" class="pcs-error" role="alert" hidden></p>
-    <div class="pcs-dialogo-acciones"><button type="button" class="pcs-boton" data-cerrar="dialogoAccionPC" autofocus>Cancelar</button><button id="confirmarAccionPC" type="button" class="pcs-boton pcs-peligro">Confirmar</button></div>
+    <div class="pcs-dialogo-acciones"><button id="volverAccionPC" type="button" class="pcs-boton" data-cerrar="dialogoAccionPC" autofocus>Cancelar</button><button id="confirmarAccionPC" type="button" class="pcs-boton pcs-peligro">Confirmar</button></div>
 </dialog>
 <dialog id="dialogoCredencialPC" class="pcs-dialogo" aria-labelledby="tituloCredencialPC" aria-describedby="avisoCredencialPC">
     <p class="pcs-eyebrow">INSTALACIÓN INICIAL</p><h2 id="tituloCredencialPC">Código temporal</h2>
-    <p id="equipoCredencialPC"></p><p id="avisoCredencialPC" class="pcs-aviso">En el asistente de Psycode Agent, introduce el servidor <strong id="servidorCredencialPC"></strong> y el código. Pulsa «Vincular e iniciar». El acceso actual del PC se conserva hasta confirmar la instalación.</p>
+    <p id="equipoCredencialPC"></p><p id="avisoCredencialPC" class="pcs-aviso">En el asistente de Psycode Agent, introduce el servidor <strong id="servidorCredencialPC"></strong> y el código. Pulsa «Vincular e iniciar». <span id="avisoReinstalacionPC">El acceso actual del PC se conserva hasta confirmar la instalación.</span></p>
     <label class="pcs-campo">Código de instalación<input id="secretoPC" class="pcs-codigo" readonly spellcheck="false" autocomplete="off"></label>
-    <p id="vencimientoCodigoPC" class="pcs-ayuda"></p>
+    <p id="vencimientoCodigoPC" class="pcs-ayuda" role="status"></p>
     <div class="pcs-acciones"><button id="copiarCredencialPC" type="button" class="pcs-boton">Copiar código</button><p id="estadoCopiaPC" class="pcs-ayuda" role="status" aria-live="polite"></p></div>
-    <p class="pcs-ayuda">Si el código vence, cierra este diálogo y abre «Instalación y acceso» en la tarjeta del mismo PC para generar otro.</p>
+    <p id="ayudaVencimientoPC" class="pcs-ayuda"></p>
     {% include "web/components/pcs_instalador.html" %}
     <div class="pcs-dialogo-acciones"><button id="cerrarCredencialPC" type="button" class="pcs-boton pcs-primario">Listo, cerrar</button></div>
 </dialog>
@@ -85,6 +85,6 @@
 <script src="{% static 'web/js/solicitudes.js' %}"></script>
 <script src="{% static 'web/js/api.js' %}"></script>
 <script src="{% static 'web/js/components.js' %}"></script>
-<script src="{% static 'web/js/pcs.js' %}"></script>
+<script src="{% static 'web/js/pcs.js' %}?v=3"></script>
 </body>
 </html>

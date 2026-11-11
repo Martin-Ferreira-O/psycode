@@ -10,6 +10,8 @@ import secrets
 
 from django.conf import settings
 from django.db import IntegrityError, transaction
+from django.db.models import Q
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.crypto import salted_hmac
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -30,6 +32,16 @@ ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 def registration_lock():
     PCRegistryAllocation.objects.get_or_create(pk=1)
     PCRegistryAllocation.objects.select_for_update().get(pk=1)
+
+
+@transaction.atomic
+def discard_abandoned_enrollments():
+    registration_lock()
+    AgentRegistration.objects.filter(
+        token_sha256="", revoked_at__isnull=False, legacy_agent_id__isnull=True,
+    ).filter(
+        Q(pairing__isnull=True) | Q(pairing__activated_at__isnull=True, pairing__expires_at__lte=timezone.now()),
+    ).delete()
 
 
 def check_available_box(box):
@@ -81,8 +93,8 @@ def create_pairable_agent(*, name, room_id=None, box=None):
     from backend.apps.agenda.models import SmileRoom
     from backend.common.boxes import registrable_boxes
     from .legacy_registry import sync_legacy_registry
+    discard_abandoned_enrollments()
     sync_legacy_registry()
-    registration_lock()
     if room_id:
         room = SmileRoom.objects.select_for_update().filter(pk=room_id).first()
         if room is None:
@@ -113,7 +125,10 @@ def create_pairable_agent(*, name, room_id=None, box=None):
 @transaction.atomic
 def issue_pairing_code(agent_id):
     registration_lock()
-    agent = AgentRegistration.objects.select_for_update().get(pk=agent_id)
+    agent = get_object_or_404(AgentRegistration.objects.select_for_update(), pk=agent_id)
+    grant = getattr(agent, "pairing", None)
+    if agent.is_provisional and (grant is None or grant.expires_at <= timezone.now()):
+        raise ServiceError("PAIRING_EXPIRED", "La instalación venció. Crea un nuevo PC en el box.", 409)
     _confirmed_room(agent)
     return agent, *_issue_code(agent)
 
@@ -209,6 +224,7 @@ class NewPCSerializer(serializers.Serializer):
 
 def pairing_response(agent, code, expiry, status=200):
     return success_response({'agent_id': str(agent.pk), 'name': agent.name, 'box': agent.box,
+                             'initial_installation': agent.is_provisional,
                              'pairing_code': code, 'expires_at': expiry}, "Código temporal generado", status=status)
 
 
@@ -227,22 +243,22 @@ class PCEnrollmentView(APIView):
 
 class PCReEnrollmentView(PCEnrollmentView):
     def post(self, request, agent_id):
-        from django.shortcuts import get_object_or_404
-        get_object_or_404(AgentRegistration, pk=agent_id)
         return pairing_response(*issue_pairing_code(agent_id))
 
 
 class PCEnrollmentCancelView(PCEnrollmentView):
     @transaction.atomic
     def post(self, request, agent_id):
-        from django.shortcuts import get_object_or_404
         registration_lock()
         agent = get_object_or_404(AgentRegistration.objects.select_for_update(), pk=agent_id)
-        grant = PCPairingCode.objects.filter(agent=agent).first()
+        grant = getattr(agent, "pairing", None)
         if grant and grant.activated_at:
             raise ServiceError("PAIRING_ALREADY_ACTIVE", "La instalación ya fue confirmada. Actualiza el estado del equipo.", 409)
-        PCPairingCode.objects.filter(agent=agent).delete()
-        return success_response({'agent_id': str(agent.pk)}, "Instalación pendiente cancelada")
+        if agent.is_provisional:
+            agent.delete()
+        elif grant:
+            grant.delete()
+        return success_response({'agent_id': str(agent_id)}, "Instalación pendiente cancelada")
 
 
 class PairingJSONParser(JSONParser):

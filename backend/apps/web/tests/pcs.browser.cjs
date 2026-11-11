@@ -39,7 +39,24 @@ const ok = data => ({ status: 200, contentType: 'application/json', body: JSON.s
         await checkInstaller(page.locator('.pcs-descarga-inicial'));
         await page.getByRole('heading', { name: 'PC Box 3', exact: true }).waitFor();
         assert.equal((await page.locator('body').innerText()).includes('catálogo'), false);
-        await page.getByRole('button', { name: 'Crear nuevo PC en Box 4', exact: true }).waitFor();
+        const freeBox = page.locator('.pc-tarjeta[data-box="box-4"]');
+        const createInBox = freeBox.getByRole('button', { name: 'Crear nuevo PC en Box 4', exact: true });
+        await createInBox.waitFor();
+        const installedBox = page.locator('.pc-tarjeta[data-box="box-3"]');
+        const [installedBounds, freeBounds] = await Promise.all([installedBox.boundingBox(), freeBox.boundingBox()]);
+        assert.equal(installedBounds.y, freeBounds.y);
+        assert.ok(freeBounds.height < installedBounds.height, 'La tarjeta vacía conserva su altura natural');
+        await createInBox.click();
+        await page.locator('#guardarPC').click();
+        await page.locator('#dialogoCredencialPC[open]').waitFor();
+        await page.locator('#cerrarCredencialPC').click();
+        await freeBox.getByText('Pendiente de instalación').waitFor();
+        assert.equal(await freeBox.locator('.pc-datos, .pc-flujo-bloque, summary').count(), 0);
+        assert.equal(await freeBox.getByRole('button', { name: /Ver historial/ }).count(), 0);
+        if (output) await page.screenshot({ path: `${output}/pcs-tarjetas-mixtas.png` });
+        await freeBox.getByRole('button', { name: 'Cancelar instalación de Box 4' }).click();
+        await page.locator('#confirmarAccionPC').click();
+        await createInBox.waitFor();
         // El sidebar usa exactamente los estilos compartidos con Configuración operativa.
         const sidebarStyle = await page.locator('.barra-lateral').evaluate(el => {
             const s = getComputedStyle(el); return [s.width, s.backgroundColor, s.padding, s.position];
@@ -148,7 +165,8 @@ finally: c.close()
         // Estados de carga/error/reintento y telemetría con respuestas sintéticas controladas.
         let mode = 'hold', release, roomsFailed = false;
         const pcs = [3, 4, 5, 6, 7].map((n, i) => ({ agent_id: `00000000-0000-4000-8000-00000000000${n}`, name: `PC Consulta · Box ${n}`, box: `box-${n}`, active: i !== 4,
-            smile_room_id: `room-${n}`, room_available:true, version: '1.0.0', connection: i < 3 ? 'online' : 'offline', last_seen_at: '2026-11-08T16:40:00Z', capturing: i < 2,
+            smile_room_id: `room-${n}`, room_available:true, version: '1.0.0', connection: n === 3 || n === 5 ? 'online' : 'offline',
+            last_seen_at: n === 7 ? null : `2026-11-08T16:4${n}:00Z`, capturing: i < 2,
             pending: i * 3, free_bytes: (i === 1 ? 2 : 44 + i) * 1024 ** 3, remaining_seconds: i === 1 ? 1500 : 90000,
             capture_status: i < 2 ? 'active' : 'finished', reception_status: 'pending', processing_status: 'complete',
             storage_warning: { active: i === 1, level: 'critical' }, last_audio: { accepted_at: '2026-11-08T16:39:32Z' } }));
@@ -168,6 +186,8 @@ finally: c.close()
         await page.waitForFunction(() => !document.getElementById('actualizarPCs').disabled);
         await page.locator('.pc-tarjeta').nth(4).waitFor();
         assert.equal(await page.locator('.pc-tarjeta').count(), 5);
+        const ordenBoxes = () => page.locator('.pc-tarjeta').evaluateAll(cards => cards.map(card => card.dataset.box));
+        assert.deepEqual(await ordenBoxes(), ['box-3', 'box-5', 'box-6', 'box-4', 'box-7']);
         assert.equal(await page.locator('#crearPC').isEnabled(), true);
         await page.locator('#crearPC').click();
         await page.locator('#dialogoPC[open]').waitFor();
@@ -251,9 +271,12 @@ finally: c.close()
         }
         await historyButton.focus();
         pcs[0].pending = 23;
+        pcs[2].connection = 'offline';
+        pcs[3].connection = 'online';
         await page.waitForTimeout(16500);
         assert.equal(await historyButton.evaluate(x => x === document.activeElement), true);
         assert.match(await page.locator('[data-agent-id]').first().innerText(), /23/);
+        assert.deepEqual(await ordenBoxes(), ['box-3', 'box-6', 'box-5', 'box-4', 'box-7']);
         await historyButton.focus(); await page.keyboard.press('Enter');
         await page.locator('#dialogoHistorialPC[open]').waitFor(); await page.keyboard.press('Escape');
         mode = 'empty'; await page.locator('#actualizarPCs').click();
