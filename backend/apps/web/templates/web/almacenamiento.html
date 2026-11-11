@@ -6,25 +6,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Almacenamiento del servidor | Psycode</title>
     <link rel="stylesheet" href="{% static 'web/css/styles.css' %}">
-    <link rel="stylesheet" href="{% static 'web/css/dashboard.css' %}?v=5">
+    <link rel="stylesheet" href="{% static 'web/css/dashboard.css' %}?v=11">
     <link rel="stylesheet" href="{% static 'web/css/estados.css' %}">
-    <link rel="stylesheet" href="{% static 'web/css/configuracion_operativa.css' %}?v=3">
+    <link rel="stylesheet" href="{% static 'web/css/configuracion_operativa.css' %}?v=4">
     <link rel="stylesheet" href="{% static 'web/css/almacenamiento.css' %}">
 </head>
 <body>
 <div class="aplicacion">
     {% include "web/components/sidebar.html" with seccion_activa="configuracion_operativa" %}
     <main class="contenido-dashboard">
-        <header class="cabecera-dashboard">
-            <div>
-                <a class="boton-navegacion-configuracion" href="{% url 'web:configuracion_operativa' %}">
-                    Volver a Configuración operativa
-                </a>
-                <h1>Almacenamiento del servidor</h1>
-                <p class="descripcion-pagina">Consulta el espacio y libera material de procesamiento que ya cumplió su conservación.</p>
-            </div>
-            {% include "web/components/usuario_sesion.html" %}
-        </header>
+        {% url 'web:configuracion_operativa' as url_regreso %}
+        {% include "web/components/cabecera_pagina.html" with titulo="Almacenamiento del servidor" subtitulo="Consulta el espacio y libera material de procesamiento que ya cumplió su conservación." url_regreso=url_regreso texto_regreso="Volver a Configuración operativa" only %}
         <section class="panel-configuracion" aria-labelledby="tituloEspacio">
             <div class="configuracion-cabecera"><h2 id="tituloEspacio">Espacio del servidor</h2><button id="actualizarAlmacenamiento" type="button">Actualizar</button></div>
             <div id="estadoAlmacenamiento" class="estado-solicitud" role="status" aria-live="polite">Cargando almacenamiento…</div>

@@ -70,12 +70,14 @@ const elementosBitacora = {
     verEventosAlerta: document.querySelector("#verEventosAlerta")
 };
 
-let fechaReferencia = new Date();
+let fechaReferencia = fechaChileDesdeInstante(new Date());
 let offsetActual = 0;
 let totalActual = 0;
 let eventoSeleccionado = null;
 let focoAnterior = null;
 let numeroCarga = 0;
+let filtrosCargados = null;
+let exportando = false;
 
 const porId = (id) => document.getElementById(id);
 function icono(nombre) {
@@ -113,58 +115,39 @@ function limpiarElemento(elemento) {
     }
 }
 
-function rellenarNumero(numero) {
-    return String(numero).padStart(2, "0");
-}
-
 function formatearFechaInput(fecha) {
-    return [
-        fecha.getFullYear(),
-        rellenarNumero(fecha.getMonth() + 1),
-        rellenarNumero(fecha.getDate())
-    ].join("-");
+    return fecha.toISOString().split("T", 1)[0];
 }
 
 function fechaDesdeInput(valor) {
     if (!valor) return null;
+    const fecha = new Date(`${valor}T00:00:00Z`);
+    return Number.isNaN(fecha.getTime()) ? null : fecha;
+}
 
-    const partes = valor.split("-").map(Number);
-
-    if (partes.length !== 3 || partes.some(Number.isNaN)) {
-        return null;
-    }
-
-    return new Date(
-        partes[0],
-        partes[1] - 1,
-        partes[2],
-        12,
-        0,
-        0,
-        0
-    );
+function fechaChileDesdeInstante(instante) {
+    const partes = new Intl.DateTimeFormat("es-CL", {
+        timeZone: "America/Santiago", year: "numeric", month: "2-digit", day: "2-digit"
+    }).formatToParts(instante);
+    const { year, month, day } = Object.fromEntries(partes.map(({ type, value }) => [type, value]));
+    // UTC representa las fechas del calendario para poder sumar días sin cambios de hora.
+    return fechaDesdeInput(`${year}-${month}-${day}`);
 }
 
 function obtenerSemana(fecha) {
-    const referencia = new Date(fecha);
-    referencia.setHours(12, 0, 0, 0);
-
-    const diaSemana = referencia.getDay();
-    const diferenciaLunes = (diaSemana + 6) % 7;
-
-    const inicio = new Date(referencia);
-    inicio.setDate(referencia.getDate() - diferenciaLunes);
-    inicio.setHours(0, 0, 0, 0);
+    const diferenciaLunes = (fecha.getUTCDay() + 6) % 7;
+    const inicio = new Date(fecha);
+    inicio.setUTCDate(fecha.getUTCDate() - diferenciaLunes);
 
     const fin = new Date(inicio);
-    fin.setDate(inicio.getDate() + 7);
-    fin.setMilliseconds(-1);
+    fin.setUTCDate(inicio.getUTCDate() + 6);
 
     return { inicio, fin };
 }
 
 function textoFechaPeriodo(fecha) {
     return new Intl.DateTimeFormat("es-CL", {
+        timeZone: "UTC",
         day: "numeric",
         month: "short",
         year: "numeric"
@@ -302,11 +285,8 @@ async function leerRespuestaBitacora(response) {
 }
 
 function parametrosPeriodo() {
-    const { inicio, fin } = obtenerSemana(fechaReferencia);
-    const parametros = new URLSearchParams();
-    parametros.set("fecha_desde", inicio.toISOString());
-    parametros.set("fecha_hasta", fin.toISOString());
-    return parametros;
+    const { inicio } = obtenerSemana(fechaReferencia);
+    return new URLSearchParams({ semana_desde: formatearFechaInput(inicio) });
 }
 
 function agregarFiltrosTabla(parametros) {
@@ -348,9 +328,8 @@ async function consultarTotal(accion = null) {
     return Number(datos.total) || 0;
 }
 
-async function obtenerPaginaNormal() {
-    const parametros = parametrosPeriodo();
-    agregarFiltrosTabla(parametros);
+async function obtenerPaginaNormal(filtros) {
+    const parametros = new URLSearchParams(filtros);
     parametros.set("limit", String(LIMITE_PAGINA));
     parametros.set("offset", String(offsetActual));
 
@@ -439,10 +418,6 @@ async function obtenerPaginaTecnica() {
         limit: LIMITE_PAGINA,
         offset: offsetActual
     };
-}
-
-async function obtenerEventosActuales() {
-    return obtenerPaginaNormal();
 }
 
 function mostrarCarga() {
@@ -626,10 +601,14 @@ function actualizarPaginacion(total) {
 
 async function cargarBitacora() {
     const carga = ++numeroCarga;
+    const filtros = agregarFiltrosTabla(parametrosPeriodo());
+    filtrosCargados = null;
+    actualizarBotonDescarga();
 
     mostrarCarga();
     actualizarPeriodoVisible();
-    try {const datos = await obtenerEventosActuales();
+    try {
+        const datos = await obtenerPaginaNormal(filtros);
 
         if (carga !== numeroCarga) return;
         if (!datos) return;
@@ -655,6 +634,8 @@ async function cargarBitacora() {
         }
 
         actualizarPaginacion(total);
+        filtrosCargados = filtros;
+        actualizarBotonDescarga();
 
         if (!eventos.length) {
             limpiarElemento(elementosBitacora.tabla);
@@ -674,8 +655,8 @@ async function cargarBitacora() {
 function cambiarSemana(cantidad) {
     const nuevaFecha = new Date(fechaReferencia);
 
-    nuevaFecha.setDate(
-        nuevaFecha.getDate() + cantidad * 7
+    nuevaFecha.setUTCDate(
+        nuevaFecha.getUTCDate() + cantidad * 7
     );
 
     fechaReferencia = nuevaFecha;
@@ -882,16 +863,18 @@ function manejarEscape(evento) {
     ) {cerrarDetalle();}
 }
 
-async function descargarExcelBitacora() {
+function actualizarBotonDescarga() {
     const boton = elementosBitacora.descargarExcel;
+    boton.disabled = exportando || filtrosCargados === null;
+    boton.querySelector("span").textContent = exportando ? "Descargando..." : "Descargar Excel";
+}
 
+async function descargarExcelBitacora() {
+    if (exportando || filtrosCargados === null) return;
+    exportando = true;
+    actualizarBotonDescarga();
     try {
-        if (boton) {
-            boton.disabled = true;
-            boton.querySelector("span").textContent = "Descargando...";
-        }
-
-        const response = await apiGet(URL_EXPORTAR_BITACORA);
+        const response = await apiGet(`${URL_EXPORTAR_BITACORA}?${filtrosCargados}`);
 
         if (!response) return;
 
@@ -923,10 +906,8 @@ async function descargarExcelBitacora() {
             || "No fue posible descargar la bitácora."
         );
     } finally {
-        if (boton) {
-            boton.disabled = false;
-            boton.querySelector("span").textContent = "Descargar Excel";
-        }
+        exportando = false;
+        actualizarBotonDescarga();
     }
 }
 
@@ -994,7 +975,6 @@ document.addEventListener("keydown", e => {
     if (e.shiftKey && document.activeElement === primero) { e.preventDefault(); ultimo.focus(); }
     else if (!e.shiftKey && document.activeElement === ultimo) { e.preventDefault(); primero.focus(); }
 });
-fechaReferencia = new Date();
 elementosBitacora.filtroOrden.value = "desc";
 
 actualizarPeriodoVisible();

@@ -8,11 +8,11 @@
     <title>Gestión de usuarios</title>
 
     <link rel="stylesheet" href="{% static 'web/css/styles.css' %}">
-    <link rel="stylesheet" href="{% static 'web/css/dashboard.css' %}?v=5">
+    <link rel="stylesheet" href="{% static 'web/css/dashboard.css' %}?v=11">
     <link rel="stylesheet" href="{% static 'web/css/alertas.css' %}?v=2">
-    <link rel="stylesheet" href="{% static 'web/css/evaluaciones.css' %}">
+    <link rel="stylesheet" href="{% static 'web/css/evaluaciones.css' %}?v=7">
     <link rel="stylesheet" href="{% static 'web/css/estados.css' %}">
-    <link rel="stylesheet" href="{% static 'web/css/usuarios.css' %}?v=8">
+    <link rel="stylesheet" href="{% static 'web/css/usuarios.css' %}?v=9">
 </head>
 
 <body>
@@ -22,17 +22,7 @@
 
         <main class="contenido-dashboard">
 
-            <header class="cabecera-dashboard">
-                <div>
-                    <h1>Gestión de usuarios</h1>
-
-                    <p class="descripcion-pagina">
-                        Administra las cuentas y permisos de acceso al sistema.
-                    </p>
-                </div>
-
-                {% include "web/components/usuario_sesion.html" %}
-            </header>
+            {% include "web/components/cabecera_pagina.html" with titulo="Gestión de usuarios" subtitulo="Administra las cuentas y permisos de acceso al sistema." only %}
 
             <section class="panel-alertas panel-usuarios">
 

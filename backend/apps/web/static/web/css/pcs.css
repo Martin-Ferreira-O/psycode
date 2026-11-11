@@ -1,11 +1,7 @@
 /* Gestión de PCs: conserva identidad visual del producto y acota sus estilos. */
 .pagina-pcs { --pcs-muted: #52677c; --pcs-line: #dce3eb; --pcs-accent: #173858; --pcs-danger: #a12828; --pcs-warning: #805100; font-size: 15px; }
 .pagina-pcs [hidden] { display: none !important; }
-.pagina-pcs .contenido-dashboard { min-width: 0; }
-.pagina-pcs .pcs-cabecera { min-height: 110px; margin-bottom: 24px; }
 .pcs-eyebrow { margin: 0 0 9px; color: var(--pcs-muted); font-size: 11px; font-weight: 700; letter-spacing: .12em; }
-.pagina-pcs .pcs-cabecera h1 { margin: 0 0 8px; font-size: 30px; letter-spacing: -.6px; }
-.pcs-descripcion { max-width: 650px; margin: 0; color: var(--pcs-muted); }
 .pcs-panel { overflow: hidden; border: 1px solid var(--pcs-line); border-radius: 12px; background: white; }
 .pcs-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 20px; padding: 24px; }
 .pcs-toolbar h2 { margin: 0 0 6px; font-size: 19px; }
@@ -92,7 +88,7 @@
 @media (max-width: 1200px) { .pcs-lista { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 600px) { .pcs-descarga-inicial { padding-inline: 16px; } }
 
-@media (max-width: 600px) { .pagina-pcs .contenido-dashboard { padding: 20px 12px; } .pcs-toolbar, .pcs-filtros { padding: 18px 16px; } .pcs-lista { padding: 12px; gap: 14px; } .pcs-toolbar > .pcs-acciones { width: 100%; } .pcs-toolbar > .pcs-acciones > button { flex: 1; } .pcs-busqueda { width: 100%; } .pcs-filtros > .pcs-ayuda { margin-left: 0; } .pc-tarjeta { --pc-padding: 14px; } .pc-tarjeta .pc-capacidad, .pc-flujo { gap: 8px; } .pc-flujo dd { font-size: 12px; } .pcs-dialogo { padding: 20px; } .pcs-dialogo-acciones > button { flex: 1; } .pcs-incidente .pc-datos { grid-template-columns: minmax(0, 1fr); } .pcs-historial .pcs-campo { flex: 1 1 140px; } }
+@media (max-width: 600px) { .pcs-toolbar, .pcs-filtros { padding: 18px 16px; } .pcs-lista { padding: 12px; gap: 14px; } .pcs-toolbar > .pcs-acciones { width: 100%; } .pcs-toolbar > .pcs-acciones > button { flex: 1; } .pcs-busqueda { width: 100%; } .pcs-filtros > .pcs-ayuda { margin-left: 0; } .pc-tarjeta { --pc-padding: 14px; } .pc-tarjeta .pc-capacidad, .pc-flujo { gap: 8px; } .pc-flujo dd { font-size: 12px; } .pcs-dialogo { padding: 20px; } .pcs-dialogo-acciones > button { flex: 1; } .pcs-incidente .pc-datos { grid-template-columns: minmax(0, 1fr); } .pcs-historial .pcs-campo { flex: 1 1 140px; } }
 @media (prefers-reduced-motion: reduce) { .pagina-pcs * { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
 .pcs-codigo { text-align: center; font-family: ui-monospace, monospace !important; font-size: 34px !important; font-weight: 700 !important; letter-spacing: .22em; }
 .saltar-contenido { position: absolute; top: -80px; left: 16px; z-index: 200; padding: 12px; background: white; color: var(--pcs-accent); }

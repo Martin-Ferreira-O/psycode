@@ -9,9 +9,9 @@
     <title>Registro de evaluaciones</title>
 
     <link rel="stylesheet" href="{% static 'web/css/styles.css' %}">
-    <link rel="stylesheet" href="{% static 'web/css/dashboard.css' %}?v=5">
+    <link rel="stylesheet" href="{% static 'web/css/dashboard.css' %}?v=11">
     <link rel="stylesheet" href="{% static 'web/css/alertas.css' %}?v=3">
-    <link rel="stylesheet" href="{% static 'web/css/evaluaciones.css' %}?v=5">
+    <link rel="stylesheet" href="{% static 'web/css/evaluaciones.css' %}?v=7">
     <link rel="stylesheet" href="{% static 'web/css/estados.css' %}">
 </head>
 
@@ -21,15 +21,7 @@
 
         <main class="contenido-dashboard">
 
-            <header class="cabecera-dashboard">
-                <h1>Registro de evaluaciones</h1>
-                {% include "web/components/usuario_sesion.html" %}
-
-                    <p class="descripcion-pagina">
-                        Consulta las alertas que ya fueron revisadas y revisa
-                        el resultado, junto a la fecha de cada evaluación.
-                    </p>
-            </header>
+            {% include "web/components/cabecera_pagina.html" with titulo="Registro de evaluaciones" subtitulo="Consulta las alertas que ya fueron revisadas y revisa el resultado, junto a la fecha de cada evaluación." only %}
 
             <section class="panel-alertas panel-evaluaciones">
 

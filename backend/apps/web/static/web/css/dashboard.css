@@ -92,9 +92,18 @@
 }
 
 .cabecera-dashboard {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 210px;
+    align-content: start;
+    align-items: start;
+    gap: 16px 20px;
     min-height: 126px;
     margin-bottom: 28px;
-    padding-right: 230px;
+}
+
+.cabecera-dashboard > .boton-navegacion-configuracion {
+    justify-self: start;
+    margin-bottom: 0;
 }
 
 .cabecera-dashboard h1 {
@@ -107,11 +116,7 @@
 }
 
 .usuario-dashboard {
-    position: absolute;
-    top: 34px;
-    right: 40px;
     display: flex;
-    width: 210px;
     box-sizing: border-box;
     align-items: center;
     gap: 12px;
@@ -619,11 +624,6 @@
         padding: 30px;
     }
 
-    .usuario-dashboard {
-        top: 28px;
-        right: 30px;
-    }
-
     .tarjetas-resumen {
         gap: 16px;
     }
@@ -632,7 +632,7 @@
 @media (max-width: 950px) {
 
     .cabecera-dashboard {
-    min-height: auto;
+        min-height: auto;
     }
     .barra-lateral {
         position: static;
@@ -655,32 +655,12 @@
         padding: 24px;
     }
 
-    .usuario-dashboard {
-        top: 22px;
-        right: 24px;
-    }
-
     .seccion-historial .tabla-alertas {
         min-width: 1000px;
     }
 }
 
 @media (max-width: 700px) {
-    .cabecera-dashboard {
-        padding-right: 0;
-    }
-
-    .cabecera-dashboard h1 {
-        font-size: 27px;
-    }
-
-    .usuario-dashboard {
-        position: static;
-        width: 100%;
-        box-sizing: border-box;
-        margin-top: 16px;
-    }
-
     .tarjetas-resumen {
         grid-template-columns: 1fr;
     }
@@ -1060,6 +1040,7 @@
 }
 
 [data-tooltip]::after {
+    --desplazamiento-tooltip: -50%;
     content: attr(data-tooltip);
     position: absolute;
     z-index: 50;
@@ -1080,10 +1061,16 @@
     white-space: normal;
     pointer-events: none;
     opacity: 0;
-    transform: translate(-50%, 4px);
+    transform: translate(var(--desplazamiento-tooltip), 4px);
     transition:
         opacity 0.15s ease,
         transform 0.15s ease;
+}
+
+.panel-indicadores .titulo-bloque > [data-tooltip]::after {
+    --desplazamiento-tooltip: 0%;
+    right: 0;
+    left: auto;
 }
 
 [data-tooltip]::before {
@@ -1104,12 +1091,7 @@
 [data-tooltip]:focus::after,
 [data-tooltip]:focus-visible::after {
     opacity: 1;
-}
-
-[data-tooltip]:hover::after,
-[data-tooltip]:focus::after,
-[data-tooltip]:focus-visible::after {
-    transform: translate(-50%, 0);
+    transform: translate(var(--desplazamiento-tooltip), 0);
 }
 
 .usuario-dashboard,
@@ -1402,6 +1384,11 @@
     .seccion-historial .tabla-alertas {
         width: 100%;
         min-width: 850px;
+        table-layout: auto;
+    }
+
+    .seccion-historial .tabla-alertas tbody td:nth-child(5) {
+        white-space: nowrap;
     }
 
     .grafico-dashboard {
@@ -1439,19 +1426,7 @@
     }
 
     .cabecera-dashboard {
-        width: 100%;
-        min-height: auto;
-
-        padding-right: 0;
-
-        flex-direction: column;
-        align-items: stretch;
-
-        gap: 16px;
-    }
-
-    .cabecera-dashboard > div:first-child {
-        min-width: 0;
+        grid-template-columns: minmax(0, 1fr);
     }
 
     .cabecera-dashboard h1 {
@@ -1468,17 +1443,6 @@
 
         font-size: 14px;
         line-height: 1.5;
-    }
-
-    .usuario-dashboard {
-        position: static;
-
-        width: 100%;
-        max-width: 100%;
-
-        margin-top: 0;
-
-        box-sizing: border-box;
     }
 
     .resumen-dashboard {
@@ -1653,8 +1617,6 @@
     .seccion-historial .tabla-alertas {
         width: 760px;
         min-width: 760px;
-
-        table-layout: fixed;
     }
 
     .seccion-historial .tabla-alertas th,

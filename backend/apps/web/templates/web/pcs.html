@@ -6,19 +6,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gestión de PCs | Psycode</title>
     <link rel="stylesheet" href="{% static 'web/css/styles.css' %}">
-    <link rel="stylesheet" href="{% static 'web/css/dashboard.css' %}">
-    <link rel="stylesheet" href="{% static 'web/css/pcs.css' %}?v=2">
+    <link rel="stylesheet" href="{% static 'web/css/dashboard.css' %}?v=11">
+    <link rel="stylesheet" href="{% static 'web/css/pcs.css' %}?v=3">
 </head>
 <body class="pagina-pcs">
 <a class="saltar-contenido" href="#contenidoPCs">Saltar al contenido</a>
 <div class="aplicacion">
     {% include "web/components/sidebar.html" with seccion_activa="pcs" %}
     <main id="contenidoPCs" class="contenido-dashboard" tabindex="-1">
-        <header class="cabecera-dashboard pcs-cabecera">
-            <div><p class="pcs-eyebrow">ADMINISTRACIÓN / EQUIPOS</p><h1>Gestión de PCs</h1>
-                <p class="pcs-descripcion">Revisa el funcionamiento de los computadores de la clínica y consulta su historial.</p></div>
-            {% include "web/components/usuario_sesion.html" %}
-        </header>
+        {% include "web/components/cabecera_pagina.html" with titulo="Gestión de PCs" subtitulo="Revisa el funcionamiento de los computadores de la clínica y consulta su historial." only %}
         <section class="pcs-panel" aria-labelledby="tituloRegistro">
             <div class="pcs-toolbar">
                 <div><h2 id="tituloRegistro">Equipos de la clínica</h2><p id="actualizacionPCs" class="pcs-ayuda">Consulta pendiente</p></div>

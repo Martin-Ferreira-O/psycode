@@ -9,9 +9,9 @@
     <title>Bitácora | Psycode</title>
 
     <link rel="stylesheet" href="{% static 'web/css/styles.css' %}">
-    <link rel="stylesheet" href="{% static 'web/css/dashboard.css' %}?v=5">
+    <link rel="stylesheet" href="{% static 'web/css/dashboard.css' %}?v=11">
     <link rel="stylesheet" href="{% static 'web/css/estados.css' %}">
-    <link rel="stylesheet" href="{% static 'web/css/bitacora.css' %}?v=101">
+    <link rel="stylesheet" href="{% static 'web/css/bitacora.css' %}?v=103">
 </head>
 
 <body>
@@ -27,18 +27,7 @@
         {% include "web/components/sidebar.html" with seccion_activa="bitacora" %}
 
         <main class="contenido-dashboard contenido-bitacora">
-            <header class="cabecera-dashboard cabecera-bitacora">
-                <div>
-                    <h1>Bitácora del sistema</h1>
-
-                    <p>
-                        Consulta de la trazabilidad de alertas, despachos,
-                        evaluaciones y eventos técnicos registrados en el sistema.
-                    </p>
-                </div>
-
-                {% include "web/components/usuario_sesion.html" %}
-            </header>
+            {% include "web/components/cabecera_pagina.html" with titulo="Bitácora del sistema" subtitulo="Consulta de la trazabilidad de alertas, despachos, evaluaciones y eventos técnicos registrados en el sistema." only %}
 
             <section class="barra-periodo" aria-label="Selección de periodo">
                 <div class="periodo-info">
@@ -233,6 +222,7 @@
                             type="button"
                             class="boton-exportar-excel"
                             id="descargarExcelBitacora"
+                            disabled
                         >
                             <svg
                                 viewBox="0 0 24 24"
@@ -447,6 +437,12 @@
 
     <div class="panel-detalle-fondo detalle-bitacora" id="detalleFondo" hidden>
         <aside class="panel-detalle-evento" id="panelDetalle" aria-labelledby="tituloDetalleEvento" aria-describedby="explicacionEvento" aria-modal="true" role="dialog" tabindex="-1">
+            <header class="cabecera-detalle-evento">
+                <h2 id="tituloDetalleEvento">Detalle del evento</h2>
+                <button type="button" class="boton-cerrar-detalle" id="cerrarDetalle" aria-label="Cerrar">
+                    <span aria-hidden="true">×</span>
+                </button>
+            </header>
             <div class="detalle-resumen"><span id="detalleResultado" class="etiqueta-resultado">—</span><h3 id="detalleAccion">—</h3><p id="explicacionEvento"></p><span id="detalleFecha">—</span></div>
             <div class="seccion-detalle"><h3>Contexto del evento</h3><div class="contenido-detalle-evento"><div class="dato-detalle"><span>Responsable</span><strong id="detalleActor">—</strong></div><div class="dato-detalle"><span>Canal</span><strong id="detalleCanal">—</strong></div><div class="dato-detalle dato-completo"><span>ID de alerta</span><div class="identificador-detalle"><strong id="detalleAlerta">—</strong><button type="button" class="boton-icono" id="copiarAlerta" aria-label="Copiar ID de alerta"><svg aria-hidden="true"><use href="#i-copy"/></svg></button></div></div></div><button type="button" class="boton-principal boton-ver-alerta" id="verEventosAlerta" hidden>Seguir esta alerta en el período<svg aria-hidden="true"><use href="#i-arrow"/></svg></button><p id="alcanceRelacion" class="nota-detalle" hidden>Consulta la misma alerta en todas las categorías y resultados. Se conserva el período y el orden.</p></div>
             <section class="seccion-detalle" id="seccionAlmacenamiento" hidden><h3>Limpieza de almacenamiento</h3><p id="detalleAlmacenamiento"></p></section>
@@ -459,6 +455,6 @@
     <script src="{% static 'web/js/estados.js' %}"></script>
     <script src="{% static 'web/js/api.js' %}?v=security-1"></script>
     <script src="{% static 'web/js/components.js' %}"></script>
-    <script src="{% static 'web/js/bitacora.js' %}?v=6"></script>
+    <script src="{% static 'web/js/bitacora.js' %}?v=7"></script>
 </body>
 </html>

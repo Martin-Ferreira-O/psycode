@@ -6,24 +6,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Configuración operativa | Psycode</title>
     <link rel="stylesheet" href="{% static 'web/css/styles.css' %}">
-    <link rel="stylesheet" href="{% static 'web/css/dashboard.css' %}?v=5">
+    <link rel="stylesheet" href="{% static 'web/css/dashboard.css' %}?v=11">
     <link rel="stylesheet" href="{% static 'web/css/estados.css' %}">
-    <link rel="stylesheet" href="{% static 'web/css/configuracion_operativa.css' %}?v=3">
+    <link rel="stylesheet" href="{% static 'web/css/configuracion_operativa.css' %}?v=4">
 </head>
 <body>
     <div class="aplicacion">
         {% include "web/components/sidebar.html" with seccion_activa="configuracion_operativa" %}
 
         <main class="contenido-dashboard">
-            <header class="cabecera-dashboard">
-                <div>
-                    <h1>Configuración operativa</h1>
-                    <p class="descripcion-pagina">
-                        Administra los días, el horario clínico y los destinatarios de alertas.
-                    </p>
-                </div>
-                {% include "web/components/usuario_sesion.html" %}
-            </header>
+            {% include "web/components/cabecera_pagina.html" with titulo="Configuración operativa" subtitulo="Administra los días, el horario clínico y los destinatarios de alertas." only %}
 
             <section class="panel-configuracion panel-configuracion-operativa" aria-labelledby="tituloConfiguracion">
                 <div

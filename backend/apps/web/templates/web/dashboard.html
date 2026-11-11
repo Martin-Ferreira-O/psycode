@@ -9,7 +9,7 @@
     <title>Dashboard de alertas</title>
 
     <link rel="stylesheet" href="{% static 'web/css/styles.css' %}">
-    <link rel="stylesheet" href="{% static 'web/css/dashboard.css' %}?v=8">
+    <link rel="stylesheet" href="{% static 'web/css/dashboard.css' %}?v=11">
     <link rel="stylesheet" href="{% static 'web/css/alertas.css' %}?v=5">
     <link rel="stylesheet" href="{% static 'web/css/estados.css' %}">
 </head>
@@ -22,19 +22,7 @@
 
         <main class="contenido-dashboard">
 
-            <header class="cabecera-dashboard">
-
-                <div>
-                    <h1>Dashboard de alertas</h1>
-
-                    <p class="subtitulo-dashboard">
-                        Resumen general de alertas y actividad registrada.
-                    </p>
-                </div>
-
-                {% include "web/components/usuario_sesion.html" %}
-
-            </header>
+            {% include "web/components/cabecera_pagina.html" with titulo="Dashboard de alertas" subtitulo="Resumen general de alertas y actividad registrada." only %}
 
             <section class="resumen-dashboard">
 

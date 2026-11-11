@@ -1,0 +1,10 @@
+<header class="cabecera-dashboard">
+    <div>
+        <h1>{{ titulo }}</h1>
+        <p class="subtitulo-dashboard">{{ subtitulo }}</p>
+    </div>
+    {% include "web/components/usuario_sesion.html" %}
+    {% if url_regreso %}
+        <a class="boton-navegacion-configuracion" href="{{ url_regreso }}">{{ texto_regreso }}</a>
+    {% endif %}
+</header>
