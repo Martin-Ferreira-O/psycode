@@ -1,99 +1,23 @@
-
 .estado-solicitud {
-    
     padding: 12px 16px;
-    border: 1px solid var(--borde, #dce3eb);
+    border: 1px solid var(--borde);
     border-radius: 10px;
-    background: var(--azul-claro, #e8f0f7);
-    color: var(--texto, #172033);
+    background: var(--azul-claro);
+    color: var(--texto);
     line-height: 1.5;
     overflow-wrap: anywhere;
 }
-.estado-solicitud[hidden] { display: none; }
+
 .estado-solicitud[data-estado="error"] {
-    background: #fee2e2;
-    border-color: #fecaca;
-    color: #991b1b;
+    border-color: var(--rojo);
+    background: var(--rojo-claro);
+    color: var(--rojo);
 }
+
 .estado-solicitud[data-estado="exito"] {
-    background: #dcfce7;
-    color: #166534;
-}
-.boton-reintentar {
-    display: block;
-    margin-top: 12px;
-    min-height: 44px;
-    padding: 8px 16px;
-    border: 1px solid currentColor;
-    border-radius: 8px;
-    background: var(--blanco, #fff);
-    color: inherit;
-    font: inherit;
-    cursor: pointer;
+    border-color: var(--verde);
+    background: var(--verde-claro);
+    color: var(--verde);
 }
 
-.etiqueta-nivel {
-    display: inline-flex;
-    min-width: 82px;
-    min-height: 34px;
-    align-items: center;
-    justify-content: center;
-    border-radius: 999px;
-    padding: 7px 13px;
-    font-family: "Segoe UI", Arial, sans-serif;
-    font-size: 15px;
-    font-weight: 400;
-    line-height: 1;
-    white-space: nowrap;
-}
-
-.etiqueta-nivel.nivel-alto {
-    border: 1px solid #efb6b6;
-    background: #fde8e8;
-    color: #a52828;
-}
-
-.etiqueta-nivel.nivel-medio {
-    border: 1px solid #f1cf92;
-    background: #fff3d8;
-    color: #9a5b00;
-}
-
-.etiqueta-nivel.nivel-bajo {
-    border: 1px solid #86b99a;
-    background: #dcfce7;
-    color: #166534;
-}
-
-.etiqueta-nivel.nivel-nulo,
-.etiqueta-nivel.nivel-desconocido {
-    border: 1px solid #d4dbe3;
-    background: #eef2f6;
-    color: #5c6875;
-}
-.boton-reintentar:focus-visible { outline: 3px solid var(--azul, #2b5278); outline-offset: 3px; }
-.boton-reintentar:disabled { opacity: .65; cursor: wait; }
-.etiqueta-estado {
-    display: inline-flex;
-    width: 112px;
-    min-width: 112px;
-    height: 34px;
-    min-height: 34px;
-
-    align-items: center;
-    justify-content: center;
-
-    box-sizing: border-box;
-    border-radius: 999px;
-    padding: 0 12px;
-
-    font-family: "Segoe UI", Arial, sans-serif;
-    font-size: 15px;
-    font-weight: 400;
-    line-height: 1;
-
-    white-space: nowrap;
-}
-.estado-pendiente {border: 1px solid #e6c88d;background: #fff4dc;color: #8a5a00;}
-
-.estado-revisada {border: 1px solid #b9d2e8;background: #eaf3fb;color: #24577f;}
+.estado-solicitud .boton-reintentar { display: flex; width: fit-content; margin-top: 10px; }

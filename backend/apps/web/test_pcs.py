@@ -59,13 +59,13 @@ class PCPanelTests(APITestCase):
     def test_admin_can_use_panel_without_a_published_installer(self):
         self.client.force_authenticate(self.admin)
         response = self.client.get('/api/v1/pcs/panel')
-        self.assertContains(response, 'Crear nuevo PC')
-        self.assertContains(response, '/static/web/js/pcs.js')
-        self.assertContains(response, 'dialogoHistorialPC')
+        self.assertContains(response, '/static/web/react/app.js')
+        self.assertEqual(response.context["config"]["page"], "pcs")
         self.assertIn('no-store', response['Cache-Control'])
         self.assertIn('csrftoken', response.cookies)
-        self.assertContains(response, 'El instalador de Windows x64 no está disponible.', count=2)
-        self.assertNotContains(response, 'Descargar instalador para Windows x64')
+        self.assertIsNone(response.context["config"]["installerVersion"])
+        self.assertIsNone(response.context["config"]["installerUrl"])
+        self.assertIsNone(response.context["config"]["checksumUrl"])
         self.assertContains(self.client.get(INSTALLER_URL), 'no está disponible', status_code=404)
         self.assertEqual(self.client.get('/gestion-pcs').url, '/api/v1/pcs/panel')
 
@@ -78,9 +78,10 @@ class PCPanelTests(APITestCase):
                             format='json', secure=True, HTTP_ORIGIN='https://testserver', HTTP_X_PSYCODE_BROWSER='1', HTTP_X_CSRFTOKEN=csrf)
         self.assertEqual(login.status_code, 200)
         panel = client.get('/api/v1/pcs/panel', secure=True)
-        self.assertContains(panel, 'Descargar instalador para Windows x64', count=2)
-        self.assertContains(panel, 'Versión 1.2.1', count=2)
-        self.assertContains(panel, f'href="{INSTALLER_URL}"', count=2)
+        config = panel.context["config"]
+        self.assertEqual(config["installerVersion"], "1.2.1")
+        self.assertEqual(config["installerUrl"], INSTALLER_URL)
+        self.assertEqual(config["checksumUrl"], f"{INSTALLER_URL}/sha256")
         for url, filename, expected in [(INSTALLER_URL, INSTALLER_NAME, INSTALLER_BYTES),
                                         (INSTALLER_URL + '/sha256', INSTALLER_NAME + '.sha256', CHECKSUM_BYTES)]:
             response = client.get(url, secure=True)
@@ -117,7 +118,7 @@ class PCPanelTests(APITestCase):
         release = self.publish_installer()
         (release / (INSTALLER_NAME + '.sha256')).unlink()
         self.client.force_authenticate(self.admin)
-        self.assertContains(self.client.get('/api/v1/pcs/panel'), 'El instalador de Windows x64 no está disponible.')
+        self.assertIsNone(self.client.get('/api/v1/pcs/panel').context["config"]["installerVersion"])
         self.assertEqual(self.client.get(INSTALLER_URL).status_code, 404)
 
         response = self.client.post('/api/v1/pcs/alta', {'name': 'PC nuevo', 'room_id': str(self.room.pk)}, format='json')
@@ -144,6 +145,6 @@ class PCPanelTests(APITestCase):
         next_link.replace(current)
 
         self.client.force_authenticate(self.admin)
-        self.assertContains(self.client.get('/api/v1/pcs/panel'), 'Versión 1.2.0', count=2)
+        self.assertEqual(self.client.get('/api/v1/pcs/panel').context["config"]["installerVersion"], "1.2.0")
         self.assertEqual(self.client.get(INSTALLER_URL).status_code, 404)
         self.assertEqual(b''.join(self.client.get(INSTALLER_URL.replace('1.2.1', '1.2.0')).streaming_content), binary)

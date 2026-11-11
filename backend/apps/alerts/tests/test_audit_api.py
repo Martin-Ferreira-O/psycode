@@ -1,8 +1,11 @@
+from datetime import timedelta
+from io import BytesIO
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 from django.test import SimpleTestCase, TestCase
+from openpyxl import load_workbook
 from pymongo.errors import AutoReconnect
 from rest_framework.test import APIClient
 
@@ -51,12 +54,41 @@ class AuditApiTests(SimpleTestCase):
 
     def test_invalid_filters(self):
         self.client.force_authenticate(self.user)
-        for query in ['limit=0', 'limit=101', 'offset=-1', 'alerta_id=no', 'action=auth.login',
+        for query in ['limit=0', 'limit=101', 'offset=-1', 'offset=9223372036854775808', 'alerta_id=no', 'action=auth.login',
                       'outcome=invalid', 'order=invalid', 'fecha_desde=no', 'email=private',
-                      'limit=1&limit=2', 'fecha_desde=2026-12-01&fecha_hasta=2026-01-01']:
+                      'limit=1&limit=2', 'fecha_desde=2026-12-01&fecha_hasta=2026-01-01',
+                      'semana_desde=2026-04-05', 'semana_desde=2026-04-06&fecha_desde=2026-04-06']:
             response = self.client.get('/api/v1/audit-events?' + query)
             self.assertEqual(response.status_code, 400, query)
         self.repo.list_events.assert_not_called()
+
+    def test_week_uses_santiago_daylight_saving_boundaries(self):
+        self.client.force_authenticate(self.user)
+        for monday, hours in [('2026-03-30', 169), ('2026-08-31', 167)]:
+            with self.subTest(monday=monday):
+                response = self.client.get('/api/v1/audit-events', {'semana_desde': monday})
+                self.assertEqual(response.status_code, 200, response.data)
+                filters = self.repo.list_events.call_args.args[0]
+                duration = filters['fecha_hasta'] + timedelta(microseconds=1) - filters['fecha_desde']
+                self.assertEqual(duration, timedelta(hours=hours))
+
+    def test_export_reuses_filters_and_order_on_every_page(self):
+        self.client.force_authenticate(self.user)
+        self.repo.list_events.side_effect = [([self.event], 2), ([self.event], 2)]
+        params = {'semana_desde': '2025-11-03', 'alerta_id': self.event['alerta_id'],
+                  'action': 'alerts.register', 'outcome': 'success', 'order': 'asc'}
+        response = self.client.get('/api/v1/audit-events/export', params)
+        self.assertEqual(response.status_code, 200)
+        workbook = load_workbook(BytesIO(response.content), read_only=True)
+        self.addCleanup(workbook.close)
+        self.assertEqual(workbook.active.max_row, 3)
+        pages = [call.args[0] for call in self.repo.list_events.call_args_list]
+        self.assertEqual([page['offset'] for page in pages], [0, 1])
+        for filters in pages:
+            for name in ('alerta_id', 'action', 'outcome', 'order'):
+                self.assertEqual(filters[name], params[name])
+            self.assertEqual(filters['fecha_desde'].isoformat(), '2025-11-03T03:00:00+00:00')
+            self.assertEqual(filters['fecha_hasta'].isoformat(), '2025-11-10T02:59:59.999999+00:00')
 
     def test_notification_summary_filter_and_historical_compatibility(self):
         metadata = dict(id=str(uuid4()), mode='supervisores_activos', phase='resumen',

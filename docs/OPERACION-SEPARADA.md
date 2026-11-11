@@ -15,6 +15,8 @@ un JWT profesional ni el hash configurado en el servidor.
 ```sh
 uv sync --locked --no-dev
 uv run python manage.py migrate
+npm ci --prefix frontend
+npm run build --prefix frontend
 uv run python manage.py collectstatic --noinput
 uv run uvicorn backend.config.asgi:application --host 127.0.0.1 --port 8000 --workers 2 --ws-max-size 65536 --proxy-headers --forwarded-allow-ips 127.0.0.1 --timeout-graceful-shutdown 90
 ```
@@ -25,7 +27,8 @@ Nginx sirve `/static/` desde `STATIC_ROOT` (por defecto `staticfiles/`). El `ali
 del ejemplo debe coincidir con la ruta absoluta de ese directorio, con permisos de
 lectura para el usuario de Nginx. Mantenerlo separado de `.local/`, que contiene
 SQL, secretos, audio y journals, y nunca publicar el checkout completo. Uvicorn no sirve los
-estáticos de la interfaz; repetir `collectstatic` después de actualizar sus assets.
+estáticos de la interfaz. Para cada versión, compilar la interfaz con Node.js 22.12
+o superior y ejecutar `collectstatic`.
 Este es el flujo de [estáticos de Django 5.2](https://docs.djangoproject.com/en/5.2/howto/static-files/deployment/).
 
 En procesos supervisados separados:

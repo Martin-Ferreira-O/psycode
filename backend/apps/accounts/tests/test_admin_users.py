@@ -126,6 +126,16 @@ class AdminUserManagementTests(APITestCase):
         self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(res.data["error"]["code"], "VALIDATION_ERROR")
 
+    def test_nombre_de_usuario_invalido_o_duplicado_tras_normalizar(self):
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.admin_token}")
+        payload = {"nombre": "Usuario QA", "correo": "nuevo@example.test", "password": "Password-Segura-1234"}
+        for usuario in ("=1+1", "ｓｕｐｅｒｖｉｓｏｒ＿ｔｅｓｔ"):
+            with self.subTest(usuario=usuario):
+                res = self.client.post(self.url_users, {**payload, "usuario": usuario}, format="json")
+                self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+                self.assertIn("usuario", res.data["error"]["details"]["fields"])
+        self.assertEqual(User.objects.count(), 2)
+
     def test_permisos_insuficientes_supervisor(self):
         """Impedir que un usuario con rol supervisor administre cuentas."""
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.supervisor_token}")

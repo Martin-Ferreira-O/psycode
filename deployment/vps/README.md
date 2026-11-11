@@ -19,7 +19,7 @@ coincida con el `main` actual. Los eventos de commits superados se omiten.
 `flock` y la concurrencia de Actions evitan despliegues simultáneos.
 
 El script prepara una versión en `/srv/psycode/releases/<SHA>`, instala las
-dependencias fijadas, ejecuta límites de módulos, pruebas Django, comprobación
+dependencias fijadas, compila React, ejecuta límites de módulos, pruebas Django, comprobación
 de migraciones y chequeos de producción, y recopila estáticos. Después detiene
 el coordinador, espera hasta cinco minutos por las sesiones abiertas y drena
 el trabajador. Si siguen abiertas, cancela el despliegue y reanuda los servicios.
@@ -41,6 +41,9 @@ no prometen cero interrupción: reinician HTTP y las conexiones WebSocket.
 Los archivos operativos en `/usr/local/sbin`, `/etc/systemd/system` y
 `/etc/nginx` son de root. Cambiar sus ejemplos en Git no los reinstala: requieren
 una actualización explícita de mantenimiento como `ubuntu` mediante `sudo`.
+Antes del primer despliegue de la interfaz React, instalar Node.js 22.12 o
+superior con `npm` disponible en el `PATH` del script y actualizar
+`/usr/local/sbin/psycode-deploy-main` desde `deployment/vps/deploy-main.sh`.
 
 ## Datos y configuración
 

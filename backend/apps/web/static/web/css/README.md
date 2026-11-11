@@ -1,4 +1,10 @@
 # Estilos del frontend
 
-Se conservan los estilos propios de login, dashboard, historial y evaluaciones.
-`estados.css`, cargado después de los estilos de pantalla, reutiliza la paleta existente para carga, vacío, error y confirmación. Incluye foco visible y tamaño de interacción para el botón de reintento. Los estados usan texto y roles accesibles además de color.
+`ui.css` define la paleta semántica, los botones, las tablas y la navegación
+compartida. Los componentes React aplican estos estilos en todas las pantallas.
+Las tablas anchas conservan su estructura y muestran un aviso de desplazamiento
+dentro de su panel.
+
+Los archivos por pantalla definen la composición, el gráfico y otras
+variaciones de contenido. `estados.css` usa la misma paleta para carga, vacío,
+error y confirmación.

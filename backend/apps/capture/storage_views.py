@@ -1,6 +1,5 @@
 """Administración de almacenamiento, sin edición web de la política."""
 from django.core import signing
-from django.shortcuts import render
 from django.views.decorators.cache import never_cache
 from django.utils.decorators import method_decorator
 from rest_framework.permissions import IsAuthenticated
@@ -15,14 +14,6 @@ from .retention import cleanup, inventory, serialize_run
 from .storage_audit import flush_storage_audit
 
 SALT = "psycode.storage.preview.v1"
-
-
-@method_decorator(never_cache, name="dispatch")
-class StoragePanelView(APIView):
-    permission_classes = [IsAuthenticated, IsActiveAdmin]
-
-    def get(self, request):
-        return render(request, "web/almacenamiento.html")
 
 
 @method_decorator(never_cache, name="dispatch")

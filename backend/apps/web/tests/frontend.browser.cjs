@@ -50,9 +50,16 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         assert.equal(await page.locator('body').innerText().then(t => t.includes('TRAZA_PRIVADA')), false);
 
         estado = 503;
+        let confirmarConsulta;
+        const primeraConsulta = new Promise(resolve => { confirmarConsulta = resolve; });
         liberar = null;
         await page.route(url => url.pathname === '/api/v1/alerts' && url.searchParams.get('revisadas') === 'true', async route => {
-            if (liberar === null) await new Promise(resolve => { liberar = resolve; });
+            if (liberar === null) {
+                await new Promise(resolve => {
+                    liberar = resolve;
+                    confirmarConsulta();
+                });
+            }
             let respuesta = cuerpo;
             if (registros) {
                 const parametros = new URL(route.request().url()).searchParams;
@@ -67,8 +74,11 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         });
         await page.goto(`${base}/evaluaciones`);
         const panel = page.locator('#estadoVacioEvaluaciones');
-        await page.locator('[data-estado="carga"]').waitFor();
-        assert.equal(await page.locator('#tablaEvaluacionesContenedor').isVisible(), false);
+        await page.locator('#tablaEvaluacionesContenedor .ui-skeleton').first().waitFor();
+        assert.equal(await page.getByRole('heading', { name: 'Registro de evaluaciones' }).isVisible(), true);
+        assert.equal(await page.getByRole('columnheader', { name: 'Fecha de evaluación' }).isVisible(), true);
+        assert.equal(await page.locator('.panel-evaluaciones').getAttribute('aria-busy'), 'true');
+        await primeraConsulta;
         liberar();
         await page.locator('[data-estado="error"]').waitFor();
         assert.equal((await panel.innerText()).includes('Todavía no'), false);
@@ -77,13 +87,13 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         await page.locator('[data-estado="vacio"]').waitFor();
         assert.match(await panel.innerText(), /Todavía no existen/);
         cuerpo = { success: true, data: {} };
-        await page.evaluate(() => cargarEvaluaciones());
-        assert.equal(await panel.getAttribute('data-estado'), 'error');
+        await page.reload();
+        await page.locator('#estadoVacioEvaluaciones[data-estado="error"]').waitFor();
         assert.equal((await panel.innerText()).includes('Todavía no'), false);
         for (const codigo of [400, 404, 409]) {
             estado = codigo;
-            await page.evaluate(() => cargarEvaluaciones());
-            assert.equal(await panel.getAttribute('data-estado'), 'error');
+            await page.reload();
+            await page.locator('#estadoVacioEvaluaciones[data-estado="error"]').waitFor();
             assert.equal(await page.locator('.boton-reintentar').count(), 0);
         }
         estado = 200;
@@ -92,12 +102,12 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
             nivel_severidad: 1, fecha_hora: '2026-09-12T15:00:00Z',
             estado_evaluacion: 'correcta', evaluacion: { evaluacion: 'correcta' },
         }] } };
-        await page.evaluate(() => cargarEvaluaciones());
-        assert.equal(await page.locator('#tablaEvaluacionesContenedor').isVisible(), true);
+        await page.reload();
+        await page.locator('#tablaEvaluacionesContenedor').waitFor();
         assert.equal(await page.locator('#tablaEvaluaciones tr').count(), 1);
         estado = 503;
-        await page.evaluate(() => cargarEvaluaciones());
-        assert.equal(await page.locator('#tablaEvaluaciones tr').count(), 1, 'conserva datos ante fallo');
+        await page.reload();
+        await page.locator('#estadoVacioEvaluaciones[data-estado="error"]').waitFor();
         assert.equal(await page.locator('#tablaEvaluacionesContenedor').isVisible(), false, 'no presenta datos anteriores como actuales');
 
         estado = 200;
@@ -110,14 +120,21 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
                 alerta_id: `33333333-3333-4333-8333-${String(index + 1).padStart(12, '0')}`,
             }));
             await page.setViewportSize({ width: ancho, height: 800 });
-            await page.evaluate(() => cargarEvaluaciones());
+            await page.reload();
+            await filas.first().waitFor();
             assert.equal(await anterior.isDisabled(), true);
             assert.equal(await filas.first().locator('td').count(), 6);
-            const etiquetas = await filas.first().locator('.etiqueta-campo-evaluacion:visible').count();
-            assert.equal(etiquetas, ancho === 320 ? 5 : 0);
-            assert.equal(await page.locator('#tablaEvaluacionesContenedor').evaluate(tabla =>
-                tabla.scrollWidth === tabla.clientWidth && document.documentElement.scrollWidth === window.innerWidth
-            ), true, `sin desplazamiento horizontal a ${ancho}px`);
+            assert.equal(await page.evaluate(() => document.documentElement.scrollWidth === window.innerWidth),
+                true, `sin desplazamiento horizontal de la página a ${ancho}px`);
+            const accion = filas.first().getByRole('button');
+            const visible = await accion.evaluate(boton => {
+                const tabla = boton.closest('.ui-table-scroll');
+                const marco = tabla.getBoundingClientRect();
+                const accion = boton.getBoundingClientRect();
+                return tabla.scrollLeft === 0 && accion.left >= marco.left && accion.right <= marco.right
+                    && accion.width >= 44 && accion.height >= 44;
+            });
+            assert.equal(visible, true, 'acción visible sin desplazar la tabla y con área táctil suficiente');
 
             const visibles = [];
             const paginas = Math.ceil(total / 10);
@@ -137,12 +154,13 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         await page.setViewportSize({ width: 1280, height: 720 });
         registros = undefined;
         estado = 401;
-        await page.evaluate(() => cargarEvaluaciones());
+        await page.reload();
         await page.waitForURL(`${base}/`);
         assert.equal(await page.evaluate(() => localStorage.getItem('access_token')), null);
 
         const alerta = { ...cuerpo.data.items[0], estado_evaluacion: 'pendiente', evaluacion: null };
         let evaluacion = null;
+        let estadoEvaluacion = 503;
         const consultasHistorial = [];
         await page.route('**/api/v1/alerts**', async route => {
             const url = new URL(route.request().url());
@@ -150,6 +168,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
             if (url.pathname.endsWith('/evaluacion')) {
                 assert.equal(route.request().method(), 'POST');
                 assert.equal(route.request().postDataJSON().evaluacion, 'correcta');
+                if (estadoEvaluacion !== 200) return route.fulfill({ status: estadoEvaluacion });
                 evaluacion = { alerta_id: alerta.alerta_id, evaluacion: 'correcta', estado_evaluacion: 'correcta',
                     usuario: 'supervisor-sintetico', fecha_hora: '2026-10-27T15:00:00Z' };
                 data = evaluacion;
@@ -178,15 +197,24 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         assert.equal(consultasHistorial.at(-1).get('q'), 'sin coincidencias');
 
         await buscar.fill('texto sin confirmar');
-        await page.locator('#filtroBox').selectOption('box-3');
+        await Promise.all([
+            page.waitForResponse(response => new URL(response.url()).searchParams.get('box') === 'box-3'),
+            page.locator('#filtroBox').selectOption('box-3'),
+        ]);
         await sinResultados.waitFor();
         assert.equal(consultasHistorial.at(-1).get('box'), 'box-3');
         assert.equal(consultasHistorial.at(-1).get('q'), 'sin coincidencias', 'el filtro aplica la última búsqueda confirmada');
-        await page.locator('#botonActualizar').click();
+        await Promise.all([
+            page.waitForResponse(response => new URL(response.url()).searchParams.get('q') === 'sin coincidencias'),
+            page.locator('#botonActualizar').click(),
+        ]);
         await sinResultados.waitFor();
         assert.equal(consultasHistorial.at(-1).get('q'), 'sin coincidencias');
         assert.equal(await buscar.inputValue(), 'texto sin confirmar');
-        await page.getByRole('search', { name: 'Buscar alertas' }).getByRole('button', { name: 'Buscar', exact: true }).click();
+        await Promise.all([
+            page.waitForResponse(response => new URL(response.url()).searchParams.get('q') === 'texto sin confirmar'),
+            page.getByRole('search', { name: 'Buscar alertas' }).getByRole('button', { name: 'Buscar', exact: true }).click(),
+        ]);
         await sinResultados.waitFor();
         assert.equal(consultasHistorial.at(-1).get('q'), 'texto sin confirmar');
         assert.match(await page.locator('#estadoVacio').innerText(), /filtros/);
@@ -198,31 +226,27 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         await guardar.waitFor();
 
         const radioConFoco = page.locator('input[name="evaluacion"]:focus');
-        const opciones = ['correcta', 'falso_positivo', 'neutro'];
-        for (const valor of opciones) {
-            await page.keyboard.press('Tab');
-            assert.equal(await radioConFoco.inputValue({ timeout: 1000 }), valor);
-        }
+        const cerrar = page.getByRole('dialog').getByRole('button', { name: 'Cerrar', exact: true });
+        await cerrar.focus();
+        await page.keyboard.press('Tab');
+        assert.equal(await radioConFoco.inputValue(), 'correcta');
         await page.keyboard.press('Tab');
         assert.equal(await guardar.evaluate(boton => boton === document.activeElement), true);
-        for (const valor of opciones.slice().reverse()) {
-            await page.keyboard.press('Shift+Tab');
-            assert.equal(await radioConFoco.inputValue({ timeout: 1000 }), valor);
-        }
         assert.equal(await page.locator('input[name="evaluacion"]:checked').count(), 0);
         await guardar.click();
-        assert.equal(await page.locator('#mensajeEvaluacion').getAttribute('role'), 'alert');
+        await page.locator('#mensajeEvaluacion[role="alert"]').waitFor();
         await page.locator('input[name="evaluacion"][value="correcta"]').check();
         await page.keyboard.press('ArrowRight');
         assert.equal(await page.locator('input[name="evaluacion"][value="falso_positivo"]').isChecked(), true);
-        await page.locator('#modalDetalle .boton-cerrar').focus();
+        await cerrar.focus();
         await page.keyboard.press('Tab');
-        assert.equal(await radioConFoco.inputValue({ timeout: 1000 }), 'correcta');
-        assert.equal(await page.locator('input[name="evaluacion"][value="falso_positivo"]').isChecked(), true);
-        await page.keyboard.press('Space');
-        await page.evaluate(() => mostrarError(document.querySelector('#mensajeEvaluacion'), new ErrorSolicitud(503)));
+        assert.equal(await radioConFoco.inputValue(), 'falso_positivo');
+        await page.keyboard.press('ArrowLeft');
+        await guardar.click();
+        await page.getByText('El servicio no está disponible temporalmente.', { exact: false }).waitFor();
         assert.equal(await page.locator('input[name="evaluacion"][value="correcta"]').isChecked(), true);
-        await page.locator('#guardarEvaluacion').click();
+        estadoEvaluacion = 200;
+        await guardar.click();
         await page.locator('#evaluacionRegistrada').waitFor();
         assert.equal(await page.locator('#evaluacionRegistrada').isVisible(), true);
         assert.deepEqual(errores, [], 'sin errores JavaScript en las pantallas');

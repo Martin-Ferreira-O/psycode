@@ -610,7 +610,7 @@ Total cuenta coincidencias antes de paginar. Orden fijo: fecha_hora descendente,
 | `estado_evaluacion` | enum de estado; omitido | Coincidencia exacta |
 | `revisadas` | true o false; omitido | true: distinto de pendiente; false: pendiente |
 | `limit` | integer, 50 | Entre 1 y 100 |
-| `offset` | integer, 0 | Mayor o igual a cero |
+| `offset` | integer, 0 | Entre 0 y 9223372036854775807 |
 
 Filtros se combinan con AND. Combinaciones contradictorias como revisadas=true y estado_evaluacion=pendiente son válidas y devuelven cero coincidencias. No interpretar q como regex ni consulta MongoDB.
 
@@ -853,12 +853,13 @@ Errores: `NOTIFICATION_TIMEOUT`, `NOTIFICATION_CONNECTION_FAILED`, `NOTIFICATION
 | Parámetro | Regla |
 |---|---|
 | `fecha_desde`, `fecha_hasta` | ISO 8601 fecha/hora; extremos inclusivos, convertidos a UTC. Sin zona se interpreta UTC. Desde no puede superar hasta. |
+| `semana_desde` | Fecha `AAAA-MM-DD` de un lunes en `America/Santiago`. Incluye la semana hasta el domingo. Se usa sin `fecha_desde` ni `fecha_hasta`. |
 | `alerta_id` | UUID válido |
 | `action` | `alerts.register`, `alerts.evaluate`, `notifications.send`, `notifications.result`, `analysis.speechmatics`, `analysis.jev`, `alerts.flow` |
 | `outcome` | `success`, `failure`, `skipped` |
 | `order` | `asc` por defecto, o `desc`; timestamp y event_id como desempate |
 | `limit` | 1–100, por defecto 50 |
-| `offset` | ≥ 0, por defecto 0 |
+| `offset` | 0–9223372036854775807, por defecto 0 |
 
 Parámetros desconocidos, repetidos o inválidos → 400. Los filtros se combinan con AND. Devuelve el envelope habitual con `data={total, limit, offset, items}`. Una consulta sin coincidencias devuelve 200 y lista vacía. Paginación por offset: nuevas inserciones entre consultas pueden desplazar páginas.
 
@@ -871,6 +872,9 @@ La resolución también se aplica a eventos históricos que solo almacenan `acto
 Las fechas se expresan en UTC. La evaluación utiliza el usuario autenticado. No se incluyen nombres completos, correos, cuerpos de mensajes ni campos ajenos a la lista permitida. Los campos históricos de sesión o secuencia ausentes se presentan como null.
 
 Ejemplo: `/api/v1/audit-events?alerta_id=11111111-1111-4111-8111-111111111111&action=notifications.send&outcome=failure&order=asc&limit=20&offset=0`.
+
+`GET /api/v1/audit-events/export` aplica los mismos filtros y permisos y descarga
+todos los resultados coincidentes en XLSX. Admite `order` (por defecto `desc`).
 
 ## 5. Ingesta interna de fragmentos
 
@@ -1154,6 +1158,11 @@ Los schemas `contracts/agent-events-v1.schema.json` y
 `contracts/capture-ended-v1.schema.json`, incluidos en `manifest.json`, son la
 referencia para solicitudes. El `ready` anuncia `agent.events.v1` y
 `sessions.capture-ended.v1`. Desplegar/migrar primero central y después agentes.
+
+Para configuración remota, los agentes administrados que implementan `config_sync`
+anuncian `agent.config.v1` en `hello`. El servidor confirma esa capacidad en `ready`
+y entrega las configuraciones pendientes por ese canal. Con agentes sin esa capacidad,
+la configuración sigue pendiente y el canal continúa entregando órdenes de captura.
 
 
 ## Almacenamiento del servidor

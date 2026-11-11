@@ -1,4 +1,6 @@
-from django.shortcuts import redirect, render
+from django.shortcuts import redirect
+from django.urls import reverse
+from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.utils.decorators import method_decorator
 from rest_framework.permissions import IsAuthenticated
@@ -6,14 +8,16 @@ from rest_framework.views import APIView
 from backend.apps.operational.views import IsActiveAdmin
 from backend.apps.operational.windows_installer import published_installer
 
+from .frontend import render_screen
+
 
 @ensure_csrf_cookie
 def inicio(request):
-    return render(request, "web/login.html")
+    return render_screen(request, "login")
 
 
 def dashboard(request):
-    return render(request, "web/dashboard.html")
+    return render_screen(request, "dashboard")
 
 
 def alertas(request):
@@ -21,23 +25,23 @@ def alertas(request):
 
 
 def evaluaciones(request):
-    return render(request, "web/evaluaciones.html")
+    return render_screen(request, "evaluaciones")
 
 
 def usuarios(request):
-    return render(request, "web/usuarios.html")
+    return render_screen(request, "usuarios")
 
 
 def bitacora(request):
-    return render(request, "web/bitacora.html")
+    return render_screen(request, "bitacora")
 
 
 def configuracion_operativa(request):
-    return render(request, "web/configuracion_operativa.html")
+    return render_screen(request, "configuracion_operativa")
 
 
 def password_reset_confirm(request):
-    return render(request, "web/password_reset_confirm.html")
+    return render_screen(request, "password_reset_confirm")
 
 
 def almacenamiento_entrada(request):
@@ -56,6 +60,19 @@ class PCPanelView(APIView):
 
     def get(self, request):
         installer = published_installer()
-        return render(request, "web/pcs.html", {
-            "installer_version": installer.parent.name if installer else None,
-        })
+        version = installer.parent.name if installer else None
+        return render_screen(
+            request,
+            "pcs",
+            installerVersion=version,
+            installerUrl=reverse("operational:pcs_windows_installer", args=[version]) if version else None,
+            checksumUrl=reverse("operational:pcs_windows_checksum", args=[version]) if version else None,
+        )
+
+
+@method_decorator(never_cache, name="dispatch")
+class StoragePanelView(APIView):
+    permission_classes = [IsAuthenticated, IsActiveAdmin]
+
+    def get(self, request):
+        return render_screen(request, "almacenamiento")

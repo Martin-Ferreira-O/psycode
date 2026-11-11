@@ -1,4 +1,4 @@
-from datetime import timezone
+from datetime import datetime, time, timedelta, timezone
 from io import BytesIO
 
 from django.http import HttpResponse
@@ -20,6 +20,7 @@ from .audit import (
     NOTIFICATION_STATUSES,
 )
 from .repositories import AlertsRepository
+from .serializers import MAX_MONGO_OFFSET, ZONA_SANTIAGO
 
 
 class AuditPermission(BasePermission):
@@ -34,7 +35,8 @@ class AuditPermission(BasePermission):
         )
 
 
-class AuditQuerySerializer(serializers.Serializer):
+class AuditFiltersSerializer(serializers.Serializer):
+    semana_desde = serializers.DateField(required=False)
     fecha_desde = serializers.DateTimeField(
         required=False,
         default_timezone=timezone.utc,
@@ -54,22 +56,13 @@ class AuditQuerySerializer(serializers.Serializer):
     )
     order = serializers.ChoiceField(
         choices=("asc", "desc"),
-        default="asc",
-    )
-    limit = serializers.IntegerField(
-        default=50,
-        min_value=1,
-        max_value=100,
-    )
-    offset = serializers.IntegerField(
-        default=0,
-        min_value=0,
+        default="desc",
     )
 
     def to_internal_value(self, data):
         if any(
             key not in self.fields
-            or len(data.getlist(key)) != 1
+            or (hasattr(data, "getlist") and len(data.getlist(key)) != 1)
             for key in data
         ):
             raise serializers.ValidationError(
@@ -83,6 +76,20 @@ class AuditQuerySerializer(serializers.Serializer):
         return super().to_internal_value(data)
 
     def validate(self, attrs):
+        semana = attrs.pop("semana_desde", None)
+        if semana is not None:
+            if semana.weekday() != 0 or "fecha_desde" in attrs or "fecha_hasta" in attrs:
+                raise serializers.ValidationError({
+                    "semana_desde": "Indica un lunes sin combinarlo con fecha_desde ni fecha_hasta."
+                })
+            try:
+                inicio = datetime.combine(semana, time.min, tzinfo=ZONA_SANTIAGO).astimezone(timezone.utc)
+                siguiente = datetime.combine(semana + timedelta(days=7), time.min, tzinfo=ZONA_SANTIAGO)
+                attrs["fecha_desde"] = inicio
+                attrs["fecha_hasta"] = siguiente.astimezone(timezone.utc) - timedelta(microseconds=1)
+            except (OverflowError, ValueError) as exc:
+                raise serializers.ValidationError({"semana_desde": "Semana fuera del rango admitido."}) from exc
+
         if (
             attrs.get("fecha_desde")
             and attrs.get("fecha_hasta")
@@ -96,6 +103,12 @@ class AuditQuerySerializer(serializers.Serializer):
             attrs["alerta_id"] = str(attrs["alerta_id"])
 
         return attrs
+
+
+class AuditQuerySerializer(AuditFiltersSerializer):
+    order = serializers.ChoiceField(choices=("asc", "desc"), default="asc")
+    limit = serializers.IntegerField(default=50, min_value=1, max_value=100)
+    offset = serializers.IntegerField(default=0, min_value=0, max_value=MAX_MONGO_OFFSET)
 
 
 class NotificationAuditSerializer(serializers.Serializer):
@@ -263,7 +276,12 @@ class AuditExportView(APIView):
     ]
 
     def get(self, request):
+        serializer = AuditFiltersSerializer(data=request.query_params)
+        serializer.is_valid(raise_exception=True)
+
         fecha_exportacion = django_timezone.now()
+        filters = serializer.validated_data
+        filters["fecha_hasta"] = min(filters.get("fecha_hasta", fecha_exportacion), fecha_exportacion)
         repositorio = AlertsRepository()
 
         eventos = []
@@ -271,14 +289,7 @@ class AuditExportView(APIView):
         limite = 100
 
         while True:
-            lote, total = repositorio.list_events(
-                {
-                    "fecha_hasta": fecha_exportacion,
-                    "order": "desc",
-                    "limit": limite,
-                    "offset": offset,
-                }
-            )
+            lote, total = repositorio.list_events({**filters, "limit": limite, "offset": offset})
 
             eventos.extend(lote)
 

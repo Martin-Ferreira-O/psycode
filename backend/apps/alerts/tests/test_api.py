@@ -98,6 +98,7 @@ class AlertFilterTests(SimpleTestCase):
             ("/api/v1/alerts?revisadas=1", "revisadas"),
             ("/api/v1/alerts?estado_evaluacion=otra", "estado_evaluacion"),
             ("/api/v1/alerts?limit=0", "limit"),
+            ("/api/v1/alerts?offset=9223372036854775808", "offset"),
             ("/api/v1/alerts?fecha_hasta=fecha", "fecha_hasta"),
             ("/api/v1/alerts?fecha_desde=2026-09-13&fecha_hasta=2026-09-12", "fecha_desde"),
         ):

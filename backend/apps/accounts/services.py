@@ -8,6 +8,7 @@ from django.conf import settings
 from django.contrib.auth.hashers import make_password
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
+from django.db import IntegrityError
 from django.utils import timezone
 from django.utils.crypto import constant_time_compare
 from rest_framework_simplejwt.exceptions import TokenError
@@ -189,10 +190,27 @@ class AccountsService:
             return items
         return {"items": items, "total": total, "limit": limit, "offset": offset}
 
+    def _check_user_identity_available(self, usuario, correo):
+        if self.repository.find_by_email(correo) is not None:
+            raise ServiceError(
+                "VALIDATION_ERROR",
+                "Ya existe un usuario con este correo.",
+                400,
+                {"fields": {"correo": ["Ya existe un usuario con este correo."]}},
+            )
+        if self.repository.find_user(usuario) is not None:
+            raise ServiceError(
+                "VALIDATION_ERROR",
+                "Ya existe este nombre de usuario.",
+                400,
+                {"fields": {"usuario": ["Ya existe este nombre de usuario."]}},
+            )
+
     def create_admin_user(self, actor, usuario, nombre, correo, password, rol=Role.SUPERVISOR, activo=True):
         if not (actor.is_authenticated and actor.is_active and getattr(actor, "is_admin", False)):
             raise ServiceError("AUTH_FORBIDDEN", "No tienes permisos para administrar usuarios", 403)
 
+        usuario = User.normalize_username(usuario).strip()
         correo_norm = correo.strip().lower()
         if "@" in usuario:
             raise ServiceError(
@@ -202,47 +220,44 @@ class AccountsService:
                 {"fields": {"usuario": ["No puede contener @."]}},
             )
 
-        with self.repository.atomic():
-            if self.repository.find_by_email(correo_norm) is not None:
-                raise ServiceError(
-                    "VALIDATION_ERROR",
-                    "Ya existe un usuario con este correo.",
-                    400,
-                    {"fields": {"correo": ["Ya existe un usuario con este correo."]}},
+        user_instance = User(username=usuario, email=correo_norm)
+        try:
+            User._meta.get_field("username").clean(usuario, user_instance)
+        except ValidationError as exc:
+            raise ServiceError(
+                "VALIDATION_ERROR",
+                "Nombre de usuario no válido",
+                400,
+                {"fields": {"usuario": exc.messages}},
+            ) from None
+
+        self._check_user_identity_available(usuario, correo_norm)
+        try:
+            validate_password(password, user_instance)
+        except ValidationError as exc:
+            raise ServiceError(
+                "VALIDATION_ERROR",
+                "Contraseña no aceptable",
+                400,
+                {"fields": {"password": exc.messages}},
+            ) from None
+
+        parts = nombre.strip().split(" ", 1)
+        try:
+            with self.repository.atomic():
+                user = self.repository.create_user(
+                    username=usuario,
+                    email=correo_norm,
+                    first_name=parts[0],
+                    last_name=parts[1] if len(parts) > 1 else "",
+                    password=password,
+                    role=rol,
+                    is_active=activo,
                 )
-            if self.repository.find_user(usuario) is not None:
-                raise ServiceError(
-                    "VALIDATION_ERROR",
-                    "Ya existe este nombre de usuario.",
-                    400,
-                    {"fields": {"usuario": ["Ya existe este nombre de usuario."]}},
-                )
-
-            user_instance = User(username=usuario, email=correo_norm)
-            try:
-                validate_password(password, user_instance)
-            except ValidationError as exc:
-                raise ServiceError(
-                    "VALIDATION_ERROR",
-                    "Contraseña no aceptable",
-                    400,
-                    {"fields": {"password": exc.messages}},
-                ) from None
-
-            parts = nombre.strip().split(" ", 1)
-            first_name = parts[0]
-            last_name = parts[1] if len(parts) > 1 else ""
-
-            user = self.repository.create_user(
-                username=usuario,
-                email=correo_norm,
-                first_name=first_name,
-                last_name=last_name,
-                password=password,
-                role=rol,
-                is_active=activo,
-            )
-            return self._format_user(user)
+        except IntegrityError:
+            self._check_user_identity_available(usuario, correo_norm)
+            raise
+        return self._format_user(user)
 
     def update_admin_user(self, actor, user_id, **fields):
         if not (actor.is_authenticated and actor.is_active and getattr(actor, "is_admin", False)):

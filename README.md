@@ -31,7 +31,14 @@ La integración interna de Speechmatics Batch y JEV está documentada en [implem
 
 ## Primera instalación
 
-Abre una terminal en la carpeta del proyecto, donde está `manage.py`. Necesitas Python 3.12 o 3.13. Elige una de las dos opciones siguientes; ambas instalan las mismas dependencias.
+Abre una terminal en la carpeta del proyecto, donde está `manage.py`. Necesitas Python 3.12 o 3.13 y Node.js 22.12 o superior para compilar la interfaz React.
+
+```sh
+npm ci --prefix frontend
+npm run build --prefix frontend
+```
+
+Elige una de las dos opciones siguientes para instalar las dependencias de Python.
 
 ### Opción 1: uv
 
@@ -208,6 +215,18 @@ uv run python manage.py seed_demo_user --reset-password
 ```
 
 Con pip, sustituye `uv run python` por `python` en el entorno activado, o por `.venv\Scripts\python.exe` en Windows.
+
+## Datos de demostración
+
+Con las migraciones aplicadas, MongoDB disponible y `DJANGO_DEBUG=true`, ejecuta:
+
+```sh
+uv run python manage.py seed_demo
+```
+
+Carga 26 cuentas, 16 PCs y salas, 96 sesiones clínicas y alertas, evaluaciones pendientes y resueltas, agenda e historial técnico. Entra como `psycode_demo_admin` con la contraseña inicial `autonoma` para ver también las pantallas de administración.
+
+Puedes repetir el comando para completar la carga sin duplicar registros. Usa `--count 200` para tener 200 sesiones clínicas y alertas, o `--sql-only` si solo tienes la base SQL. Los datos son sintéticos y la carga no envía correos ni genera archivos de audio.
 
 ## Alertas de prueba (MongoDB)
 

@@ -9,13 +9,16 @@ from django.test import SimpleTestCase, override_settings
 
 
 class StaticDeploymentTests(SimpleTestCase):
-    def test_login_assets_can_be_collected_for_the_reverse_proxy(self):
+    def test_react_assets_can_be_collected_for_the_reverse_proxy(self):
         self.assertTrue(settings.STATIC_ROOT)
-        response = self.client.get('/')
-        self.assertEqual(response.status_code, 200)
+        response = self.client.get("/")
         with TemporaryDirectory() as directory, override_settings(STATIC_ROOT=directory):
-            call_command('collectstatic', interactive=False, verbosity=0, stdout=StringIO())
-            for asset in ('web/js/login.js', 'web/js/solicitudes.js', 'web/css/login.css', 'web/img/logo.png'):
+            call_command("collectstatic", interactive=False, verbosity=0, stdout=StringIO())
+            root = Path(directory)
+            for asset in ("web/react/app.js", "web/css/login.css", "web/css/ui.css", "web/img/logo.png"):
                 with self.subTest(asset=asset):
-                    self.assertTrue((Path(directory) / asset).is_file())
-                    self.assertContains(response, f'/static/{asset}')
+                    self.assertTrue((root / asset).is_file(), "Ejecuta npm run build --prefix frontend antes de las pruebas.")
+            self.assertTrue(list((root / "web/react/chunks").glob("Login-*.js")))
+            self.assertTrue(list((root / "web/react/chunks").glob("Pcs-*.js")))
+            self.assertContains(response, 'src="/static/web/react/app.js"')
+            self.assertContains(response, 'href="/static/web/css/ui.css"')
