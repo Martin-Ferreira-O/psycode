@@ -355,3 +355,28 @@ class PCPairingCode(models.Model):
     installation_id = models.UUIDField(null=True)
     pending_token_sha256 = models.CharField(max_length=64, blank=True)
     activated_at = models.DateTimeField(null=True)
+
+
+class ConfigurationState(models.TextChoices):
+    PENDING = "pendiente"
+    RECEIVED = "recibido"
+    APPLIED = "aplicado"
+    FAILED = "fallido"
+
+class AgentConfiguration(models.Model):
+    """Configuraciones versionadas por equipo solicitadas por administradores."""
+    config_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    agent = models.ForeignKey(AgentRegistration, on_delete=models.CASCADE, related_name="configurations")
+    requested_by = models.UUIDField(null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    desired_config = models.JSONField(default=dict)
+    effective_config = models.JSONField(default=dict)
+    version = models.PositiveBigIntegerField()
+    state = models.CharField(max_length=16, choices=ConfigurationState.choices, default=ConfigurationState.PENDING)
+    error_code = models.CharField(max_length=40, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["agent", "version"], name="capture_unique_agent_config_version")
+        ]

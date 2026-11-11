@@ -63,3 +63,16 @@ class AgentRegistrationCreateSerializer(serializers.Serializer):
             )
 
         return value
+
+from backend.apps.capture.models import AgentConfiguration
+
+class AgentConfigurationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AgentConfiguration
+        fields = ["config_id", "version", "desired_config", "effective_config", "state", "error_code", "created_at", "updated_at"]
+        read_only_fields = ["config_id", "version", "effective_config", "state", "error_code", "created_at", "updated_at"]
+
+    def validate_desired_config(self, value):
+        if not isinstance(value, dict):
+            raise serializers.ValidationError("La configuración deseada debe ser un diccionario JSON válido.")
+        return value

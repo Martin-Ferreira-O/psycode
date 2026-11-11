@@ -1,4 +1,4 @@
-"""Adaptador ASGI: el dominio conserva órdenes, sesiones y ACK en SQL."""
+﻿"""Adaptador ASGI: el dominio conserva órdenes, sesiones y ACK en SQL."""
 import asyncio
 import json
 import time
@@ -12,7 +12,7 @@ from django.utils import timezone
 from rest_framework.exceptions import AuthenticationFailed
 from .authentication import (authenticate_agent_header,ensure_agent_identity_current,)
 from .domain import CaptureError, TECHNICAL_ERRORS
-from .models import AgentCommand, AgentRegistration, AgentStatus, CaptureSession, OPEN_STATES, RuntimeLease
+from .models import AgentCommand, AgentRegistration, AgentStatus, CaptureSession, OPEN_STATES, RuntimeLease, AgentConfiguration, ConfigurationState
 from .services import CaptureSessionService, _snapshot
 from .protocol import MAX_BYTES, decode, envelope, identifier, instant
 from . import leases
@@ -68,7 +68,6 @@ class RemoteControl:
         with transaction.atomic():
             if self.identity.managed:
                 agent = AgentRegistration.objects.select_for_update().get(pk=self.identity.registry_id)
-                # Si el proceso anterior murió, registrar la caída antes de renovarle el lease.
                 if agent.control_owner:
                     reconcile_connection(agent)
             ensure_agent_identity_current(self.identity)
@@ -81,7 +80,6 @@ class RemoteControl:
         with transaction.atomic():
             if self.identity.managed:
                 agent = AgentRegistration.objects.select_for_update().get(pk=self.identity.registry_id)
-                # Una conexión anterior no puede desconectar a su reemplazo.
                 if agent.control_owner == self.owner:
                     register_server_disconnect(self.identity, cause=cause)
                     AgentRegistration.objects.filter(pk=agent.pk).update(control_owner=None)
@@ -89,50 +87,73 @@ class RemoteControl:
 
     @transaction.atomic
     def register_hello(self, agent_version, smile_check_supported=False):
-        """
-        Guarda información estable anunciada por el agente
-        durante el handshake WebSocket.
-        """
         self._lock_identity()
         self._lock_lease()
         now = timezone.now()
-
         status, _ = AgentStatus.objects.get_or_create(
             box=self.identity.box,
-            defaults={
-                "seen_at": now,
-                "diagnostics": {},
-            },
+            defaults={"seen_at": now, "diagnostics": {}},
         )
-
         diagnostics = {"agent_version": agent_version}
         if smile_check_supported:
             diagnostics["smile_check_supported"] = True
-
         status.seen_at = now
         status.diagnostics = diagnostics
-
-        status.save(
-            update_fields=[
-                "seen_at",
-                "diagnostics",
-            ]
-        )
+        status.save(update_fields=["seen_at", "diagnostics"])
         if self.identity.managed:
             AgentRegistration.objects.filter(pk=self.identity.registry_id).update(
                 last_seen_at=now, diagnostics=diagnostics,
             )
 
+    def acknowledge_config(self, config_id, success, effective_config=None, error_code=""):
+        config = AgentConfiguration.objects.filter(config_id=config_id, agent_id=self.identity.registry_id).first()
+        if not config:
+            raise ValueError("CONFIG_NOT_FOUND")
+        if config.state != ConfigurationState.PENDING:
+            return config
+        config.state = ConfigurationState.APPLIED if success else ConfigurationState.FAILED
+        if effective_config is not None:
+            config.effective_config = effective_config
+        config.error_code = error_code
+        config.save(update_fields=["state", "effective_config", "error_code", "updated_at"])
+        return config
+
+    def poll_configs(self):
+        with transaction.atomic():
+            self._lock_identity()
+            self._lock_lease()
+            leases.acquire(self.name, self.owner)
+            configs = AgentConfiguration.objects.filter(
+                agent_id=self.identity.registry_id,
+                state=ConfigurationState.PENDING
+            ).order_by('version')
+            return [{"config_id": str(c.config_id), "version": c.version, "desired_config": c.desired_config} for c in configs]
+
     def dispatch(self, message):
         with transaction.atomic():
             self._lock_identity()
-            # Bloquear el lease también durante el commit del dominio. Una conexión
-            # sustituida nunca confirma ni obtiene órdenes tras perder su propiedad.
             self._lock_lease()
             leases.acquire(self.name, self.owner)
             box, p, kind = self.identity.box, message["payload"], message["type"]
             if "box" in p and p["box"] != box:
                 raise ValueError("BOX_FORBIDDEN")
+            
+            if kind == "config_ack":
+                required = {"config_id", "success"}
+                if not required <= p.keys() or p.keys() - required - {"effective_config", "error_code"}:
+                    raise ValueError("INVALID_MESSAGE")
+                cid = identifier(p["config_id"])
+                if type(p["success"]) is not bool:
+                    raise ValueError("INVALID_MESSAGE")
+                
+                result = self.acknowledge_config(
+                    cid,
+                    success=p["success"],
+                    effective_config=p.get("effective_config"),
+                    error_code=p.get("error_code", "")
+                )
+                return "config_receipt", {"config_id": str(cid), "state": result.state}
+
             if kind == "sync":
                 sessions = CaptureSession.objects.filter(box=box, state__in=OPEN_STATES)
                 return "state", {"sessions": [payload(_snapshot(s)) for s in sessions],
@@ -176,18 +197,13 @@ class RemoteControl:
                     raise ValueError("INVALID_MESSAGE")
                 if p.get("smile_last_sync") is not None:
                     instant(p["smile_last_sync"])
-                #AgentStatus.objects.update_or_create(box=box, defaults={"seen_at": timezone.now(), "diagnostics": p})
-                status, _ = AgentStatus.objects.get_or_create(box=box,defaults={"seen_at": timezone.now(),"diagnostics": {},},)
-
-                # Status es una fotografía; un opcional ausente deja de ser conocido.
+                status, _ = AgentStatus.objects.get_or_create(box=box,defaults={"seen_at": timezone.now(),"diagnostics": {},})
                 diagnostics = {"agent_version": status.diagnostics.get("agent_version")}
                 if status.diagnostics.get("smile_check_supported") is True:
                     diagnostics["smile_check_supported"] = True
                 diagnostics.update(p)
-
                 status.seen_at = timezone.now()
                 status.diagnostics = diagnostics
-
                 status.save(update_fields=["seen_at","diagnostics",])
                 if self.identity.managed:
                     AgentRegistration.objects.filter(pk=self.identity.registry_id).update(
@@ -276,6 +292,8 @@ async def agent_websocket(scope, receive, send):
             if time.monotonic() >= next_poll:
                 for command in await db(control.poll):
                     await emit("command", command)
+                for config in await db(control.poll_configs):
+                    await emit("config_sync", config)
                 next_poll = time.monotonic() + settings.CAPTURE_COMMAND_INTERVAL_SECONDS
             done, _ = await asyncio.wait([pending], timeout=max(0, next_poll - time.monotonic()))
             if not done:
