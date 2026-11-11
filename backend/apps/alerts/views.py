@@ -21,6 +21,15 @@ from .serializers import (
 )
 from .services import AlertsService
 
+from io import BytesIO
+
+from django.http import HttpResponse
+from django.utils import timezone as django_timezone
+from django.utils.dateparse import parse_datetime
+
+from openpyxl import Workbook
+from openpyxl.styles import Alignment, Font, PatternFill
+
 
 def get_service() -> AlertsService:
     return AlertsService(store=AlertsRepository())
@@ -83,6 +92,210 @@ class AlertListView(APIView):
             status=status.HTTP_200_OK,
         )
 
+class AlertExportView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        query_serializer = AlertQueryFilterSerializer(
+            data=request.query_params
+        )
+        query_serializer.is_valid(raise_exception=True)
+
+        data = query_serializer.validated_data
+
+        service = get_service()
+
+        alertas = []
+        offset = 0
+        limite = 100
+
+        try:
+            while True:
+                filters = AlertQueryFilters(
+                    q=data.get("q"),
+                    fecha_desde_utc=data.get("fecha_desde_utc"),
+                    fecha_hasta_utc=data.get("fecha_hasta_utc"),
+                    box=data.get("box"),
+                    estado_evaluacion=data.get("estado_evaluacion"),
+                    revisadas=data.get("revisadas"),
+                    limit=limite,
+                    offset=offset,
+                )
+
+                items, total = service.list_alerts(filters)
+
+                alertas.extend(items)
+
+                if not items or len(alertas) >= total:
+                    break
+
+                offset += len(items)
+
+        except PersistenceUnavailable:
+            return Response(
+                {
+                    "success": False,
+                    "error": {
+                        "code": "PERSISTENCE_UNAVAILABLE",
+                        "message": "Base de datos no disponible",
+                        "details": {},
+                    },
+                    "timestamp": ahora_utc_iso(),
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        if not alertas:
+            return HttpResponse(status=204)
+
+        datos = AlertaListItemSerializer(
+            alertas,
+            many=True,
+        ).data
+
+        libro = Workbook()
+        hoja = libro.active
+        hoja.title = "Alertas"
+
+        encabezados = [
+            "Alerta",
+            "Box",
+            "Tipo de riesgo",
+            "Nivel",
+            "Semáforo",
+            "Fecha",
+            "Hora",
+            "Estado",
+        ]
+
+        hoja.append(encabezados)
+
+        tipos = {
+            "riesgo_suicida": "Riesgo suicida",
+            "vulneracion_derechos": "Vulneración de derechos",
+        }
+
+        estados = {
+            "pendiente": "Pendiente",
+            "correcta": "Correcta",
+            "falso_positivo": "Falso positivo",
+            "neutro": "Neutro",
+        }
+
+        for alerta in datos:
+            fecha_valor = alerta.get("fecha_hora")
+            fecha_texto = ""
+            hora_texto = ""
+
+            if fecha_valor:
+                momento = parse_datetime(str(fecha_valor))
+
+                if momento is not None:
+                    if django_timezone.is_aware(momento):
+                        momento = django_timezone.localtime(momento)
+
+                    fecha_texto = momento.strftime("%d-%m-%Y")
+                    hora_texto = momento.strftime("%H:%M:%S")
+
+            tipo = alerta.get("tipo_riesgo") or ""
+
+            hoja.append(
+                [
+                    str(alerta.get("alerta_id") or ""),
+                    alerta.get("box") or "",
+                    tipos.get(
+                        tipo,
+                        tipo.replace("_", " ").capitalize()
+                    ),
+                    alerta.get("nivel_severidad"),
+                    alerta.get("semaforo") or "",
+                    fecha_texto,
+                    hora_texto,
+                    estados.get(
+                        alerta.get("estado_evaluacion"),
+                        alerta.get("estado_evaluacion") or "",
+                    ),
+                ]
+            )
+
+        # Estilo del encabezado igual al Excel de Bitácora
+        relleno_encabezado = PatternFill(
+            fill_type="solid",
+            fgColor="198754",
+        )
+
+        fuente_encabezado = Font(
+            color="FFFFFF",
+            bold=True,
+        )
+
+        for celda in hoja[1]:
+            celda.fill = relleno_encabezado
+            celda.font = fuente_encabezado
+            celda.alignment = Alignment(
+                horizontal="center",
+                vertical="center",
+            )
+
+        hoja.freeze_panes = "A2"
+        hoja.auto_filter.ref = hoja.dimensions
+
+        anchos = [
+            38,  # Alerta
+            14,  # Box
+            28,  # Tipo
+            12,  # Nivel
+            16,  # Semáforo
+            14,  # Fecha
+            14,  # Hora
+            20,  # Estado
+        ]
+
+        for indice, ancho in enumerate(anchos, start=1):
+            hoja.column_dimensions[
+                hoja.cell(
+                    row=1,
+                    column=indice,
+                ).column_letter
+            ].width = ancho
+
+        for fila in hoja.iter_rows(
+            min_row=2,
+            max_row=hoja.max_row,
+        ):
+            for celda in fila:
+                celda.alignment = Alignment(
+                    vertical="top",
+                    wrap_text=True,
+                )
+
+        salida = BytesIO()
+
+        libro.save(salida)
+        salida.seek(0)
+
+        fecha_nombre = django_timezone.localtime(
+            django_timezone.now()
+        ).strftime("%Y-%m-%d_%H-%M")
+
+        nombre_archivo = (
+            f"dashboard_alertas_{fecha_nombre}.xlsx"
+        )
+
+        response = HttpResponse(
+            salida.getvalue(),
+            content_type=(
+                "application/vnd.openxmlformats-officedocument."
+                "spreadsheetml.sheet"
+            ),
+        )
+
+        response["Content-Disposition"] = (
+            f'attachment; filename="{nombre_archivo}"'
+        )
+
+        return response
+    
 
 class AlertDetailView(APIView):
     permission_classes = [IsAuthenticated]

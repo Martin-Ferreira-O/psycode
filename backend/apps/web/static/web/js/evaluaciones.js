@@ -108,13 +108,25 @@ function renderizarEvaluaciones(evaluaciones, total) {
                     <small>${formatearHora(alerta.evaluacion?.fecha_hora)}</small>
                 </div>
             </td>
-            <td role="cell">
-                <button type="button" class="boton-ver-detalle boton-revisar">Ver detalle</button>
+            <td role="cell" class="celda-detalle-evaluacion">
+                <button
+                    type="button"
+                    class="boton-detalle-evaluacion"
+                    title="Ver detalle"
+                >
+                    <svg
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                        class="icono-detalle-evaluacion"
+                    >
+                        <path d="M9 6l6 6-6 6"></path>
+                    </svg>
+                </button>
             </td>
         `;
         const codigoAlerta = codigoAlertaVisible(alerta.alerta_id);
         fila.querySelector("strong").textContent = codigoAlerta;
-        const boton = fila.querySelector(".boton-ver-detalle");
+        const boton = fila.querySelector(".boton-detalle-evaluacion");
         boton.dataset.alerta = alerta.alerta_id;
         boton.setAttribute("aria-label", `Ver detalle de ${codigoAlerta}`);
         boton.addEventListener("click", () => abrirDetalle(alerta.alerta_id, boton));

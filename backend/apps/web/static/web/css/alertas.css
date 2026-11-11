@@ -724,3 +724,40 @@ body.modal-abierto {
         grid-template-columns: 1fr;
     }
 }
+
+@media (min-width: 951px) {
+
+    #modalDetalle.modal {
+        box-sizing: border-box;
+
+        padding:
+            24px
+            24px
+            24px
+            344px;
+    }
+
+    #modalDetalle .modal-contenido {
+        margin-left: auto;
+        margin-right: auto;
+    }
+}
+
+@media (max-width: 950px) {
+
+    #modalDetalle.modal {
+        padding: 24px;
+    }
+}
+
+@media (max-width: 700px) {
+
+    #modalDetalle.modal {
+        padding: 12px;
+    }
+
+    #modalDetalle .modal-contenido {
+        width: 100%;
+        max-width: 100%;
+    }
+}

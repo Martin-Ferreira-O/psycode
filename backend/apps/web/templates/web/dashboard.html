@@ -5,35 +5,50 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
     <title>Dashboard de alertas</title>
 
     <link rel="stylesheet" href="{% static 'web/css/styles.css' %}">
-    <link rel="stylesheet" href="{% static 'web/css/dashboard.css' %}?v=5">
-    <link rel="stylesheet" href="{% static 'web/css/alertas.css' %}?v=4">
+    <link rel="stylesheet" href="{% static 'web/css/dashboard.css' %}?v=8">
+    <link rel="stylesheet" href="{% static 'web/css/alertas.css' %}?v=5">
     <link rel="stylesheet" href="{% static 'web/css/estados.css' %}">
 </head>
 
 <body>
+
     <div class="aplicacion">
+
         {% include "web/components/sidebar.html" with seccion_activa="dashboard" %}
 
         <main class="contenido-dashboard">
+
             <header class="cabecera-dashboard">
+
                 <div>
                     <h1>Dashboard de alertas</h1>
+
                     <p class="subtitulo-dashboard">
                         Resumen general de alertas y actividad registrada.
                     </p>
                 </div>
 
                 {% include "web/components/usuario_sesion.html" %}
+
             </header>
 
             <section class="resumen-dashboard">
+
+
                 <div class="panel-indicadores">
+
                     <div class="titulo-bloque">
+
                         <div>
-                            <span class="titulo-bloque-icono" aria-hidden="true">
+
+                            <span
+                                class="titulo-bloque-icono"
+                                aria-hidden="true"
+                            >
                                 <svg viewBox="0 0 24 24">
                                     <path d="M4 19V9"></path>
                                     <path d="M10 19V5"></path>
@@ -44,8 +59,12 @@
 
                             <div>
                                 <h2>Indicadores principales</h2>
-                                <p>Resumen del estado actual de las alertas.</p>
+
+                                <p>
+                                    Resumen del estado actual de las alertas.
+                                </p>
                             </div>
+
                         </div>
 
                         <span
@@ -56,14 +75,21 @@
                         >
                             i
                         </span>
+
                     </div>
 
                     <div class="tarjetas-resumen">
+
+
                         <article
                             class="tarjeta-resumen tarjeta-total"
                             data-tooltip="Cantidad total de alertas registradas en el sistema."
                         >
-                            <div class="tarjeta-icono tarjeta-icono-total" aria-hidden="true">
+
+                            <div
+                                class="tarjeta-icono tarjeta-icono-total"
+                                aria-hidden="true"
+                            >
                                 <svg viewBox="0 0 24 24">
                                     <path d="M12 3 2.8 19h18.4L12 3Z"></path>
                                     <path d="M12 9v4"></path>
@@ -72,6 +98,7 @@
                             </div>
 
                             <div class="tarjeta-resumen-datos">
+
                                 <span class="resumen-etiqueta">
                                     Alertas registradas
                                 </span>
@@ -86,14 +113,20 @@
                                 <span class="resumen-descripcion">
                                     Total acumulado
                                 </span>
+
                             </div>
+
                         </article>
 
                         <article
                             class="tarjeta-resumen tarjeta-pendientes"
                             data-tooltip="Alertas que aún requieren revisión o evaluación."
                         >
-                            <div class="tarjeta-icono tarjeta-icono-pendientes" aria-hidden="true">
+
+                            <div
+                                class="tarjeta-icono tarjeta-icono-pendientes"
+                                aria-hidden="true"
+                            >
                                 <svg viewBox="0 0 24 24">
                                     <circle cx="12" cy="12" r="9"></circle>
                                     <path d="M12 7v5l3 2"></path>
@@ -101,6 +134,7 @@
                             </div>
 
                             <div class="tarjeta-resumen-datos">
+
                                 <span class="resumen-etiqueta">
                                     Pendientes
                                 </span>
@@ -115,14 +149,20 @@
                                 <span class="resumen-descripcion">
                                     Por revisar
                                 </span>
+
                             </div>
+
                         </article>
 
                         <article
                             class="tarjeta-resumen tarjeta-revisadas"
                             data-tooltip="Alertas que ya fueron revisadas por un profesional."
                         >
-                            <div class="tarjeta-icono tarjeta-icono-revisadas" aria-hidden="true">
+
+                            <div
+                                class="tarjeta-icono tarjeta-icono-revisadas"
+                                aria-hidden="true"
+                            >
                                 <svg viewBox="0 0 24 24">
                                     <circle cx="12" cy="12" r="9"></circle>
                                     <path d="m8 12 2.5 2.5L16 9"></path>
@@ -130,6 +170,7 @@
                             </div>
 
                             <div class="tarjeta-resumen-datos">
+
                                 <span class="resumen-etiqueta">
                                     Revisadas
                                 </span>
@@ -144,15 +185,23 @@
                                 <span class="resumen-descripcion">
                                     Evaluadas
                                 </span>
+
                             </div>
+
                         </article>
+
                     </div>
+
                 </div>
 
                 <article class="panel-grafico-dashboard">
+
                     <header class="cabecera-grafico-dashboard">
+
                         <div>
+
                             <div class="titulo-grafico-con-ayuda">
+
                                 <h2 id="tituloGrafico">
                                     Comportamiento mensual
                                 </h2>
@@ -165,12 +214,15 @@
                                 >
                                     i
                                 </span>
+
                             </div>
 
                             <p>
                                 Cantidad de alertas registradas por período.
                             </p>
+
                         </div>
+
                     </header>
 
                     <div
@@ -182,39 +234,99 @@
                             Cargando gráfico...
                         </div>
                     </div>
+
                 </article>
+
             </section>
 
-            <section id="historial-alertas" class="seccion-historial">
+            <section
+                id="historial-alertas"
+                class="seccion-historial"
+            >
+
                 <header class="cabecera-historial">
+
                     <div>
                         <h2>Historial de alertas</h2>
                     </div>
 
-                    <button
-                        type="button"
-                        id="botonActualizar"
-                        class="boton-principal"
-                    >
-                        Actualizar
-                    </button>
+                    <div class="acciones-dashboard">
+
+                        <button
+                            type="button"
+                            id="botonActualizar"
+                            class="boton-principal"
+                        >
+                            Actualizar
+                        </button>
+
+
+                        <button
+                            type="button"
+                            class="boton-exportar-excel"
+                            id="descargarExcelDashboard"
+                        >
+
+                            <svg
+                                viewBox="0 0 24 24"
+                                aria-hidden="true"
+                                class="icono-descarga-excel"
+                            >
+                                <path d="M12 3v12"></path>
+                                <path d="m7 10 5 5 5-5"></path>
+                                <path d="M5 21h14"></path>
+                            </svg>
+
+                            <span>
+                                Descargar Excel
+                            </span>
+
+                        </button>
+
+                    </div>
+
                 </header>
 
                 <div class="panel-filtros">
-                    <form id="formularioBusquedaAlertas" class="campo campo-busqueda" role="search" aria-label="Buscar alertas">
-                        <label for="buscar">Buscar</label>
+
+
+
+                    <form
+                        id="formularioBusquedaAlertas"
+                        class="campo campo-busqueda"
+                        role="search"
+                        aria-label="Buscar alertas"
+                    >
+
+                        <label for="buscar">
+                            Buscar
+                        </label>
+
                         <div class="entrada-busqueda-alertas">
+
                             <input
                                 type="search"
                                 id="buscar"
                                 placeholder="ID, box o tipo de riesgo"
                             >
-                            <button type="submit" class="boton-principal">Buscar</button>
+
+                            <button
+                                type="submit"
+                                class="boton-principal"
+                            >
+                                Buscar
+                            </button>
+
                         </div>
+
                     </form>
 
                     <div class="campo">
-                        <label for="filtroBox">Box</label>
+
+                        <label for="filtroBox">
+                            Box
+                        </label>
+
                         <select id="filtroBox">
                             <option value="">Todos</option>
                             <option value="box-3">Box 03</option>
@@ -223,34 +335,61 @@
                             <option value="box-6">Box 06</option>
                             <option value="box-7">Box 07</option>
                         </select>
+
                     </div>
 
                     <div class="campo">
-                        <label for="filtroEstado">Estado</label>
+
+                        <label for="filtroEstado">
+                            Estado
+                        </label>
+
                         <select id="filtroEstado">
                             <option value="">Todos</option>
-                            <option value="pendiente">Pendiente</option>
-                            <option value="__revisadas__">Revisadas</option>
-                            <option value="correcta">Correcta</option>
-                            <option value="falso_positivo">Falso positivo</option>
-                            <option value="neutro">Neutro</option>
+                            <option value="pendiente">
+                                Pendiente
+                            </option>
+                            <option value="__revisadas__">
+                                Revisadas
+                            </option>
+                            <option value="correcta">
+                                Correcta
+                            </option>
+                            <option value="falso_positivo">
+                                Falso positivo
+                            </option>
+                            <option value="neutro">
+                                Neutro
+                            </option>
                         </select>
+
                     </div>
 
+
                     <div class="campo">
-                        <label for="fechaDesde">Desde</label>
+
+                        <label for="fechaDesde">
+                            Desde
+                        </label>
+
                         <input
                             type="date"
                             id="fechaDesde"
                         >
+
                     </div>
 
                     <div class="campo">
-                        <label for="fechaHasta">Hasta</label>
+
+                        <label for="fechaHasta">
+                            Hasta
+                        </label>
+
                         <input
                             type="date"
                             id="fechaHasta"
                         >
+
                     </div>
 
                     <button
@@ -260,17 +399,25 @@
                     >
                         Limpiar
                     </button>
+
                 </div>
 
                 <section class="panel-alertas">
+
                     <div class="panel-cabecera">
+
                         <div>
-                            <h2>Alertas registradas</h2>
+
+                            <h2>
+                                Alertas registradas
+                            </h2>
 
                             <p id="resultadoTexto">
                                 Cargando alertas...
                             </p>
+
                         </div>
+
                     </div>
 
                     <div
@@ -278,19 +425,26 @@
                         class="estado-vacio"
                         hidden
                     >
-                        <strong>No se encontraron alertas</strong>
+
+                        <strong>
+                            No se encontraron alertas
+                        </strong>
 
                         <p>
                             Prueba modificando o limpiando los filtros.
                         </p>
+
                     </div>
 
                     <div
                         id="tablaContenedor"
                         class="tabla-contenedor"
                     >
+
                         <table class="tabla-alertas">
+
                             <thead>
+
                                 <tr>
                                     <th>Alerta</th>
                                     <th>Box</th>
@@ -301,19 +455,25 @@
                                     <th>Estado</th>
                                     <th>Acción</th>
                                 </tr>
+
                             </thead>
 
                             <tbody id="tablaAlertas"></tbody>
+
                         </table>
+
                     </div>
 
                     <footer
                         id="paginacion"
                         class="paginacion"
                     >
+
                         <span id="textoPaginacion"></span>
 
+
                         <div class="botones-paginacion">
+
                             <button
                                 type="button"
                                 id="paginaAnterior"
@@ -321,7 +481,9 @@
                                 Anterior
                             </button>
 
+
                             <div id="numerosPagina"></div>
+
 
                             <button
                                 type="button"
@@ -329,11 +491,17 @@
                             >
                                 Siguiente
                             </button>
+
                         </div>
+
                     </footer>
+
                 </section>
+
             </section>
+
         </main>
+
     </div>
 
     {% include "web/components/modal_detalle.html" with puede_evaluar=True %}
@@ -344,6 +512,7 @@
     <script src="{% static 'web/js/components.js' %}?v=5"></script>
     <script src="{% static 'web/js/utils.js' %}?v=2"></script>
     <script src="{% static 'web/js/alertas_detalle.js' %}?v=3"></script>
-    <script src="{% static 'web/js/dashboard.js' %}?v=9"></script>
+    <script src="{% static 'web/js/dashboard.js' %}?v=11"></script>
+
 </body>
 </html>
