@@ -1,6 +1,7 @@
 """Outbox SQL idempotente para bitácora Mongo; se conserva si Mongo cae."""
 from django.utils import timezone
 
+from backend.apps.alerts.audit import STORAGE_AUDIT_COUNTS, STORAGE_PROVIDER_AUDIT_COUNTS
 from backend.apps.alerts.repositories import AlertsRepository
 from backend.common.audit import AuditWriter
 from .models import StorageCleanupRun
@@ -8,7 +9,13 @@ from .models import StorageCleanupRun
 
 def flush_storage_audit(collection=None):
     sent = 0
-    for run in StorageCleanupRun.objects.filter(finished_at__isnull=False, audit_sent_at__isnull=True).order_by("started_at")[:100]:
+    counts = STORAGE_AUDIT_COUNTS + STORAGE_PROVIDER_AUDIT_COUNTS
+    pending = StorageCleanupRun.objects.filter(finished_at__isnull=False, audit_sent_at__isnull=True)
+    # Resolver las pasadas vacías en SQL, aun si MongoDB no está disponible.
+    pending.filter(source="automatic", outcome="success", error_code="", **dict.fromkeys(counts, 0)).update(
+        audit_sent_at=timezone.now(),
+    )
+    for run in pending.order_by("started_at")[:100]:
         event = {
             "event_id": str(run.pk), "timestamp": run.finished_at,
             "action": "storage.cleanup", "outcome": "success" if run.outcome == "success" else "failure",
@@ -19,7 +26,7 @@ def flush_storage_audit(collection=None):
             "error_code": run.error_code or ("STORAGE_DELETE_FAILED" if run.failures else None),
             "duration_ms": max(0, int((run.finished_at - run.started_at).total_seconds() * 1000)),
             "intentos": [],
-            "storage": {name: getattr(run, name) for name in ("source", "freed_bytes", "removed", "failures", "protected", "checkpoints", "provider_deleted", "provider_failures")},
+            "storage": {"source": run.source, **{name: getattr(run, name) for name in counts}},
         }
         AuditWriter.emit(event)
         try:

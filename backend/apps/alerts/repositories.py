@@ -7,7 +7,7 @@ import re
 
 from pymongo.errors import DuplicateKeyError, PyMongoError
 
-from .audit import AlertAudit
+from .audit import AlertAudit, STORAGE_AUDIT_COUNTS, STORAGE_PROVIDER_AUDIT_COUNTS
 from backend.common.errors import PersistenceUnavailable
 
 from .documents import alerta_a_documento, documento_a_alerta, evaluacion_a_documento
@@ -229,6 +229,15 @@ class AlertsRepository(AlertWritePort, AlertQueryPort):
         for field in ("alerta_id", "action", "outcome"):
             if filters.get(field) is not None:
                 query[field] = filters[field]
+        if query.get("action") in (None, "storage.cleanup"):
+            query["$nor"] = [{
+                "action": "storage.cleanup",
+                "outcome": "success",
+                "error_code": {"$in": [None, ""]},
+                "storage.source": "automatic",
+                **{f"storage.{name}": 0 for name in STORAGE_AUDIT_COUNTS},
+                **{f"storage.{name}": {"$in": [0, None]} for name in STORAGE_PROVIDER_AUDIT_COUNTS},
+            }]
         period = {}
         if filters.get("fecha_desde"):
             period["$gte"] = filters["fecha_desde"]
