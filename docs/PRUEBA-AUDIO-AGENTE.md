@@ -14,10 +14,14 @@ worker. Los resultados se consultan con la credencial individual del PC.
 Prefijo `/api/v1/internal/audio-tests/<uuid>`. Todas las solicitudes usan
 `Authorization: Agent <credencial>` por HTTPS.
 
-- `PUT` con JSON `scenario` (`neutral` o `alerta`) y `samples` (1 a 960 000).
+- `PUT` con JSON `scenario` (`neutral` o `alerta`) y `samples` (1 a 9 600 000).
   El UUID lo elige el cliente. Repetir el mismo inicio devuelve la prueba
-  existente con su fecha original. La autorización dura cinco minutos para
-  nuevas cargas.
+  existente con su fecha original. La autorización vence como mínimo cinco
+  minutos después del inicio y dos minutos después del final previsto.
+- `DELETE` cierra la recepción para ese PC y devuelve el estado. Es
+  idempotente. Los fragmentos ya aceptados siguen en análisis y los
+  recibos previos se pueden volver a consultar mediante reintentos. El
+  reproductor abre otra prueba cuando salta a un punto distinto.
 - `POST /fragments` con el multipart y recibo de audio v2. El `session_id`
   es el UUID de la prueba, `captured_at` es `started_at` más el offset del
   fragmento y el PCM es mono de 16 bits a 16 kHz. Enviar 160 000 muestras por
@@ -29,8 +33,8 @@ Prefijo `/api/v1/internal/audio-tests/<uuid>`. Todas las solicitudes usan
   `severity`, `start` y `end`. Los offsets de alerta se expresan en
   segundos desde el comienzo del clip.
 
-Los estados son `receiving`, `analyzing`, `completed`, `failed` y
-`expired`. El escenario expresa el resultado esperado y no determina la
+Los estados son `receiving`, `analyzing`, `completed`, `failed`,
+`expired` y `stopped`. El escenario expresa el resultado esperado y no determina la
 clasificación. Para esta ruta se evalúan las voces identificadas del clip
 como papeles de paciente simulado. Las señales del análisis se devuelven
 como alertas de prueba sin textos, sin escrituras en alertas clínicas y sin

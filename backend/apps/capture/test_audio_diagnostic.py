@@ -130,4 +130,24 @@ class AudioDiagnosticTests(TestCase):
             processor.analysis.alerts.register_alert.assert_not_called()
         self.assertEqual(provider_calls, ["POST", "GET", "GET", "DELETE"] * 2)
         self.assertEqual(len(sent_to_jev), 2)
+
+    def test_ten_minute_test_can_stop_and_restart_at_another_position(self):
+        url, data = self.start("alerta", samples=16000 * 600)
+        self.assertEqual(data["expected"], 67)
+        started = timezone.datetime.fromisoformat(data["started_at"])
+        other = APIClient()
+        self.new_agent(other)
+        self.assertEqual(other.delete(url).status_code, 404)
+        with patch("django.utils.timezone.now", return_value=started + timedelta(minutes=6)):
+            first = self.upload(url + "/fragments", data, end=160000)
+            self.assertEqual(first.status_code, 201, first.json())
+            stopped = self.client.delete(url).json()["data"]
+            self.assertEqual((stopped["state"], stopped["accepted"]), ("stopped", 1))
+            self.assertEqual(self.client.delete(url).json()["data"], stopped)
+            self.assertEqual(self.upload(url + "/fragments", data, end=160000).status_code, 200)
+            late = self.upload(url + "/fragments", data, seq=1, offset=144000, end=304000, new=160000)
+            self.assertEqual(late.json()["error"]["code"], "AUDIO_TEST_EXPIRED")
+            _, resumed = self.start("alerta", samples=16000 * 120)
+            self.assertNotEqual(resumed["test_id"], data["test_id"])
+        self.assertEqual(FragmentJob.objects.count(), 1)
         self.assertFalse(AgentCommand.objects.exists())

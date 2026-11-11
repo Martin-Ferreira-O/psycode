@@ -18,6 +18,8 @@ CHUNK = RATE * 10
 OVERLAP = RATE
 STEP = CHUNK - OVERLAP
 SCENARIOS = {"neutral", "alerta"}
+MAX_SAMPLES = RATE * 600
+STOPPED = "AUDIO_TEST_STOPPED"
 
 
 def load_test(test_id, agent, *, lock=False):
@@ -54,7 +56,9 @@ def status_data(run, now):
                 .values("state", "result", "checkpoint"))
     completed = [job for job in jobs if job["state"] == FragmentJob.State.COMPLETED]
     alerts = [alert for job in completed for alert in job["checkpoint"].get("test_alerts", [])]
-    if any(job["state"] in {FragmentJob.State.FAILED, FragmentJob.State.REVIEW} for job in jobs):
+    if session.capture_end_reason == STOPPED:
+        state = "stopped"
+    elif any(job["state"] in {FragmentJob.State.FAILED, FragmentJob.State.REVIEW} for job in jobs):
         state = "failed"
     elif len(completed) == expected:
         state = "completed"
@@ -82,13 +86,26 @@ class AudioTestView(APIView):
         return success_response(status_data(load_test(test_id, request.user), timezone.now()), "Estado de prueba")
 
     @transaction.atomic
+    def delete(self, request, test_id):
+        run = load_test(test_id, request.user, lock=True)
+        now = timezone.now()
+        state = status_data(run, now)
+        if state["state"] in {"receiving", "analyzing"}:
+            run.expires_at = now
+            run.save(update_fields=["expires_at"])
+            run.session.capture_end_reason = STOPPED
+            run.session.save(update_fields=["capture_end_reason"])
+            state["state"] = "stopped"
+        return success_response(state, "Recepción de prueba cerrada")
+
+    @transaction.atomic
     def put(self, request, test_id):
         data = request.data
         if not isinstance(data, dict) or set(data) != {"scenario", "samples"}:
             raise FragmentError("VALIDATION_ERROR", 400)
         scenario, samples = data["scenario"], data["samples"]
         if (not isinstance(scenario, str) or scenario not in SCENARIOS
-                or type(samples) is not int or not 0 < samples <= RATE * 60):
+                or type(samples) is not int or not 0 < samples <= MAX_SAMPLES):
             raise FragmentError("VALIDATION_ERROR", 400)
         agent = AgentRegistration.objects.select_for_update().get(pk=request.user.registry_id)
         now = timezone.now()
@@ -99,8 +116,7 @@ class AudioTestView(APIView):
             return success_response(status_data(run, now), "Prueba autorizada")
         if CaptureSession.objects.filter(pk=test_id).exists():
             raise FragmentError("AUDIO_TEST_CONFLICT", 409)
-        # Solo una carga simultánea por agente. Una prueba enviada puede seguir
-        # procesándose mientras el operador vuelve a usar el asistente.
+        # Cerrar la recepción habilita otro tramo mientras se analiza lo aceptado.
         for previous in AudioTest.objects.filter(agent=agent, expires_at__gt=now).select_related("session"):
             if status_data(previous, now)["state"] in {"receiving", "analyzing"}:
                 raise FragmentError("AUDIO_TEST_ALREADY_RUNNING", 409)
@@ -113,5 +129,5 @@ class AudioTestView(APIView):
             audio_profile={"sample_rate": RATE, "chunk_samples": CHUNK, "overlap_samples": OVERLAP},
         )
         run = AudioTest.objects.create(session=session, agent=agent, scenario=scenario, samples=samples,
-                                       expires_at=now + timedelta(minutes=5))
+                                       expires_at=max(now + timedelta(minutes=5), end + timedelta(minutes=2)))
         return success_response(status_data(run, now), "Prueba autorizada", status=201)
