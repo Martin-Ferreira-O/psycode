@@ -7,6 +7,7 @@ from rest_framework import serializers
 from .domain import Semaforo
 
 ZONA_SANTIAGO = zoneinfo.ZoneInfo("America/Santiago")
+MAX_MONGO_OFFSET = 2**63 - 1
 
 
 class UTCDateTimeField(serializers.DateTimeField):
@@ -36,7 +37,7 @@ class AlertQueryFilterSerializer(serializers.Serializer):
     )
     revisadas = StrictQueryBooleanField(required=False, default=None, allow_null=True)
     limit = serializers.IntegerField(required=False, default=50, min_value=1, max_value=100)
-    offset = serializers.IntegerField(required=False, default=0, min_value=0)
+    offset = serializers.IntegerField(required=False, default=0, min_value=0, max_value=MAX_MONGO_OFFSET)
 
     def to_internal_value(self, data):
         errors = {}
