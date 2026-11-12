@@ -37,5 +37,20 @@ Los estados son `receiving`, `analyzing`, `completed`, `failed`,
 `expired` y `stopped`. El escenario expresa el resultado esperado y no determina la
 clasificación. Para esta ruta se evalúan las voces identificadas del clip
 como papeles de paciente simulado. Las señales del análisis se devuelven
-como alertas de prueba sin textos, sin escrituras en alertas clínicas y sin
-notificaciones.
+al asistente como alertas de prueba sin textos.
+
+## Mostrar la detección en la demo
+
+1. En el agente, abre **Probar conexión con audio** y elige **Con alerta esperada**.
+2. En la web, abre **Registro de evaluaciones** y pulsa **Actualizar** tras la
+   detección. La fila aparece como **Alerta de prueba** y **Pendiente**. Puedes
+   guardar una evaluación desde su detalle.
+3. Si el servidor tiene `NOTIFICATIONS_ENABLED=true` y el correo configurado,
+   usa los destinatarios de **Configuración operativa** y envía un mensaje con
+   el asunto **[PRUEBA] Alerta simulada**. El cuerpo indica que la detección es
+   simulada y que no requiere intervención clínica.
+
+El historial y los indicadores clínicos del Dashboard excluyen las alertas de
+prueba. El clip **Sin alerta esperada** solo genera un registro o correo si el análisis
+detecta una señal. Para mostrar el flujo completo, inicia una nueva prueba
+después de actualizar la web y el worker de fragmentos.

@@ -52,7 +52,8 @@ class AlertsService:
             from backend.apps.notifications.domain import NotificationPayload
             try:
                 notification = self.notifier.notify_alert(stored.alerta_id, NotificationPayload(
-                    str(stored.semaforo), "riesgo_suicida", stored.box, stored.fecha_hora.isoformat()))
+                    str(stored.semaforo), "riesgo_suicida", stored.box, stored.fecha_hora.isoformat(),
+                    es_prueba=stored.es_prueba))
             except Exception:
                 if before_notify is not None:
                     raise

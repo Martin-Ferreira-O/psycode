@@ -2,9 +2,11 @@ from datetime import timedelta
 import hashlib
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 from uuid import uuid4
 
+from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.utils import timezone
@@ -13,6 +15,10 @@ from rest_framework.test import APIClient
 
 from backend.apps.analysis.providers.settings import Settings
 from backend.apps.analysis.tests.test_integration import answer
+from backend.apps.alerts.repositories import AlertsRepository
+from backend.apps.alerts.services import AlertsService
+from backend.apps.alerts.tests.test_persistence import FakeDatabase
+from backend.apps.operational.models import OperationalConfiguration
 from backend.config.composition import fragment_job_processor
 from .models import AgentCommand, AgentRegistration, FragmentJob
 from .test_ingestion import wav_bytes
@@ -77,7 +83,13 @@ class AudioDiagnosticTests(TestCase):
         self.assertFalse(AgentCommand.objects.exists())
         self.assertFalse(FragmentJob.objects.exists())
 
-    def test_clip_goes_through_transcription_classifier_and_test_alerts(self):
+    @override_settings(NOTIFICATIONS_ENABLED=True, EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_clip_persists_and_emails_only_detected_test_alerts(self):
+        config = OperationalConfiguration.load()
+        config.primary_email = "demo@example.test"
+        config.save()
+        db = FakeDatabase()
+        store = AlertsRepository(db)
         settings = Settings(speechmatics_key="test-speech-key", jev_key="test-jev-key", external_enabled=True)
         sent_to_jev, provider_calls = [], []
         text = ""
@@ -104,8 +116,7 @@ class AudioDiagnosticTests(TestCase):
               httpx.Client(transport=httpx.MockTransport(jev)) as jev_client):
             processor = fragment_job_processor(settings=settings, directory=self.root,
                                                speechmatics_http=speech_client, jev_http=jev_client,
-                                               alert_store=Mock(), audit=Mock())
-            processor.analysis.alerts = Mock()
+                                               alert_store=store, audit=Mock())
             for scenario, text, signal, expected in [
                 ("neutral", "Me gusta tomar café por la mañana", None, 0),
                 ("alerta", "Ojalá no despertar", 1, 1),
@@ -119,6 +130,12 @@ class AudioDiagnosticTests(TestCase):
                     self.assertEqual(retry.status_code, 200, retry.json())
                     self.assertEqual(first.json()["data"], retry.json()["data"])
                     self.assertEqual(self.client.get(url).json()["data"]["state"], "analyzing")
+                    if expected:
+                        # El worker perdió la confirmación final después de enviar el correo.
+                        with patch.object(processor, "_finish_completed", return_value=None):
+                            self.assertIsNone(processor.process_next())
+                        self.assertEqual(len(mail.outbox), 1)
+                        processor.recover_stuck(now=timezone.now() + timedelta(minutes=6))
                     self.assertEqual(processor.process_next(), FragmentJob.State.COMPLETED)
                     finished = self.client.get(url).json()["data"]
                     self.assertEqual(finished["state"], "completed")
@@ -127,7 +144,33 @@ class AudioDiagnosticTests(TestCase):
                     self.assertEqual(finished["indeterminate"], 0)
                     self.assertEqual(len(finished["alerts"]), expected)
                     self.assertNotIn(text, str(finished))
-            processor.analysis.alerts.register_alert.assert_not_called()
+                    self.assertEqual(len(db["alerts"].docs), expected)
+                    self.assertEqual(len(mail.outbox), expected)
+                    self.assertIsNone(processor.process_next())
+                    self.assertEqual(len(mail.outbox), expected)
+                    if expected:
+                        alert_id = finished["alerts"][0]["id"]
+                        self.assertEqual(store.get_alert(alert_id).sesion_id, data["test_id"])
+                        self.assertIsNone(store.get_alert(alert_id).descripcion)
+                        message = mail.outbox[0]
+                        self.assertEqual(message.to, ["demo@example.test"])
+                        self.assertTrue(message.subject.startswith("[PRUEBA]"))
+                        for body in (message.body, message.alternatives[0].content):
+                            self.assertIn("ALERTA DE PRUEBA", body)
+                            self.assertIn("No requiere intervención clínica.", body)
+                            self.assertNotIn(text, body)
+                        browser = APIClient()
+                        browser.force_authenticate(user=SimpleNamespace(
+                            is_authenticated=True, pk=uuid4(), username="supervisor-sintetico",
+                        ))
+                        detail = "/api/v1/alerts/" + alert_id
+                        with patch("backend.apps.alerts.views.get_service", return_value=AlertsService(store)):
+                            self.assertIs(browser.get(detail).json()["data"]["es_prueba"], True)
+                            response = browser.post(detail + "/evaluacion", {"evaluacion": "correcta"}, format="json")
+                            self.assertEqual(response.status_code, 201, response.json())
+                            reviewed = browser.get(detail).json()["data"]
+                            self.assertEqual(reviewed["estado_evaluacion"], "correcta")
+                            self.assertIs(reviewed["es_prueba"], True)
         self.assertEqual(provider_calls, ["POST", "GET", "GET", "DELETE"] * 2)
         self.assertEqual(len(sent_to_jev), 2)
 

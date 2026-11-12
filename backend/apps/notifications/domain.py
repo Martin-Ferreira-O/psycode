@@ -21,6 +21,7 @@ class NotificationPayload:
     tipo_riesgo: str
     box: str
     fecha_hora: str
+    es_prueba: bool = False
 
     def __post_init__(self):
         if not self.box or not self.tipo_riesgo:
@@ -67,24 +68,38 @@ class NotificationPayload:
         return instante.strftime("%d/%m/%Y"), instante.strftime("%H:%M:%S")
 
     def formatear_asunto_correo(self) -> str:
+        if self.es_prueba:
+            return f"[PRUEBA] Alerta simulada - {self.box_correo}"
         return f"{self.circulo_riesgo} [RIESGO {self.nivel_normalizado}] Alerta del sistema - {self.box_correo}"
+
+    @property
+    def titulo_correo(self) -> str:
+        return "ALERTA DE PRUEBA" if self.es_prueba else "ALERTA DEL SISTEMA"
+
+    @property
+    def mensaje_correo(self) -> str:
+        if self.es_prueba:
+            return "Detección generada con audio simulado. No requiere intervención clínica."
+        return "Se requiere revisión profesional."
 
     def formatear_cuerpo_correo(self) -> str:
         fecha, hora = self.fecha_y_hora_correo()
         linea_fecha = f"Fecha: {fecha}\n" if fecha else ""
         return (
-            "ALERTA DEL SISTEMA\n\n"
+            f"{self.titulo_correo}\n\n"
             f"Box: {self.box_correo}\n"
             f"Tipo: {self.tipo_riesgo_correo}\n"
             f"Nivel: {self.indicador_visual}\n"
             f"{linea_fecha}Hora: {hora}\n\n"
-            "Se requiere revisión profesional.\n\n"
+            f"{self.mensaje_correo}\n\n"
             "Sin datos personales del paciente"
         )
 
     def formatear_html_correo(self) -> str:
         fecha, hora = self.fecha_y_hora_correo()
         context = {
+            "titulo": self.titulo_correo,
+            "mensaje": self.mensaje_correo,
             "box": self.box_correo,
             "tipo_riesgo": self.tipo_riesgo_correo,
             "indicador_visual": self.indicador_visual,
@@ -111,4 +126,3 @@ class NotificationResult:
     intentos: List[AttemptResult] = field(default_factory=list)
     motivo_omision: Optional[str] = None
     estado: str = "OMITIDA"
-    

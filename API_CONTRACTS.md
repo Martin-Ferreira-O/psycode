@@ -573,6 +573,7 @@ SCRUM-32, 33, 34, 37, 39 y 40. Todas requieren autenticación. No hay creación,
 | Campo de alerta | Tipo | Presencia / regla |
 |---|---|---|
 | `alerta_id` | UUID | Listado y detalle; único e inmutable |
+| `es_prueba` | boolean | Listado y detalle; derivado del origen de la alerta de prueba de audio |
 | `box` | string | Listado y detalle; 1–64 caracteres |
 | `tipo_riesgo` | string | Listado y detalle; 1–100; sin catálogo inventado |
 | `nivel_severidad` | integer | Listado y detalle; solo 1, 2 o 3; no booleano |
@@ -580,7 +581,7 @@ SCRUM-32, 33, 34, 37, 39 y 40. Todas requieren autenticación. No hay creación,
 | `fecha_hora` | fecha/hora UTC | Listado y detalle; detección, no evaluación |
 | `estado_evaluacion` | enum | Listado y detalle; pendiente, correcta, falso_positivo, neutro |
 | `evaluacion` | Evaluation o null | Listado y detalle; null si pendiente |
-| `sesion_id` | UUID | Solo detalle; referencia de sesión clínica, no sesión JWT |
+| `sesion_id` | UUID | Solo detalle; referencia de sesión de captura o prueba de audio |
 | `descripcion` | string o null | Solo detalle; fragmento relevante de transcripción asociado a la alerta; máximo 500 caracteres; se normalizan espacios y Unicode; ausente o vacío se normaliza a null | 
 | `trazabilidad` | objeto | Solo detalle: registrada_en, actualizada_en (UTC), origen (string 1–100) |
 
@@ -609,6 +610,7 @@ Total cuenta coincidencias antes de paginar. Orden fijo: fecha_hora descendente,
 | `box` | string 1–64; omitido | Coincidencia exacta, sensible a mayúsculas |
 | `estado_evaluacion` | enum de estado; omitido | Coincidencia exacta |
 | `revisadas` | true o false; omitido | true: distinto de pendiente; false: pendiente |
+| `registro_evaluaciones` | true o false; false | true: alertas revisadas y alertas de prueba en cualquier estado. false: solo alertas fuera de pruebas. Solo para el listado, no para la exportación del Dashboard. |
 | `limit` | integer, 50 | Entre 1 y 100 |
 | `offset` | integer, 0 | Entre 0 y 9223372036854775807 |
 
@@ -630,6 +632,7 @@ Respuesta 200:
     "items": [
       {
         "alerta_id": "11111111-1111-4111-8111-111111111111",
+        "es_prueba": false,
         "box": "box-3",
         "tipo_riesgo": "riesgo_suicida",
         "nivel_severidad": 2,
@@ -663,6 +666,7 @@ Sin parámetros ni cuerpo. Ejemplo pendiente, respuesta 200:
   "success": true,
   "data": {
     "alerta_id": "11111111-1111-4111-8111-111111111111",
+    "es_prueba": false,
     "box": "box-3",
     "tipo_riesgo": "riesgo_suicida",
     "nivel_severidad": 2,

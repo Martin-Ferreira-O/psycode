@@ -32,7 +32,7 @@ Los repositorios devuelven DTO, nunca cursores. La evaluación incrustada incluy
 
 `register_alert` es una interfaz interna para datos ya clasificados; solo acepta niveles 1–3, no clasifica voz ni genera diagnósticos. Los resultados NULO/sin riesgo se omiten antes de registrarlos. Persiste antes de invocar `AlertNotifier`. Un UUID duplicado produce conflicto y no dispara un nuevo envío.
 
-Dashboard consume `AlertQueryPort`. El registro frontend de evaluaciones usa listado con `revisadas=true` y el objeto `evaluacion` incluido, evitando una consulta por fila.
+Dashboard consume `AlertQueryPort` y excluye alertas de prueba. El registro frontend usa `registro_evaluaciones=true` para listar las alertas revisadas y las pruebas de audio, incluidas las pendientes. Cada fila incluye `es_prueba` y el objeto `evaluacion` cuando existe.
 
 Pruebas actuales en [tests](tests/README.md): mapeo, duplicados, evaluación atómica, variedad del seed y conexión fallida. La integración contra MongoDB real se activa con `PSYCODE_TEST_MONGODB_URI`. Filtros HTTP y página quedan para SCRUM-33.
 

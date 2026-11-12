@@ -18,6 +18,7 @@ class AlertQueryFilters:
     revisadas: Optional[bool] = None
     limit: int = 50
     offset: int = 0
+    registro_evaluaciones: bool = False
 
 
 class AlertWritePort(ABC):

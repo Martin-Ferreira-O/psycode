@@ -6,6 +6,7 @@ import re
 from threading import Lock
 from uuid import NAMESPACE_URL, uuid4, uuid5
 
+from backend.apps.alerts.domain import ORIGEN_PRUEBA_AUDIO
 from backend.apps.alerts.exceptions import AlertAlreadyExists
 from backend.common.errors import PersistenceUnavailable
 from .domain import AnalysisContextLost, AnalysisResult, AnalysisState, Fragment, FragmentRejected, JevDecision, Signal
@@ -231,7 +232,8 @@ class AnalysisService:
             raise FragmentRejected("Resultado no corresponde al fragmento")
         if result.state != AnalysisState.SIGNAL or result.error_codes:
             return
-        delivery = checkpoint.data.setdefault("delivery", {}) if checkpoint is not None and not fragment.audio_test else {}
+        delivery = checkpoint.data.setdefault("delivery", {}) if checkpoint is not None else {}
+        test_alerts = []
         for signal in result.signals:
             evidence = self.evidence.setdefault(fragment.session_id, [])
             excerpt = " ".join(signal.excerpt.casefold().split())
@@ -241,14 +243,6 @@ class AnalysisService:
                 continue
             ident = str(uuid5(NAMESPACE_URL, f"psycode:1.0:{fragment.session_id}:{fragment.sequence}:"
                              f"{signal.start}:{signal.end}:{signal.category_id}"))
-            if fragment.audio_test:
-                if checkpoint is not None:
-                    checkpoint.data.setdefault("test_alerts", []).append({
-                        "id": ident, "category": signal.category_id, "severity": signal.severity,
-                        "start": signal.start, "end": signal.end,
-                    })
-                evidence.append((signal.category_id, excerpt, signal.start, signal.end))
-                continue
             def before_notify(alert_id):
                 if delivery.get(alert_id) == "sending":
                     if self.alerts.store.has_alert_event(alert_id, "notifications.result"):
@@ -264,8 +258,10 @@ class AnalysisService:
                     self.alerts.register_alert(
                         alerta_id=ident, box=fragment.box, tipo_riesgo="riesgo_suicida",
                         nivel_severidad=signal.severity, fecha_hora=fragment.captured_at,
-                        sesion_id=fragment.session_id, origen="analysis.speechmatics-jev/1.0",
-                        descripcion=" ".join(signal.excerpt.split())[:500], **options)
+                        sesion_id=fragment.session_id,
+                        origen=ORIGEN_PRUEBA_AUDIO if fragment.audio_test else "analysis.speechmatics-jev/1.0",
+                        descripcion=None if fragment.audio_test else " ".join(signal.excerpt.split())[:500],
+                        **options)
                     if checkpoint is not None:
                         delivery[ident] = "done"
                         checkpoint.save()
@@ -275,6 +271,13 @@ class AnalysisService:
                 self.audit.failure("ALERT_PERSISTENCE_FAILED", alerta_id=ident,
                                    sesion_id=fragment.session_id, sequence=fragment.sequence)
                 raise
-            if fragment.new_audio_start_sample is not None:
+            if fragment.audio_test:
+                test_alerts.append({
+                    "id": ident, "category": signal.category_id, "severity": signal.severity,
+                    "start": signal.start, "end": signal.end,
+                })
+            if fragment.audio_test or fragment.new_audio_start_sample is not None:
                 evidence.append((signal.category_id, excerpt, signal.start, signal.end))
                 evidence[:] = [e for e in evidence if e[3] >= signal.end - 60][-256:]
+        if fragment.audio_test and checkpoint is not None:
+            checkpoint.data["test_alerts"] = test_alerts

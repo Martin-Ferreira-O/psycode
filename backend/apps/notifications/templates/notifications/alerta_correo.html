@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Alerta del sistema</title>
+  <title>{{ titulo }}</title>
   <style>
     .riesgo-bajo .indicador-riesgo { background-color: #16a34a; }
     .riesgo-medio .indicador-riesgo { background-color: #d97706; }
@@ -28,7 +28,7 @@
             <div class="indicador-riesgo" style="width: 46px; height: 46px; border-radius: 50%; color: #ffffff; font-size: 26px; font-weight: 900; line-height: 46px; text-align: center;">!</div>
           </td>
           <td style="vertical-align: top;">
-            <h2 style="margin: 0 0 10px 0; font-size: 17px; font-weight: 800; color: #0f172a; letter-spacing: 0.5px;">ALERTA DEL SISTEMA</h2>
+            <h2 style="margin: 0 0 10px 0; font-size: 17px; font-weight: 800; color: #0f172a; letter-spacing: 0.5px;">{{ titulo }}</h2>
             <div style="font-size: 14px; color: #1e293b; line-height: 1.6;">
               <div><strong>Box:</strong> {{ box }}</div>
               <div><strong>Tipo:</strong> {{ tipo_riesgo }}</div>
@@ -38,7 +38,7 @@
               {% endif %}
               <div><strong>Hora:</strong> {{ hora }}</div>
             </div>
-            <p style="margin: 12px 0 0 0; font-size: 13px; color: #475569;">Se requiere revisión profesional.</p>
+            <p style="margin: 12px 0 0 0; font-size: 13px; color: #475569;">{{ mensaje }}</p>
           </td>
         </tr>
       </table>
