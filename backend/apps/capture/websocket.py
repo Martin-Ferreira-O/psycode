@@ -7,7 +7,7 @@ from datetime import datetime
 from uuid import UUID, uuid4
 from asgiref.sync import sync_to_async
 from django.conf import settings
-from django.db import close_old_connections, transaction
+from django.db import OperationalError, close_old_connections, connections, transaction
 from django.utils import timezone
 from rest_framework.exceptions import AuthenticationFailed
 from .authentication import (authenticate_agent_header,ensure_agent_identity_current,)
@@ -27,6 +27,14 @@ from backend.apps.agenda.collector_check import CAPABILITY as SMILE_CHECK_CAPABI
 
 
 CONFIG_CAPABILITY = "agent.config.v1"
+YIELD_REPLACED_CAPABILITY = "control.yield-replaced.v1"
+MAX_COMMAND_BATCH = 16
+SEND_TIMEOUT = 5
+
+
+def lease_ttl():
+    return max(30, settings.CAPTURE_INACTIVITY_TIMEOUT_SECONDS + SEND_TIMEOUT)
+
 
 
 def serial(value):
@@ -44,11 +52,12 @@ def database_call(fn, *args):
     try:
         return fn(*args)
     finally:
-        close_old_connections()
+        # Esta llamada puede ejecutarse en cualquier hilo del pool.
+        connections.close_all()
 
 
 async def db(fn, *args):
-    return await sync_to_async(database_call, thread_sensitive=True)(fn, *args)
+    return await sync_to_async(database_call, thread_sensitive=False)(fn, *args)
 
 
 class RemoteControl:
@@ -56,6 +65,7 @@ class RemoteControl:
         self.identity, self.owner = identity, owner
         self.name = "control:" + identity.box
         self.service = CaptureSessionService()
+        self.yield_replaced = False
         self.chunk_config_supported = False
         self.chunk_config_v2_supported = False
 
@@ -76,8 +86,8 @@ class RemoteControl:
                 if agent.control_owner:
                     reconcile_connection(agent)
             ensure_agent_identity_current(self.identity)
-            acquired = leases.acquire(self.name, self.owner, replace=True)
-            if self.identity.managed:
+            acquired = leases.acquire(self.name, self.owner, ttl=lease_ttl(), replace=not self.yield_replaced)
+            if acquired and self.identity.managed:
                 AgentRegistration.objects.filter(pk=self.identity.registry_id).update(control_owner=self.owner)
             return acquired
 
@@ -127,18 +137,16 @@ class RemoteControl:
         with transaction.atomic():
             self._lock_identity()
             self._lock_lease()
-            leases.acquire(self.name, self.owner)
             configs = AgentConfiguration.objects.filter(
                 agent_id=self.identity.registry_id,
                 state=ConfigurationState.PENDING
-            ).order_by('version')
+            ).order_by('version')[:MAX_COMMAND_BATCH]
             return [{"config_id": str(c.config_id), "version": c.version, "desired_config": c.desired_config} for c in configs]
 
     def dispatch(self, message):
         with transaction.atomic():
             self._lock_identity()
             self._lock_lease()
-            leases.acquire(self.name, self.owner)
             box, p, kind = self.identity.box, message["payload"], message["type"]
             if "box" in p and p["box"] != box:
                 raise ValueError("BOX_FORBIDDEN")
@@ -160,9 +168,13 @@ class RemoteControl:
                 return "config_receipt", {"config_id": str(cid), "state": result.state}
 
             if kind == "sync":
-                sessions = CaptureSession.objects.filter(box=box, state__in=OPEN_STATES)
+                commands = self.commands()
+                sessions = CaptureSession.objects.filter(box=box, state__in=OPEN_STATES,
+                    actual_end__isnull=True).order_by("authorized_at", "pk")[:MAX_COMMAND_BATCH]
+                leases.acquire(self.name, self.owner, ttl=lease_ttl())
+                register_server_reconnect(self.identity)
                 return "state", {"sessions": [payload(_snapshot(s)) for s in sessions],
-                                 "commands": self.commands()}
+                                 "commands": commands}
             if kind == "command_ack":
                 required = {"command_id", "session_id", "success", "occurred_at"}
                 if not required <= p.keys() or p.keys() - required - {"last_sequence", "error_code"}:
@@ -214,18 +226,15 @@ class RemoteControl:
                     AgentRegistration.objects.filter(pk=self.identity.registry_id).update(
                         last_seen_at=status.seen_at, diagnostics=diagnostics,
                     )
+                leases.acquire(self.name, self.owner, ttl=lease_ttl())
+                register_server_reconnect(self.identity)
                 return "state", {"status_persisted": True}
             raise ValueError("INVALID_MESSAGE")
 
     def command_payload(self, command):
         data = payload(command)
-        session = CaptureSession.objects.get(pk=command.session_id)
-        if (command.kind == "inicio" and session.capture_chunk_negotiated is True
-                and (not self.chunk_config_supported
-                     or (chunk_config.overlap(session) == 0 and not self.chunk_config_v2_supported))):
-            raise ValueError("CAPABILITIES_CHANGED")
-        if (not self.chunk_config_supported or session.capture_chunk_negotiated is not True
-                or command.kind != "inicio" or command.audio_chunk_duration is None):
+        if (not self.chunk_config_supported or command.kind != "inicio"
+                or command.audio_chunk_duration is None):
             data.pop("audio_chunk_duration", None)
         if command.kind != "inicio" or command.audio_chunk_overlap is None:
             data.pop("audio_chunk_overlap", None)
@@ -234,19 +243,57 @@ class RemoteControl:
     def commands(self):
         return [self.command_payload(c) for c in self.service.commands(
             self.identity.box, chunk_config_supported=self.chunk_config_supported,
-            chunk_config_v2_supported=self.chunk_config_v2_supported)]
+            chunk_config_v2_supported=self.chunk_config_v2_supported,
+            limit=MAX_COMMAND_BATCH, redelivery_seconds=15)]
 
     def poll(self):
+        # Un box inactivo no toma el lock de escritura de SQLite cada segundo.
+        ensure_agent_identity_current(self.identity)
+        if not leases.owned(self.name, self.owner):
+            raise ValueError("CONNECTION_REPLACED")
+        if not CaptureSession.objects.filter(box=self.identity.box, state__in=OPEN_STATES,
+                                             actual_end__isnull=True).exists():
+            pending_stop = AgentCommand.objects.filter(session__box=self.identity.box,
+                session__actual_end__isnull=True, kind="detencion", cancelled_at=None).exclude(succeeded=True)
+            if not pending_stop.exists():
+                return []
         with transaction.atomic():
             self._lock_identity()
             self._lock_lease()
-            leases.acquire(self.name, self.owner)
             return self.commands()
+
+    def still_current(self, command):
+        ensure_agent_identity_current(self.identity)
+        if not leases.owned(self.name, self.owner):
+            raise ValueError("CONNECTION_REPLACED")
+        candidates = AgentCommand.objects.filter(pk=command["command_id"], cancelled_at=None).exclude(succeeded=True)
+        if command["kind"] == "inicio":
+            candidates = candidates.filter(acknowledged_at=None,
+                session__scheduled_end__gt=timezone.now(), session__authorization_ended_at=None)
+        return candidates.exists()
+
 
 
 async def agent_websocket(scope, receive, send):
     event = await receive()
     if event["type"] != "websocket.connect":
+        return
+    async def send_bounded(event):
+        await asyncio.wait_for(send(event), timeout=SEND_TIMEOUT)
+
+    async def deny(status, code, close_code, retry_after=None):
+        if "websocket.http.response" not in scope.get("extensions", {}):
+            await send_bounded({"type": "websocket.close", "code": close_code})
+            return
+        response_headers = [(b"x-psycode-control-error", code.encode("ascii"))]
+        if retry_after is not None:
+            response_headers.append((b"retry-after", str(retry_after).encode("ascii")))
+        await send_bounded({"type": "websocket.http.response.start", "status": status,
+                            "headers": response_headers})
+        await send_bounded({"type": "websocket.http.response.body", "body": b""})
+
+    if scope["path"] != "/ws/v1/agents":
+        await deny(404, "ROUTE_NOT_FOUND", 4404)
         return
     headers = [v for k, v in scope.get("headers", []) if k.lower() == b"authorization"]
     try:
@@ -254,36 +301,31 @@ async def agent_websocket(scope, receive, send):
             raise AuthenticationFailed()
         client = scope.get("client")
         source_ip = client[0] if client else ""
-
-        identity = await db(
-            partial(
-                authenticate_agent_header,
-                headers[0],
-                source_ip=source_ip,
-            )
-        )
+        identity = await db(partial(authenticate_agent_header, headers[0], source_ip=source_ip))
     except AuthenticationFailed:
-        await send({"type": "websocket.close", "code": 4401})
+        await deny(401, "CREDENTIAL_INVALID", 4401)
         return
     except ServiceError as exc:
         if exc.code == "AUTH_RATE_LIMITED":
-            await send({
-                "type": "websocket.close",
-                "code": 4429,
-            })
+            await deny(429, "AUTH_RATE_LIMITED", 4429, settings.CAPTURE_AGENT_AUTH_WINDOW_SECONDS)
             return
         raise
-    
-    if scope["path"] != "/ws/v1/agents":
-        await send({"type": "websocket.close", "code": 4404})
+    except OperationalError:
+        await deny(503, "DATABASE_UNAVAILABLE", 1013)
         return
-    await send({"type": "websocket.accept"})
+
+    await send_bounded({"type": "websocket.accept"})
     control = RemoteControl(identity, uuid4())
-    opened = False
+    acquisition = None
     pending = None
     disconnect_cause = "UNKNOWN"
+
     async def emit(kind, data, correlation=None):
-        await send({"type": "websocket.send", "text": json.dumps(envelope(kind, data, correlation), default=serial)})
+        raw = json.dumps(envelope(kind, data, correlation), default=serial, separators=(",", ":"))
+        if len(raw.encode()) > MAX_BYTES:
+            raise ValueError("MESSAGE_TOO_LARGE")
+        await send_bounded({"type": "websocket.send", "text": raw})
+
     try:
         event = await asyncio.wait_for(receive(), timeout=10)
         hello = decode(event.get("text"))
@@ -293,15 +335,16 @@ async def agent_websocket(scope, receive, send):
                 or not isinstance(p["capabilities"], list) or len(p["capabilities"]) > 16
                 or any(not isinstance(x, str) or len(x) > 64 for x in p["capabilities"])):
             raise ValueError("INVALID_MESSAGE")
-        await db(control.open)
-        opened = True
+        control.yield_replaced = YIELD_REPLACED_CAPABILITY in p["capabilities"]
+        acquisition = asyncio.create_task(db(control.open))
+        if not await asyncio.shield(acquisition):
+            raise ValueError("CONNECTION_REPLACED")
         smile_check = SMILE_CHECK_CAPABILITY in p["capabilities"] and bool(await db(sources_for, identity))
         config_supported = identity.managed and CONFIG_CAPABILITY in p["capabilities"]
         control.chunk_config_v2_supported = {chunk_config.CAPABILITY_V2, "audio.v2"} <= set(p["capabilities"])
         control.chunk_config_supported = (control.chunk_config_v2_supported
             or {chunk_config.CAPABILITY, "audio.v2"} <= set(p["capabilities"]))
         await db(control.register_hello, p["agent_version"], smile_check)
-        await db(register_server_reconnect, identity)
         capabilities = ["audio.v1", "audio.v2", "agenda.excel.v1", "agenda.smile-json.v1",
                         "agent.events.v1", "sessions.capture-ended.v1"]
         if control.chunk_config_supported:
@@ -318,44 +361,70 @@ async def agent_websocket(scope, receive, send):
         next_poll = 0
         last_message = time.monotonic()
         pending = asyncio.create_task(receive())
+        batch = []
         while True:
-            if time.monotonic() - last_message > settings.CAPTURE_INACTIVITY_TIMEOUT_SECONDS:
+            deadline = last_message + settings.CAPTURE_INACTIVITY_TIMEOUT_SECONDS
+            if time.monotonic() >= deadline:
                 disconnect_cause = "CONNECTION_TIMEOUT"
-                await send({"type": "websocket.close", "code": 4408})
+                await send_bounded({"type": "websocket.close", "code": 4408})
                 break
-            if time.monotonic() >= next_poll:
-                for command in await db(control.poll):
-                    await emit("command", command)
-                if config_supported:
-                    for config in await db(control.poll_configs):
-                        await emit("config_sync", config)
-                next_poll = time.monotonic() + settings.CAPTURE_COMMAND_INTERVAL_SECONDS
-            done, _ = await asyncio.wait([pending], timeout=max(0, next_poll - time.monotonic()))
-            if not done:
+            if pending.done():
+                event = pending.result()
+                if event["type"] == "websocket.disconnect":
+                    break
+                pending = asyncio.create_task(receive())
+                message = decode(event.get("text"))
+                try:
+                    kind, data = await db(control.dispatch, message)
+                except CaptureError as exc:
+                    await emit("error", {"code": exc.code, "recoverable": False}, message["message_id"])
+                except ValueError as exc:
+                    if str(exc) == "CONNECTION_REPLACED":
+                        raise
+                    code = str(exc) if str(exc) in {"COMMAND_NOT_FOUND", "BOX_FORBIDDEN",
+                                                  "CONFIG_NOT_FOUND", "INVALID_TECHNICAL_ERROR"} else "INVALID_MESSAGE"
+                    await emit("error", {"code": code, "recoverable": False}, message["message_id"])
+                except OperationalError:
+                    await emit("error", {"code": "DATABASE_UNAVAILABLE", "recoverable": True}, message["message_id"])
+                else:
+                    last_message = time.monotonic()
+                    await emit(kind, data, message["message_id"])
                 continue
-            event = pending.result()
-            if event["type"] == "websocket.disconnect":
-                break
-            last_message = time.monotonic()
-            pending = asyncio.create_task(receive())
-            message = decode(event.get("text"))
-            try:
-                kind, data = await db(control.dispatch, message)
-                await emit(kind, data, message["message_id"])
-            except CaptureError as exc:
-                await emit("error", {"code": exc.code, "recoverable": False}, message["message_id"])
+            if batch:
+                kind, data = batch.pop(0)
+                if kind != "command" or await db(control.still_current, data):
+                    await emit(kind, data)
+                continue
+            if time.monotonic() >= next_poll:
+                batch = [("command", item) for item in await db(control.poll)]
+                if config_supported:
+                    batch.extend(("config_sync", item) for item in await db(control.poll_configs))
+                next_poll = time.monotonic() + settings.CAPTURE_COMMAND_INTERVAL_SECONDS
+                continue
+            await asyncio.wait([pending], timeout=max(0, min(next_poll, deadline) - time.monotonic()))
 
     except AuthenticationFailed:
         disconnect_cause = "CREDENTIAL_INVALIDATED"
-        await send({"type": "websocket.close", "code": 4401})
-    except (ValueError, KeyError, TypeError, TimeoutError) as exc:
-        allowed_codes = {"PROTOCOL_INCOMPATIBLE", "CONNECTION_REPLACED", "CAPABILITIES_CHANGED"}
+        await send_bounded({"type": "websocket.close", "code": 4401})
+    except (TimeoutError, OSError, OperationalError):
+        disconnect_cause = "CONNECTION_TIMEOUT"
+        try:
+            await send_bounded({"type": "websocket.close", "code": 1013})
+        except (OSError, TimeoutError):
+            pass
+    except (ValueError, KeyError, TypeError) as exc:
+        allowed_codes = {"PROTOCOL_INCOMPATIBLE", "CONNECTION_REPLACED", "MESSAGE_TOO_LARGE"}
         code = str(exc) if str(exc) in allowed_codes else "INVALID_MESSAGE"
         await emit("error", {"code": code, "recoverable": code == "CONNECTION_REPLACED"})
-        await send({"type": "websocket.close", "code": 4406 if code == "PROTOCOL_INCOMPATIBLE" else 4409})
+        await send_bounded({"type": "websocket.close", "code": 4409 if code == "CONNECTION_REPLACED" else 4406})
     finally:
         if pending is not None:
             pending.cancel()
             await asyncio.gather(pending, return_exceptions=True)
-        if opened:
-            await db(control.close, disconnect_cause)
+        if acquisition is not None:
+            await asyncio.gather(acquisition, return_exceptions=True)
+            try:
+                await db(control.close, disconnect_cause)
+            except OperationalError:
+                # El vencimiento del lease reconcilia el cierre si SQL sigue caído.
+                pass

@@ -69,6 +69,51 @@ class CaptureLifecycleTests(CaptureFixtures, TestCase):
         self.assertEqual(AgentCommand.objects.count(), 1)
         self.assertEqual(list(CaptureEvent.objects.values_list("action", flat=True)).count("capture.session.created"), 1)
 
+    def test_late_start_requires_first_sample_strictly_before_revocation(self):
+        self.create()
+        start, = self.service.commands("box-3", now=NOW)
+        self.stop()
+        cut = NOW + timedelta(seconds=30)
+        for first in (cut, cut + timedelta(seconds=1)):
+            self.assert_code("INVALID_TIMESTAMP", self.service.acknowledge, "box-3",
+                             start.command_id, occurred_at=first, now=cut + timedelta(seconds=2))
+        first = cut - timedelta(microseconds=1)
+        result = self.service.acknowledge("box-3", start.command_id, occurred_at=first,
+                                         now=cut + timedelta(seconds=2))
+        self.assertEqual(result.actual_start, first)
+        self.assertEqual(result.state, "finalizando")
+        self.assertEqual(self.service.acknowledge("box-3", start.command_id, occurred_at=first,
+                         now=cut + timedelta(seconds=3)).actual_start, first)
+
+    def test_historical_stop_before_command_is_accepted_with_confirmed_start(self):
+        session = self.active()
+        stop = self.stop()
+        ended = NOW + timedelta(seconds=10)
+        self.accept(session, seconds=1)
+        result = self.service.acknowledge("box-3", stop.command_id, occurred_at=ended,
+                                         last_sequence=0, now=NOW + timedelta(seconds=31))
+        self.assertEqual(result.actual_end, ended)
+        self.assertEqual(result.state, "completada")
+
+    def test_restarts_authorized_window_only_after_recovered_physical_close(self):
+        first = self.active()
+        now = NOW + timedelta(seconds=20)
+        self.service.confirm_capture_ended("box-3", first.session_id, ended_at=now,
+            last_sequence=0, reason_code="RECOVERY_STOPPED", now=now)
+        next_session = self.service.apply_authorization(self.authorization, now=now)
+        self.assertNotEqual(first.session_id, next_session.session_id)
+        self.assertEqual(CaptureSession.objects.get(pk=first.session_id).state, "finalizando")
+        self.assertEqual(self.service.apply_authorization(self.authorization, now=now).session_id,
+                         next_session.session_id)
+
+    def test_https_upload_does_not_clear_wss_diagnostic_or_update_heartbeat(self):
+        session = self.active()
+        CaptureSession.objects.filter(pk=session.session_id).update(diagnostic_code="CONTROL_DISCONNECTED")
+        self.accept(session)
+        saved = CaptureSession.objects.get(pk=session.session_id)
+        self.assertEqual(saved.diagnostic_code, "CONTROL_DISCONNECTED")
+        self.assertEqual(saved.last_seen_at, NOW)
+
     def test_start_command_sees_saved_session_and_rolls_back_together(self):
         original = self.service._command
 

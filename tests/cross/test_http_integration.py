@@ -64,10 +64,6 @@ class AgentHTTPIntegrationTests(IngestionFixtures, TransactionTestCase):
 
         config = AgentConfig(
             box_id="box-3",
-            obs_host="127.0.0.1",
-            obs_port=4455,
-            obs_password="test-only",
-            stream_url="",
             chunk_duration=10,
             chunk_overlap=1,
             backend_url="http://testserver",

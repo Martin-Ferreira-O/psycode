@@ -32,11 +32,11 @@ class ControlAcknowledgementTests(CaptureFixtures, TestCase):
         self.control.heartbeat.side_effect = lambda box, session: self.service.heartbeat(
             box, session, now=self.now,
         )
-        self.controller = Mock()
         self.runner = Mock()
+        self.runner.store.recover_session.return_value = {}
         self.runner.store.last_sequence.return_value = -1
         self.coordinator = SessionCoordinator(
-            config, self.control, controller=self.controller,
+            config, self.control,
             runner_factory=lambda cfg: self.runner,
             journal=CommandJournal(temporary.name, "box-3"),
         )
@@ -61,7 +61,6 @@ class ControlAcknowledgementTests(CaptureFixtures, TestCase):
 
         self.assertEqual(self.coordinator.session_id, self.session.session_id)
         self.runner.run.assert_called_once()
-        self.controller.start_capture.assert_called_once()
         calls = self.control.acknowledge.call_args_list
         self.assertEqual(calls[0], calls[1])
 
@@ -82,7 +81,7 @@ class ControlAcknowledgementTests(CaptureFixtures, TestCase):
 
         self.assertIsNone(self.coordinator.session_id)
         self.assertEqual(CaptureSession.objects.get().state, "completada")
-        self.controller.stop_capture.assert_called_once()
+        self.runner.stop.assert_called_once()
         calls = self.control.acknowledge.call_args_list
         self.assertEqual(calls[-2], calls[-1])
 
@@ -94,8 +93,8 @@ class ControlAcknowledgementTests(CaptureFixtures, TestCase):
             replace(self.authorization, authorized=False, inicio=None, termino=None),
             now=self.now,
         )
-        self.controller.stop_capture.side_effect = [RuntimeError("OBS ocupado"),
-                                                   RuntimeError("OBS ocupado"), None]
+        self.runner.stop.side_effect = [RuntimeError("micrófono ocupado"),
+                                                   RuntimeError("micrófono ocupado"), None]
 
         for _ in range(2):
             with self.assertRaises(StopCaptureError):
@@ -104,7 +103,7 @@ class ControlAcknowledgementTests(CaptureFixtures, TestCase):
         self.loop.tick()
 
         self.assertIsNone(self.coordinator.session_id)
-        self.assertEqual(self.controller.stop_capture.call_count, 3)
+        self.assertEqual(self.runner.stop.call_count, 3)
         stop, = [record for record in self.coordinator.journal.root.glob("*.json")
                  if self.coordinator.journal.get(record.stem)["kind"] == "detencion"]
         self.assertEqual(self.coordinator.journal.get(stop.stem)["state"], "acknowledged")

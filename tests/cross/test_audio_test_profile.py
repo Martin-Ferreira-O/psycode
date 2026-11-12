@@ -43,7 +43,7 @@ class AudioTestProfileIntegrationTests(TestCase):
                 if len(posts) == 1:
                     raise httpx.ReadTimeout("Respuesta perdida tras commit", request=request)
             return result
-        agent = AgentConfig("box-3", "", 4455, "", "", 10, 1,
+        agent = AgentConfig("box-3", 10, 1,
                             backend_url="https://testserver", agent_token=token, retry_backoff=0)
         with (TemporaryDirectory() as root,
               override_settings(CAPTURE_FRAGMENT_ROOT=Path(root)),
