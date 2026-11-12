@@ -307,7 +307,8 @@ borra la negociación persistida. Las detenciones siguen entregándose sin el
 campo a conexiones legacy. Las sesiones sin negociación conservan compatibilidad.
 
 Para sesiones negociadas se exige temporal v2, exactamente los samples de la
-duración solicitada y solapamiento de 16000 samples (1 s). El perfil recibido
+duración solicitada y el solapamiento negociado: 0 en
+`audio.chunk-config.v2`, 16000 samples (1 s) en v1. El perfil recibido
 queda estable. Se admiten duraciones superiores a 600 s y archivos mayores de
 25 MiB únicamente con negociación persistida. El límite exacto del archivo es
 `duration * 32000 + 65536` bytes (PCM y margen de cabecera); se conservan checksum,
@@ -349,7 +350,9 @@ de Nginx ni cuotas del servidor.
 
 El análisis mantiene offsets locales del WAV separados del origen de sesión.
 Speechmatics puede cargar PCM y WAV completos en memoria; dimensionar también RAM
-y los plazos/límites del proveedor para sesiones largas. JEV conserva utterances
-de 15 s, history de 60 s y 12000 caracteres: recibir una sesión completa no implica
-una clasificación monolítica de 10 min. No se cambian estos límites ni se envía
+y los plazos/límites del proveedor para sesiones largas. Las nuevas sesiones operativas pasan `analysis_unit=fragment` al trabajador:
+JEV evalúa el bloque completo en una solicitud y conserva un único resultado.
+Las intervenciones de 15 s sirven para preservar turnos, no disparan llamadas
+individuales en este modo. Los checkpoints legacy en curso se conservan. Un
+exceso de contexto requiere revisión sin truncar texto ni eliminar audio. No se cambian estos límites ni se envía
 audio a servicios externos durante las pruebas.

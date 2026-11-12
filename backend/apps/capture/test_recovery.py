@@ -28,6 +28,9 @@ from .tests import NOW
 class FragmentRecoveryTests(IngestionFixtures, TestCase):
     def setUp(self):
         super().setUp()
+        # Estos casos conservan el contrato histórico por intervención; la
+        # recuperación por bloque tiene cobertura independiente.
+        CaptureSession.objects.filter(pk=self.session.session_id).update(capture_chunk_config={})
         self.db = FakeDatabase()
         self.store = AlertsRepository(self.db)
         self.store.ensure_schema()

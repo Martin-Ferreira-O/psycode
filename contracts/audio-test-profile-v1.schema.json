@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Perfil negociado de diagnóstico de audio v1",
-  "description": "PUT /api/v1/internal/audio-tests/<uuid>?fragment_profile_version=1. Body scenario/samples sin cambios. La respuesta valida el campo data de PUT, GET y DELETE de una prueba negociada. Solapamiento fijo de 16000 muestras.",
+  "title": "Perfil negociado de diagn\u00f3stico de audio v1",
+  "description": "PUT /api/v1/internal/audio-tests/<uuid>?fragment_profile_version=1. Body scenario/samples sin cambios. PUT, GET y DELETE conservan el perfil v1 con solapamiento fijo de 16000 muestras (1 s); v2 sin solapamiento tiene contrato independiente.",
   "oneOf": [
     {
       "$ref": "#/$defs/query"

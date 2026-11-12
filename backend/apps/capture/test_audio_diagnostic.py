@@ -249,7 +249,7 @@ class AudioDiagnosticTests(TestCase):
     def test_profile_query_is_strict_and_legacy_cannot_upgrade(self):
         url = f"/api/v1/internal/audio-tests/{uuid4()}"
         payload = {"scenario": "neutral", "samples": 16000}
-        for query in ["", "0", "2", "01", "true", "1&fragment_profile_version=1"]:
+        for query in ["", "0", "3", "01", "true", "1&fragment_profile_version=1", "1&fragment_profile_version=2"]:
             response = self.client.put(url + "?fragment_profile_version=" + query,
                                        payload, content_type="application/json")
             self.assertEqual(response.status_code, 400, response.json())
@@ -273,3 +273,48 @@ class AudioDiagnosticTests(TestCase):
         self.assertIn("audio_chunk_duration", response["required"])
         self.assertEqual(response["properties"]["fragment_profile_version"]["const"], 1)
         self.assertEqual(schema["$defs"]["query"]["properties"]["fragment_profile_version"]["const"], "1")
+
+    def test_v2_profiles_have_no_overlap_and_cannot_switch_version(self):
+        from .models import CaptureSession
+        for seconds, samples, expected in [(600, 600 * 16000, 1), (60, 600 * 16000, 10),
+                                            (60, 61 * 16000 + 1, 2)]:
+            with self.subTest(seconds=seconds, samples=samples):
+                config = OperationalConfiguration.load()
+                config.audio_chunk_duration = seconds
+                config.save()
+                url = f"/api/v1/internal/audio-tests/{uuid4()}"
+                query = url + "?fragment_profile_version=2"
+                payload = {"scenario": "neutral", "samples": samples}
+                response = self.client.put(query, payload, content_type="application/json")
+                self.assertEqual(response.status_code, 201, response.json())
+                data = response.json()["data"]
+                self.assertEqual(data["fragment_profile_version"], 2)
+                self.assertEqual(data["audio_chunk_overlap"], 0)
+                self.assertEqual(data["expected"], expected)
+                session = CaptureSession.objects.get(pk=data["test_id"])
+                saved = session.capture_chunk_config.copy()
+                self.assertEqual(saved["analysis_unit"], "fragment")
+                self.assertEqual(saved["audio_chunk_overlap"], 0)
+                self.assertEqual(self.client.put(url + "?fragment_profile_version=1", payload,
+                                                content_type="application/json").status_code, 409)
+                config.audio_chunk_duration = 10
+                config.save()
+                self.assertEqual(self.client.put(query, payload, content_type="application/json").json()["data"], data)
+                chunk = data["audio_chunk_duration"] * 16000
+                for seq in range(expected):
+                    offset = seq * chunk
+                    end = min(offset + chunk, samples)
+                    args = dict(seq=seq, offset=offset, end=end, new=offset,
+                                chunk_samples=chunk, overlap_samples=0)
+                    first = self.upload(url + "/fragments", data, **args)
+                    self.assertEqual(first.status_code, 201, first.json())
+                    retry = self.upload(url + "/fragments", data, **args)
+                    self.assertEqual(retry.status_code, 200, retry.json())
+                    self.assertEqual(first.json()["data"], retry.json()["data"])
+                self.assertEqual(FragmentJob.objects.filter(sequence__session=session).count(), expected)
+                status = self.client.get(url).json()["data"]
+                self.assertEqual(status["accepted"], expected)
+                self.assertEqual(status["audio_chunk_overlap"], 0)
+                self.assertEqual(self.client.delete(url).json()["data"]["fragment_profile_version"], 2)
+                session.refresh_from_db()
+                self.assertEqual(session.capture_chunk_config, saved)

@@ -36,8 +36,11 @@ class Fragment:
     session_origin_sample: int = 0
     new_audio_start_sample: int | None = None
     audio_test: bool = False
+    analysis_unit: str = "utterance"
 
     def __post_init__(self):
+        if self.analysis_unit not in {"utterance", "fragment"}:
+            raise FragmentRejected("Unidad de análisis inválida")
         if str(UUID(self.session_id)) != self.session_id:
             raise FragmentRejected("Sesión debe ser UUID canónico")
         if type(self.sequence) is not int or self.sequence < 0:

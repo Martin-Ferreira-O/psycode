@@ -70,9 +70,12 @@ def status_data(run, now):
         state = "expired"
     else:
         state = "receiving"
-    profile = ({"fragment_profile_version": 1,
+    version = 2 if session.capture_chunk_config.get("audio_chunk_overlap") == 0 else 1
+    profile = ({"fragment_profile_version": version,
                 "audio_chunk_duration": session.audio_profile["chunk_samples"] // RATE}
                if session.capture_chunk_config else {})
+    if profile and version == 2:
+        profile["audio_chunk_overlap"] = 0
     return {
         **profile,
         "test_id": str(run.pk), "box": session.box, "scenario": run.scenario, "samples": run.samples,
@@ -107,9 +110,10 @@ class AudioTestView(APIView):
     @transaction.atomic
     def put(self, request, test_id):
         versions = request.query_params.getlist("fragment_profile_version")
-        if versions and versions != ["1"]:
+        if versions and versions not in (["1"], ["2"]):
             raise FragmentError("VALIDATION_ERROR", 400)
         negotiated = bool(versions)
+        version = int(versions[0]) if versions else 0
         data = request.data
         if not isinstance(data, dict) or set(data) != {"scenario", "samples"}:
             raise FragmentError("VALIDATION_ERROR", 400)
@@ -122,7 +126,8 @@ class AudioTestView(APIView):
         run = AudioTest.objects.select_related("session").filter(pk=test_id, agent=agent, session__box=request.user.box).first()
         if run is not None:
             if ((run.scenario, run.samples) != (scenario, samples)
-                    or bool(run.session.capture_chunk_config) != negotiated):
+                    or bool(run.session.capture_chunk_config) != negotiated
+                    or (negotiated and status_data(run, now)["fragment_profile_version"] != version)):
                 raise FragmentError("AUDIO_TEST_CONFLICT", 409)
             return success_response(status_data(run, now), "Prueba autorizada")
         if CaptureSession.objects.filter(pk=test_id).exists():
@@ -132,6 +137,9 @@ class AudioTestView(APIView):
             if status_data(previous, now)["state"] in {"receiving", "analyzing"}:
                 raise FragmentError("AUDIO_TEST_ALREADY_RUNNING", 409)
         config = snapshot() if negotiated else {}
+        overlap = 0 if version == 2 else OVERLAP
+        if negotiated:
+            config["audio_chunk_overlap"] = overlap // RATE
         window = max(10, ceil(samples / RATE))
         seconds = (window if config.get("audio_chunk_mode") == "session"
                    else min(config["audio_chunk_duration"], window)) if config else 10
@@ -141,9 +149,9 @@ class AudioTestView(APIView):
             pk=test_id, box=request.user.box, origin=AUDIO_TEST_ORIGIN, state=SessionState.COMPLETED,
             scheduled_start=now, scheduled_end=end, authorized_at=now, authorization_ended_at=now,
             actual_start=now, actual_end=end, last_seen_at=now, closed_at=end,
-            final_sequence=max(0, (samples - OVERLAP - 1) // (chunk - OVERLAP)),
+            final_sequence=max(0, (samples - overlap - 1) // (chunk - overlap)),
             capture_chunk_config=config,
-            audio_profile={"sample_rate": RATE, "chunk_samples": chunk, "overlap_samples": OVERLAP},
+            audio_profile={"sample_rate": RATE, "chunk_samples": chunk, "overlap_samples": overlap},
         )
         run = AudioTest.objects.create(session=session, agent=agent, scenario=scenario, samples=samples,
                                        expires_at=max(now + timedelta(minutes=5), end + timedelta(minutes=2)))

@@ -200,7 +200,13 @@
               },
               "audio_chunk_duration": {
                 "type": "integer",
-                "minimum": 10
+                "minimum": 10,
+                "description": "Solo inicio con audio.chunk-config.v1 o v2; duraci\u00f3n congelada por sesi\u00f3n."
+              },
+              "audio_chunk_overlap": {
+                "type": "integer",
+                "const": 0,
+                "description": "Solo inicio con audio.chunk-config.v2 negociada. Ausente en v1/legado: solapamiento de 1 segundo."
               }
             },
             "required": [
@@ -211,7 +217,28 @@
               "scheduled_start",
               "scheduled_end"
             ],
-            "additionalProperties": false
+            "additionalProperties": false,
+            "dependentRequired": {
+              "audio_chunk_overlap": [
+                "audio_chunk_duration"
+              ]
+            },
+            "allOf": [
+              {
+                "if": {
+                  "required": [
+                    "audio_chunk_overlap"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "kind": {
+                      "const": "inicio"
+                    }
+                  }
+                }
+              }
+            ]
           }
         }
       }

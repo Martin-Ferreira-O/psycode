@@ -66,4 +66,4 @@ class AudioTestProfileIntegrationTests(TestCase):
         self.exercise(600, 1)
 
     def test_default_sixty_seconds_is_used_instead_of_legacy_ten_seconds(self):
-        self.exercise(60, 11)
+        self.exercise(60, 10)

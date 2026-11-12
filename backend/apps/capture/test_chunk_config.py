@@ -30,7 +30,8 @@ class ChunkSnapshotTests(CaptureFixtures, TestCase):
         config.save()
         CaptureSessionService().apply_authorization(self.authorization, now=NOW)
         session = CaptureSession.objects.get()
-        self.assertEqual(session.capture_chunk_config, {"audio_chunk_duration": 60, "audio_chunk_mode": "fixed"})
+        self.assertEqual(session.capture_chunk_config, {"audio_chunk_duration": 60, "audio_chunk_mode": "fixed",
+                                                             "analysis_unit": "fragment"})
         self.assertIsNone(self.service.commands("box-3", now=NOW)[0].audio_chunk_duration)
         self.assertFalse(session.audio_profile)
 
@@ -250,3 +251,128 @@ class ChunkHandshakeTests(CaptureFixtures, TransactionTestCase):
         self.assertEqual(stop["kind"], "detencion")
         self.assertNotIn("audio_chunk_duration", stop)
         self.assertFalse(any(m["type"] == "error" for m in stopped))
+
+
+class NonOverlappingSnapshotTests(CaptureFixtures, TestCase):
+    def control(self, *, v2=True):
+        control = RemoteControl(AgentIdentity("test", "box-3"), uuid4())
+        control.chunk_config_supported = True
+        control.chunk_config_v2_supported = v2
+        return control
+
+    def test_v2_freezes_zero_overlap_and_reconnect_cannot_downgrade(self):
+        self.create()
+        control = self.control()
+        with patch("django.utils.timezone.now", return_value=NOW):
+            first, = control.commands()
+            session = CaptureSession.objects.get()
+            self.assertEqual(session.capture_chunk_config["analysis_unit"], "fragment")
+            self.assertEqual(session.capture_chunk_config["audio_chunk_overlap"], 0)
+            self.assertEqual(first["audio_chunk_overlap"], 0)
+            self.assertEqual(first, self.control().commands()[0])
+            with self.assertRaisesMessage(ValueError, "CAPABILITIES_CHANGED"):
+                self.control(v2=False).commands()
+        session.refresh_from_db()
+        self.assertEqual(session.capture_chunk_config["audio_chunk_overlap"], 0)
+        self.service.acknowledge("box-3", first["command_id"], now=NOW)
+        stopped = self.stop()
+        data = self.control(v2=False).command_payload(stopped)
+        self.assertNotIn("audio_chunk_overlap", data)
+        self.assertNotIn("audio_chunk_duration", data)
+
+    def test_existing_v1_snapshot_stays_unchanged_on_v2_reconnect(self):
+        self.create()
+        old = {"audio_chunk_duration": 60, "audio_chunk_mode": "fixed"}
+        CaptureSession.objects.update(capture_chunk_config=old, capture_chunk_negotiated=True)
+        with patch("django.utils.timezone.now", return_value=NOW):
+            first, = self.control(v2=False).commands()
+            repeated, = self.control().commands()
+        self.assertEqual(first, repeated)
+        self.assertNotIn("audio_chunk_overlap", repeated)
+        self.assertEqual(CaptureSession.objects.get().capture_chunk_config, old)
+
+    def test_new_v1_delivery_cannot_upgrade_on_v2_reconnect(self):
+        self.create()
+        with patch("django.utils.timezone.now", return_value=NOW):
+            first, = self.control(v2=False).commands()
+            saved = CaptureSession.objects.get().capture_chunk_config
+            repeated, = self.control().commands()
+        self.assertEqual(first, repeated)
+        self.assertEqual(saved["audio_chunk_overlap"], 1)
+        self.assertEqual(CaptureSession.objects.get().capture_chunk_config, saved)
+
+
+class NonOverlappingIngestionTests(IngestionFixtures, TestCase):
+    def configure(self):
+        CaptureSession.objects.update(
+            scheduled_end=NOW + timedelta(seconds=3700),
+            capture_chunk_config={"audio_chunk_duration": 600, "audio_chunk_mode": "fixed",
+                                  "audio_chunk_overlap": 0, "analysis_unit": "fragment"},
+            capture_chunk_negotiated=True)
+
+    def receive_block(self, number, seconds=600, overlap=0):
+        start = number * 600 * 16000
+        temporal = dict(session_start_sample=start, session_end_sample=start + seconds * 16000,
+                        new_audio_start_sample=start, sample_rate=16000, chunk_samples=600 * 16000,
+                        overlap_samples=overlap)
+        return self.receive(number=number, content=wav_bytes(b"\x01\0" * seconds * 16000),
+                            captured_at=NOW + timedelta(seconds=10 + number * 600),
+                            now=NOW + timedelta(seconds=10 + number * 600 + seconds), temporal=temporal)
+
+    def test_hour_creates_exactly_six_jobs_and_retries_do_not_duplicate(self):
+        self.configure()
+        for number in range(6):
+            receipt, created = self.receive_block(number)
+            self.assertTrue(created)
+            retry, created = self.receive_block(number)
+            self.assertFalse(created)
+            self.assertEqual(receipt, retry)
+        self.assertEqual(FragmentJob.objects.count(), 6)
+        session = CaptureSession.objects.get()
+        self.assertEqual(session.next_sequence, 6)
+        self.assertEqual(session.audio_profile["overlap_samples"], 0)
+        self.assertEqual(FragmentJob.objects.order_by("sequence__number").last().temporal["session_end_sample"], 3600 * 16000)
+
+    def test_last_partial_is_only_new_audio_and_profile_cannot_change(self):
+        self.configure()
+        self.receive_block(0)
+        with self.assertRaises(FragmentError):
+            self.receive_block(1, seconds=1, overlap=16000)
+        self.assertEqual(FragmentJob.objects.count(), 1)
+        self.receive_block(1, seconds=1)
+        final = FragmentJob.objects.order_by("sequence__number").last().temporal
+        self.assertEqual(final["new_audio_start_sample"], 600 * 16000)
+        self.assertEqual(final["session_end_sample"], 601 * 16000)
+
+
+class NonOverlappingHandshakeTests(CaptureFixtures, TransactionTestCase):
+    @override_settings(CAPTURE_AGENTS=AGENTS)
+    def test_v2_ready_advertises_both_versions_and_delivers_explicit_overlap(self):
+        from backend.config.asgi import application
+        from .chunk_config import CAPABILITY_V2
+        self.create()
+
+        async def exercise():
+            received, sent = asyncio.Queue(), []
+            await received.put({"type": "websocket.connect"})
+            await received.put({"type": "websocket.receive", "text": json.dumps(envelope(
+                "hello", {"agent_version": "test", "capabilities": [CAPABILITY, CAPABILITY_V2, "audio.v2"]}))})
+
+            async def send(event):
+                sent.append(event)
+                if event["type"] == "websocket.send" and json.loads(event["text"])["type"] == "command":
+                    await received.put({"type": "websocket.disconnect"})
+
+            await application({"type": "websocket", "path": "/ws/v1/agents",
+                               "headers": [(b"authorization", ("Agent " + TOKEN).encode())],
+                               "query_string": b""}, received.get, send)
+            return [json.loads(e["text"]) for e in sent if "text" in e]
+
+        with patch("django.utils.timezone.now", return_value=NOW):
+            messages = asyncio.run(exercise())
+        ready = next(m["payload"] for m in messages if m["type"] == "ready")
+        command = next(m["payload"] for m in messages if m["type"] == "command")
+        self.assertIn(CAPABILITY, ready["capabilities"])
+        self.assertIn(CAPABILITY_V2, ready["capabilities"])
+        self.assertEqual(command["audio_chunk_overlap"], 0)
+        self.assertEqual(command["audio_chunk_duration"], 60)

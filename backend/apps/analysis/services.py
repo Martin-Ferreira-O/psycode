@@ -10,10 +10,11 @@ from backend.apps.alerts.domain import ORIGEN_PRUEBA_AUDIO
 from backend.apps.alerts.exceptions import AlertAlreadyExists
 from backend.common.errors import PersistenceUnavailable
 from .domain import AnalysisContextLost, AnalysisResult, AnalysisState, Fragment, FragmentRejected, JevDecision, Signal
-from .errors import AnalysisRetry, ProviderError, SubmissionUncertain
+from .errors import AnalysisRetry, JevContextLimit, ProviderError, SubmissionUncertain
 from .ports import AnalizadorDeSenales, FragmentLedger, TechnicalAudit, Transcriptor
 from .privacy import redact
-from .rules import align_words, context_flags, jev_candidates
+from .rules import align_words, context_flags, evidence_dimensions, jev_candidates, literal_candidates
+from .providers.jev_contract import BLOCK_QUESTIONS_VERSION
 
 MATRIX = json.loads(Path(__file__).with_name("matrix.json").read_text(encoding="utf-8"))
 
@@ -60,15 +61,22 @@ class AnalysisService:
     def resume(self, fragment, *, roles, checkpoint, previous):
         with self._lock:
             session_id = fragment.session_id
-            self.histories[session_id] = checkpoint.data.get("history", previous.get("history", [])).copy()
-            self.evidence[session_id] = previous.get("evidence", []).copy()
+            previous = previous or {}
+            if fragment.analysis_unit == "fragment":
+                self.histories[session_id] = []
+                self.evidence[session_id] = []
+            else:
+                self.histories[session_id] = checkpoint.data.get("history", previous.get("history", [])).copy()
+                self.evidence[session_id] = previous.get("evidence", []).copy()
             try:
                 if "result" in checkpoint.data:
                     pending = checkpoint.data["result"]
                     result = AnalysisResult(
                         session_id, fragment.sequence, AnalysisState(pending["state"]),
                         signals=tuple(Signal(**signal) for signal in pending["signals"]),
+                        decisions=tuple(JevDecision(**decision) for decision in pending.get("decisions", [])),
                         error_codes=tuple(pending["error_codes"]),
+                        questions_version=pending.get("questions_version", "habla-signals-1"),
                     )
                 else:
                     result = self._process(fragment, roles, checkpoint)
@@ -78,6 +86,12 @@ class AnalysisService:
                     "evidence": self.evidence[session_id],
                     "speechmatics": checkpoint.data.get("speechmatics", {}),
                     "jev_requests": checkpoint.data.get("jev_requests", []),
+                    **({"analysis_unit": "fragment", "block_result": {
+                        "state": result.state,
+                        "decisions": [asdict(decision) for decision in result.decisions],
+                        "error_codes": result.error_codes,
+                        "questions_version": result.questions_version,
+                    }} if fragment.analysis_unit == "fragment" else {}),
                     **({"test_alerts": checkpoint.data.get("test_alerts", [])} if fragment.audio_test else {}),
                 }
             finally:
@@ -95,14 +109,179 @@ class AnalysisService:
             for item in self._utterances(fragment, words)
         ]
 
+    def _prepare_block(self, fragment, words):
+        # Orden estable y recorrido lineal tras ordenar. El bloque de una hora
+        # no necesita comparar cada palabra con todas las demás ni ventanas de 15 s.
+        words = sorted(words, key=lambda word: (word["start"], word["end"]))
+        items = []
+        previous_end = -1
+        origin = fragment.session_origin_sample / 16000
+        for index, word in enumerate(words):
+            overlap = (previous_end > word["start"] or
+                       (index + 1 < len(words) and words[index + 1]["start"] < word["end"]))
+            previous_end = max(previous_end, word["end"])
+            attribution = "overlap" if overlap else "assigned" if word["speaker"] else "unknown"
+            start, end = word["start"] + origin, word["end"] + origin
+            if (items and items[-1]["speaker"] == word["speaker"]
+                    and items[-1]["attribution"] == attribution
+                    and not re.search(r"[.!?…][\s\"»”]*$", items[-1]["text"])
+                    and start - items[-1]["end"] < 1.2):
+                items[-1]["text"] += word["text"]
+                items[-1]["end"] = max(items[-1]["end"], end)
+            else:
+                items.append({"start": start, "end": end, "speaker": word["speaker"],
+                              "attribution": attribution, "text": word["text"]})
+        for item in items:
+            item["text"] = redact_for_jev(item["text"].strip(), fragment, self.secrets, self.redact_terms)
+        return items
+
+    @staticmethod
+    def _confirmed_role(speaker, roles):
+        role = roles.get(speaker, "unknown") if speaker is not None else "unknown"
+        return role if role in {"patient", "professional", "unknown"} else "unknown"
+
+    def _block_current(self, fragment, utterances, roles):
+        lines = []
+        for item in utterances:
+            annotation = {key: item[key] for key in ("start", "end", "speaker", "attribution")}
+            annotation["role"] = self._confirmed_role(item["speaker"], roles)
+            # JSON separa etiquetas técnicas del contenido conversacional redactado.
+            lines.append(json.dumps(dict(annotation, text=item["text"]), ensure_ascii=False))
+        return {"text": "\n".join(lines), "analysis_unit": "fragment", "role": "unknown",
+                "start": (fragment.session_origin_sample + fragment.start) / 16000,
+                "end": (fragment.session_origin_sample + fragment.end) / 16000}
+
+    def _block_signals(self, fragment, utterances, roles, decision):
+        verified = []
+        eligible = False
+        for item in utterances:
+            if (self._confirmed_role(item["speaker"], roles) != "patient"
+                    or item["attribution"] != "assigned"):
+                continue
+            if (fragment.new_audio_start_sample is not None
+                    and (item["start"] + item["end"]) / 2 < fragment.new_audio_start_sample / 16000):
+                continue
+            text = item["text"]
+            if not text or set(context_flags(text)).intersection({
+                    "pregunta", "cita", "referencia_a_terceros", "antecedente_temporal"}):
+                continue
+            eligible = True
+            if decision.context != "afirmacion_propia":
+                continue
+            literal = literal_candidates(text)
+            dimensions = evidence_dimensions(text)
+            for candidate in jev_candidates(text, decision.values, MATRIX):
+                level = candidate["matrix_level"]
+                # Una puntuación agregada no localiza evidencia: verificarla en
+                # esta voz/intervalo, sin usar texto de otra voz como dimensión.
+                if (decision.values[level] < .55
+                        or (level < 3 and level not in literal)
+                        or (level >= 3 and not dimensions[level])):
+                    continue
+                severity = 1 if level <= 2 else 2 if level <= 4 else 3
+                verified.append(Signal(candidate["category_id"], level, severity, text,
+                                       item["start"], item["end"], item["speaker"]))
+        # Desempate estable: mayor nivel verificado, luego primera evidencia cronológica.
+        best = max(verified, key=lambda signal: (signal.severity, signal.matrix_level, -signal.start), default=None)
+        errors = []
+        if not eligible or decision.context != "afirmacion_propia":
+            errors.append("CONTEXT_NOT_EVALUABLE")
+        elif best is None and (any(v >= .55 for v in decision.values[1:])
+                              or any(self._confirmed_role(item["speaker"], roles) == "unknown"
+                                     or item["attribution"] != "assigned" for item in utterances)):
+            errors.append("TEXT_NOT_EVALUABLE")
+        return (() if best is None else (best,)), errors
+
+    def _process_block(self, fragment, utterances, roles, transcription, errors, checkpoint):
+        if fragment.audio_test:
+            # Convención ficticia exclusiva del diagnóstico sintético autorizado.
+            # Las sesiones clínicas y voces sin atribución conservan unknown.
+            roles = dict(roles)
+            for item in utterances:
+                if item["attribution"] == "assigned" and item["speaker"] is not None:
+                    roles.setdefault(item["speaker"], "patient")
+        decision = None
+        signals = ()
+        if checkpoint is not None and checkpoint.data.get("review_code") == "JEV_CONTEXT_LIMIT":
+            raise AnalysisRetry("JEV_CONTEXT_LIMIT")
+        if not utterances or not any(item["text"].strip() for item in utterances):
+            errors.append("TEXT_NOT_EVALUABLE")
+        else:
+            current = self._block_current(fragment, utterances, roles)
+            try:
+                if checkpoint is not None and "jev_response" in checkpoint.data:
+                    decision = JevDecision(**checkpoint.data["jev_response"])
+                else:
+                    if checkpoint is not None and "jev_pending" in checkpoint.data:
+                        raise AnalysisRetry("JEV_SUBMISSION_UNCERTAIN")
+                    request_id = (checkpoint.data.get("jev_retry_request_id") if checkpoint is not None else None) or uuid4().hex
+                    if checkpoint is not None:
+                        checkpoint.data["jev_pending"] = {"analysis_unit": "fragment", "request_id": request_id}
+                        checkpoint.save()
+                    decision = self.analyzer.evaluate(current, [], request_id=request_id)
+                    if checkpoint is not None:
+                        checkpoint.data["jev_response"] = asdict(decision)
+                        checkpoint.save()
+                signals, block_errors = self._block_signals(fragment, utterances, roles, decision)
+                errors.extend(block_errors)
+            except JevContextLimit as exc:
+                if checkpoint is not None:
+                    checkpoint.data["review_code"] = "JEV_CONTEXT_LIMIT"
+                    checkpoint.save()
+                    raise AnalysisRetry("JEV_CONTEXT_LIMIT") from exc
+                errors.append("JEV_CONTEXT_LIMIT")
+                self.audit.failure("JEV_CONTEXT_LIMIT", sesion_id=fragment.session_id, sequence=fragment.sequence)
+            except ProviderError as exc:
+                code = "JEV_SUBMISSION_UNCERTAIN" if isinstance(exc, SubmissionUncertain) else "JEV_FAILED"
+                if checkpoint is not None:
+                    # Solo un rechazo confirmado permite repetir el mismo bloque.
+                    # Conserva su request_id para trazabilidad entre intentos.
+                    if not isinstance(exc, SubmissionUncertain):
+                        checkpoint.data["jev_retry_request_id"] = checkpoint.data.pop("jev_pending")["request_id"]
+                        checkpoint.save()
+                    raise AnalysisRetry(code) from exc
+                errors.append(code)
+                self.audit.failure(code, sesion_id=fragment.session_id, sequence=fragment.sequence)
+        state = (AnalysisState.INDETERMINATE if errors else
+                 AnalysisState.SIGNAL if signals else AnalysisState.NO_SIGNAL)
+        result = AnalysisResult(fragment.session_id, fragment.sequence, state, transcription,
+                                signals, () if decision is None else (decision,), tuple(sorted(set(errors))),
+                                questions_version=BLOCK_QUESTIONS_VERSION)
+        if checkpoint is None:
+            self.register_signals(fragment, result)
+        else:
+            request = checkpoint.data.get("jev_pending")
+            if request and decision is not None:
+                requests = checkpoint.data.setdefault("jev_requests", [])
+                if request["request_id"] not in requests:
+                    requests.append(request["request_id"])
+            checkpoint.data["result"] = {
+                "state": result.state, "signals": [asdict(signal) for signal in result.signals],
+                "decisions": [asdict(item) for item in result.decisions],
+                "error_codes": result.error_codes, "questions_version": result.questions_version,
+            }
+            checkpoint.save()
+            # El resultado y la respuesta ya están persistidos. La recuperación
+            # posterior usa result, sin conservar otra copia del bloque completo.
+            for key in ("utterances", "roles", "jev_response", "jev_pending", "jev_retry_request_id"):
+                checkpoint.data.pop(key, None)
+            checkpoint.save()
+        return result
+
     def _process(self, fragment, roles, checkpoint=None):
         if fragment.session_id not in self.histories and len(self.histories) >= self.max_sessions:
             raise FragmentRejected("Límite de contextos; cierre sesiones terminadas")
-        if fragment.sequence > 0 and fragment.session_id not in self.histories:
+        if (fragment.analysis_unit == "utterance" and fragment.sequence > 0
+                and fragment.session_id not in self.histories):
             raise AnalysisContextLost("Contexto de sesión no disponible; requiere revisión tras reinicio")
         self.ledger.claim(fragment)
         history = self.histories.setdefault(fragment.session_id, [])
         decisions, signals, errors = [], [], []
+        if checkpoint is not None:
+            stored_unit = checkpoint.data.setdefault("analysis_unit", fragment.analysis_unit)
+            if stored_unit != fragment.analysis_unit:
+                raise FragmentRejected("Checkpoint pertenece a otra unidad de análisis")
+        prepare = self._prepare_block if fragment.analysis_unit == "fragment" else self._prepare_utterances
         try:
             if checkpoint is None:
                 transcription = self.transcriptor.transcribe(fragment)
@@ -110,7 +289,7 @@ class AnalysisService:
                   or checkpoint.data["speechmatics"]["state"] != "deleted"):
                 checkpoint.data.setdefault("roles", roles)
                 transcription = self.transcriptor.transcribe(
-                    fragment, checkpoint=checkpoint, prepare=lambda words: self._prepare_utterances(fragment, words),
+                    fragment, checkpoint=checkpoint, prepare=lambda words: prepare(fragment, words),
                 )
             else:
                 transcription = None
@@ -129,6 +308,19 @@ class AnalysisService:
             self.audit.failure(errors[-1], sesion_id=fragment.session_id, sequence=fragment.sequence)
         utterances = (checkpoint.data["utterances"] if checkpoint is not None
                       else self._utterances(fragment, [asdict(word) for word in transcription.words]))
+        if fragment.analysis_unit == "fragment":
+            if checkpoint is not None:
+                roles = checkpoint.data["roles"]
+            else:
+                utterances = self._prepare_block(fragment, [asdict(word) for word in transcription.words])
+            if fragment.audio_test:
+                # Solo el diagnóstico de clips ficticios tiene roles sintéticos.
+                # El marcador proviene del servidor, nunca de la diarización clínica.
+                roles = dict(roles)
+                for item in utterances:
+                    if item["attribution"] == "assigned" and item["speaker"] is not None:
+                        roles.setdefault(item["speaker"], "patient")
+            return self._process_block(fragment, utterances, roles, transcription, errors, checkpoint)
         start = 0
         if checkpoint is not None:
             roles = checkpoint.data["roles"]
@@ -234,7 +426,10 @@ class AnalysisService:
             return
         delivery = checkpoint.data.setdefault("delivery", {}) if checkpoint is not None else {}
         test_alerts = []
-        for signal in result.signals:
+        signals = result.signals
+        if fragment.analysis_unit == "fragment" and signals:
+            signals = (max(signals, key=lambda signal: (signal.severity, signal.matrix_level, -signal.start)),)
+        for signal in signals:
             evidence = self.evidence.setdefault(fragment.session_id, [])
             excerpt = " ".join(signal.excerpt.casefold().split())
             if fragment.new_audio_start_sample is not None and any(

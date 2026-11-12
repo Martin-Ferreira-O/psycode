@@ -25,6 +25,7 @@ class Command:
     scheduled_start: datetime
     scheduled_end: datetime
     audio_chunk_duration: int | None = None
+    audio_chunk_overlap: int | None = None
 
 
 @dataclass(frozen=True)

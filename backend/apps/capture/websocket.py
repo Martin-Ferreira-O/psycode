@@ -57,6 +57,7 @@ class RemoteControl:
         self.name = "control:" + identity.box
         self.service = CaptureSessionService()
         self.chunk_config_supported = False
+        self.chunk_config_v2_supported = False
 
     def _lock_identity(self):
         if self.identity.managed:
@@ -220,16 +221,20 @@ class RemoteControl:
         data = payload(command)
         session = CaptureSession.objects.get(pk=command.session_id)
         if (command.kind == "inicio" and session.capture_chunk_negotiated is True
-                and not self.chunk_config_supported):
+                and (not self.chunk_config_supported
+                     or (chunk_config.overlap(session) == 0 and not self.chunk_config_v2_supported))):
             raise ValueError("CAPABILITIES_CHANGED")
         if (not self.chunk_config_supported or session.capture_chunk_negotiated is not True
                 or command.kind != "inicio" or command.audio_chunk_duration is None):
             data.pop("audio_chunk_duration", None)
+        if command.kind != "inicio" or command.audio_chunk_overlap is None:
+            data.pop("audio_chunk_overlap", None)
         return data
 
     def commands(self):
         return [self.command_payload(c) for c in self.service.commands(
-            self.identity.box, chunk_config_supported=self.chunk_config_supported)]
+            self.identity.box, chunk_config_supported=self.chunk_config_supported,
+            chunk_config_v2_supported=self.chunk_config_v2_supported)]
 
     def poll(self):
         with transaction.atomic():
@@ -292,13 +297,17 @@ async def agent_websocket(scope, receive, send):
         opened = True
         smile_check = SMILE_CHECK_CAPABILITY in p["capabilities"] and bool(await db(sources_for, identity))
         config_supported = identity.managed and CONFIG_CAPABILITY in p["capabilities"]
-        control.chunk_config_supported = {chunk_config.CAPABILITY, "audio.v2"} <= set(p["capabilities"])
+        control.chunk_config_v2_supported = {chunk_config.CAPABILITY_V2, "audio.v2"} <= set(p["capabilities"])
+        control.chunk_config_supported = (control.chunk_config_v2_supported
+            or {chunk_config.CAPABILITY, "audio.v2"} <= set(p["capabilities"]))
         await db(control.register_hello, p["agent_version"], smile_check)
         await db(register_server_reconnect, identity)
         capabilities = ["audio.v1", "audio.v2", "agenda.excel.v1", "agenda.smile-json.v1",
                         "agent.events.v1", "sessions.capture-ended.v1"]
         if control.chunk_config_supported:
             capabilities.append(chunk_config.CAPABILITY)
+        if control.chunk_config_v2_supported:
+            capabilities.append(chunk_config.CAPABILITY_V2)
         if smile_check:
             capabilities.append(SMILE_CHECK_CAPABILITY)
         if config_supported:

@@ -236,7 +236,7 @@ class CaptureSessionService:
             raise CaptureError("SESSION_NOT_FOUND")
         return session
 
-    def commands(self, box, *, now=None, chunk_config_supported=None):
+    def commands(self, box, *, now=None, chunk_config_supported=None, chunk_config_v2_supported=False):
         now, box = _instant(now), _box(box)
         # Recuperación y entrega comparten la transacción: no se publica un
         # inicio vencido, incluso si el programador externo dejó de ejecutar ticks.
@@ -258,7 +258,10 @@ class CaptureSessionService:
                 if (item.kind == CommandKind.START and session.capture_chunk_negotiated is None
                         and chunk_config_supported is not None):
                     session.capture_chunk_negotiated = bool(chunk_config_supported and session.capture_chunk_config)
-                    session.save(update_fields=["capture_chunk_negotiated"])
+                    if session.capture_chunk_negotiated:
+                        session.capture_chunk_config = {**session.capture_chunk_config,
+                            "audio_chunk_overlap": 0 if chunk_config_v2_supported else 1}
+                    session.save(update_fields=["capture_chunk_negotiated", "capture_chunk_config"])
                 item.delivered_at, item.delivery_count = now, item.delivery_count + 1
                 item.save(update_fields=["delivered_at", "delivery_count"])
                 _event(item.session, "command.delivered", now, command=item)
@@ -266,7 +269,9 @@ class CaptureSessionService:
                                       item.session.scheduled_start, min(item.session.scheduled_end, item.session.stop_requested_at)
                                       if item.kind == CommandKind.STOP and item.session.stop_requested_at else item.session.scheduled_end,
                                       chunk_config.duration(session) if item.kind == CommandKind.START
-                                      and session.capture_chunk_negotiated is True else None))
+                                      and session.capture_chunk_negotiated is True else None,
+                                      0 if item.kind == CommandKind.START and session.capture_chunk_negotiated is True
+                                      and chunk_config.overlap(session) == 0 else None))
             return tuple(result)
 
     def acknowledge(self, box, command_id, *, success=True, last_sequence=None, error_code="",
