@@ -35,7 +35,7 @@ class Command(BaseCommand):
                         raise CommandError("PROCESS_LEASE_LOST")
                     refresh(agenda)
                     if options["stop_all"]:
-                        self.stop_all(service)
+                        self.stop_all(service, owner)
                     else:
                         service.recover()
                         for box in known_boxes():
@@ -44,10 +44,14 @@ class Command(BaseCommand):
                     return
                 stop.wait(options["interval"])
             # No nuevos inicios; receptores siguen atendiendo ACK/uploads.
-            self.stop_all(service)
+            self.stop_all(service, owner)
 
     @staticmethod
-    def stop_all(service):
+    def stop_all(service, owner):
         with transaction.atomic():
-            for session in CaptureSession.objects.select_for_update().filter(state__in=OPEN_STATES):
+            if not RuntimeLease.objects.select_for_update().filter(name="coordinator", owner=owner,
+                    expires_at__gt=timezone.now()).exists():
+                raise CommandError("PROCESS_LEASE_LOST")
+            for session in CaptureSession.objects.select_for_update().filter(
+                    state__in=OPEN_STATES, actual_end__isnull=True):
                 service._stop(session, timezone.now())

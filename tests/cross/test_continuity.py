@@ -40,7 +40,7 @@ class FiveAgentContinuityTests(TransactionTestCase):
                 pairs = []
                 original_hashes = {}
                 for box, token in tokens.items():
-                    config = AgentConfig(box, "127.0.0.1", 4455, "synthetic", "rtsp://synthetic", 10, 1,
+                    config = AgentConfig(box, 10, 1, autonomous=False,
                         backend_url="http://testserver", agent_token=token, agent_state_root=str(root / box),
                         max_retries=2, retry_backoff=0)
                     journal = CommandJournal(root / box, box)

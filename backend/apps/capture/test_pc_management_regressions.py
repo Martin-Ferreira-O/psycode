@@ -27,14 +27,23 @@ class SocketLifecycleTests(TransactionTestCase):
             await incoming.put({"type": "websocket.connect"})
             await incoming.put({"type": "websocket.receive", "text": json.dumps(envelope(
                 "hello", {"agent_version": "test-96", "capabilities": list(capabilities)}))})
-            for kind, data in messages:
-                await incoming.put({"type": "websocket.receive", "text": json.dumps(envelope(kind, data))})
-            if not invalidate:
-                await incoming.put({"type": "websocket.disconnect", "code": 1000})
+            deferred = CONFIG_CAPABILITY in capabilities
+            async def send_requests():
+                for kind, data in messages:
+                    await incoming.put({"type": "websocket.receive", "text": json.dumps(envelope(kind, data))})
+                if not invalidate:
+                    await incoming.put({"type": "websocket.disconnect", "code": 1000})
+            if not deferred:
+                await send_requests()
             async def send(event):
                 sent.append(event)
-                if invalidate and event["type"] == "websocket.send" and json.loads(event["text"])["type"] == "ready":
+                if event["type"] != "websocket.send":
+                    return
+                kind = json.loads(event["text"])["type"]
+                if invalidate and kind == "ready":
                     await db(invalidate, self.agent)
+                if deferred and kind == "config_sync":
+                    await send_requests()
             await asyncio.wait_for(agent_websocket({
                 "type": "websocket", "path": "/ws/v1/agents", "query_string": b"",
                 "headers": [(b"authorization", f"Agent {self.token}".encode())],
@@ -94,6 +103,18 @@ class SocketLifecycleTests(TransactionTestCase):
         self.assertEqual(self.agent.control_owner, new.owner)
         self.assertEqual(ServerConnectivityOutage.objects.count(), 0)
         self.assertEqual(new.poll(), [])
+
+    def test_displaced_client_cannot_take_back_a_live_lease(self):
+        identity = authenticate_agent_header(f"Agent {self.token}".encode())
+        original, current, retry = [RemoteControl(identity, uuid4()) for _ in range(3)]
+        self.assertTrue(original.open())
+        self.assertTrue(current.open())
+        retry.yield_replaced = True
+        self.assertFalse(retry.open())
+        self.assertTrue(RuntimeLease.objects.filter(name="control:box-3", owner=current.owner).exists())
+        current.close()
+        self.assertTrue(retry.open())
+        retry.close()
 
     def test_reconnect_after_expired_lease_preserves_outage_without_dashboard_visit(self):
         identity = authenticate_agent_header(f"Agent {self.token}".encode())

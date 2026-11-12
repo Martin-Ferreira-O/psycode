@@ -1,10 +1,9 @@
-"""Proceso del paquete instalado: OBS simulado y transportes WS/HTTP reales."""
+"""Proceso del paquete instalado: captura simulada y transportes WS/HTTP reales."""
 import json
 import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import Mock
 from psycode_agent.config import AgentConfig
 from psycode_agent.control import WebSocketControl
@@ -17,14 +16,14 @@ from psycode_agent.fragment_store import FragmentStore
 
 base, token, root, alternate=sys.argv[1:]
 from dataclasses import replace
-config=AgentConfig('box-3','127.0.0.1',4455,'synthetic','rtsp://127.0.0.1/synthetic',10,1,
-    backend_url=base,agent_token=token,agent_state_root=root,websocket_url=base.replace('http:','ws:')+'/ws/v1/agents',
-    max_retries=2,retry_backoff=0,autonomous=False,audio_v2=True)
+config=AgentConfig('box-3',10,1,
+    backend_url=base,agent_token=token,agent_state_root=root,websocket_url=base.replace('https:','wss:').replace('http:','ws:')+'/ws/v1/agents',
+    max_retries=2,retry_backoff=0,autonomous=False,audio_v2=True, control_ca_file=__import__("os").environ.get("SSL_CERT_FILE", ""))
 control=WebSocketControl(config)
 try:
     control.open()
-    controller=Mock();runner=Mock();runner.store=FragmentStore(Path(root)/'fragments')
-    coordinator=SessionCoordinator(config,control,controller=controller,runner_factory=lambda cfg:runner,
+    runner=Mock();runner.store=FragmentStore(Path(root)/'fragments')
+    coordinator=SessionCoordinator(config,control,runner_factory=lambda cfg:runner,
                                    journal=CommandJournal(root,'box-3'))
     commands=control.commands('box-3')
     if not commands:
@@ -33,17 +32,17 @@ try:
     assert start.audio_chunk_duration == 60, "Default duration did not reach agent"
     original=control._request
     dropped=[]
-    def lose_receipt(kind,payload,expected):
-        result=original(kind,payload,expected)
+    def lose_receipt(kind,payload,expected,**options):
+        result=original(kind,payload,expected,**options)
         if kind=='command_ack' and not dropped:
             dropped.append(dict(payload));raise TimeoutError('synthetic lost receipt after commit')
         return result
     control._request=lose_receipt
     try:coordinator.handle_command(start)
     except TimeoutError:pass
-    # Reintenta sin reentrega y conserva identidad, instante y una sola acción OBS.
+    # Reintenta sin reentrega y conserva identidad, instante y una sola ejecución de captura.
     # La reconexión toma propiedad en OTRO proceso ASGI, antes de cerrar el viejo.
-    replacement=WebSocketControl(replace(config,websocket_url=alternate.replace('http:','ws:')+'/ws/v1/agents'))
+    replacement=WebSocketControl(replace(config,websocket_url=alternate.replace('https:','wss:').replace('http:','ws:')+'/ws/v1/agents'))
     replacement.open()
     deadline=time.monotonic()+3
     while control._error is None and time.monotonic()<deadline:time.sleep(.05)
@@ -51,7 +50,7 @@ try:
     control.close();control=replacement;coordinator.control=control
     coordinator.retry_pending_confirmation()
     coordinator.thread.join(1)
-    assert controller.start_capture.call_count==1
+    runner.run.assert_called_once()
     captured=datetime.now(timezone.utc)
     # Esperar la duración representada en el WAV para no enviar audio futuro.
     metadata=save_fragment(Path(root)/'fragments'/str(start.session_id),'box-3',start.session_id,0,
@@ -72,7 +71,7 @@ try:
         for command in control.commands('box-3'):
             if command.kind=='detencion':
                 coordinator.handle_command(command)
-                assert controller.stop_capture.call_count==1
+                runner.stop.assert_called_once()
                 print(json.dumps({'stage':'stopped','last_sequence':0}),flush=True)
                 sys.exit(0)
         time.sleep(.1)
