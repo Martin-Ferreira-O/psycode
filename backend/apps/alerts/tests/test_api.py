@@ -9,11 +9,13 @@ from zoneinfo import ZoneInfo
 from django.test import SimpleTestCase
 from rest_framework.test import APIClient
 
-from backend.apps.alerts.domain import alerta_con_evaluacion, evaluacion_nueva
+from backend.apps.alerts.documents import alerta_a_documento
+from backend.apps.alerts.domain import ORIGEN_PRUEBA_AUDIO, alerta_con_evaluacion, evaluacion_nueva
 from backend.apps.alerts.exceptions import EvaluationAlreadyRegistered
 from backend.apps.alerts.ports import AlertQueryFilters
 from backend.apps.alerts.repositories import AlertsRepository
 from backend.apps.alerts.serializers import AlertQueryFilterSerializer, AlertaDetailSerializer, AlertaListItemSerializer
+from backend.apps.alerts.services import AlertsService
 
 from .test_persistence import alta_pendiente
 
@@ -96,6 +98,7 @@ class AlertFilterTests(SimpleTestCase):
             ("/api/v1/alerts?box=a&box=b", "box"),
             ("/api/v1/alerts?revisadas=true&revisadas=false", "revisadas"),
             ("/api/v1/alerts?revisadas=1", "revisadas"),
+            ("/api/v1/alerts?registro_evaluaciones=1", "registro_evaluaciones"),
             ("/api/v1/alerts?estado_evaluacion=otra", "estado_evaluacion"),
             ("/api/v1/alerts?limit=0", "limit"),
             ("/api/v1/alerts?offset=9223372036854775808", "offset"),
@@ -141,8 +144,35 @@ class AlertFilterTests(SimpleTestCase):
                 collection.return_value.find.return_value.sort.return_value.skip.return_value.limit.return_value = []
                 store.list_alerts(AlertQueryFilters(estado_evaluacion=estado, revisadas=revisadas))
                 query = collection.return_value.count_documents.call_args.args[0]
-                self.assertEqual(query, {"$and": clauses})
+                self.assertEqual(query, {
+                    "$and": clauses,
+                    "trazabilidad.origen": {"$ne": ORIGEN_PRUEBA_AUDIO},
+                })
                 collection.return_value.find.assert_called_once_with(query, {"_id": 0})
+
+    def test_registro_evaluaciones_incluye_pruebas_pendientes(self):
+        store = AlertsRepository()
+        alert = alta_pendiente(origen=ORIGEN_PRUEBA_AUDIO)
+
+        with (patch("backend.apps.alerts.views.get_service", return_value=AlertsService(store)),
+              patch.object(store, "_alerts") as collection):
+            collection.return_value.count_documents.return_value = 1
+            collection.return_value.find.return_value.sort.return_value.skip.return_value.limit.return_value = [
+                alerta_a_documento(alert),
+            ]
+            response = self.client.get("/api/v1/alerts?registro_evaluaciones=true&limit=10")
+            query = {"$and": [{"$or": [
+                {"estado_evaluacion": {"$ne": "pendiente"}},
+                {"trazabilidad.origen": ORIGEN_PRUEBA_AUDIO},
+            ]}]}
+            collection.return_value.count_documents.assert_called_once_with(query)
+            collection.return_value.find.assert_called_once_with(query, {"_id": 0})
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.data["data"]["total"], 1)
+        item = response.data["data"]["items"][0]
+        self.assertEqual(item["estado_evaluacion"], "pendiente")
+        self.assertIs(item["es_prueba"], True)
 
     def test_estado_revisadas_y_otros_filtros_conservan_and(self):
         store = AlertsRepository()

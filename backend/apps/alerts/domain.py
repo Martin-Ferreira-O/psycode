@@ -46,6 +46,7 @@ TIPO_RIESGO_LONGITUD: Final[tuple[int, int]] = (1, 100)
 DESCRIPCION_MAX: Final[int] = 500
 ORIGEN_LONGITUD: Final[tuple[int, int]] = (1, 100)
 USUARIO_LONGITUD: Final[tuple[int, int]] = (1, 150)
+ORIGEN_PRUEBA_AUDIO: Final[str] = "analysis.audio-test/1.0"
 
 # Escala operativa del proyecto: un nivel por cada semáforo.
 _SEMAFORO_POR_SEVERIDAD: Final[dict[int, Semaforo]] = {
@@ -145,6 +146,10 @@ class Alerta:
     sesion_id: str
     descripcion: str | None
     trazabilidad: Trazabilidad
+
+    @property
+    def es_prueba(self) -> bool:
+        return self.trazabilidad.origen == ORIGEN_PRUEBA_AUDIO
 
 
 def trazabilidad_nueva(origen: object, instante: datetime) -> Trazabilidad:

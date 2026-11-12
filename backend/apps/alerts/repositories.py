@@ -11,7 +11,7 @@ from .audit import AlertAudit, STORAGE_AUDIT_COUNTS, STORAGE_PROVIDER_AUDIT_COUN
 from backend.common.errors import PersistenceUnavailable
 
 from .documents import alerta_a_documento, documento_a_alerta, evaluacion_a_documento
-from .domain import Alerta, DomainError, Evaluacion, EstadoEvaluacion, normalizar_uuid, validar_alerta
+from .domain import Alerta, DomainError, Evaluacion, EstadoEvaluacion, ORIGEN_PRUEBA_AUDIO, normalizar_uuid, validar_alerta
 from .exceptions import AlertAlreadyExists, AlertNotFound, EvaluationAlreadyRegistered
 from .mongo import ensure_alert_schema, schema_path
 from .ports import AlertQueryFilters, AlertQueryPort, AlertWritePort
@@ -141,6 +141,13 @@ class AlertsRepository(AlertWritePort, AlertQueryPort):
             query.update(estados[0])
         elif estados:
             query["$and"] = estados
+        if filters.registro_evaluaciones:
+            query.setdefault("$and", []).append({"$or": [
+                {"estado_evaluacion": {"$ne": EstadoEvaluacion.PENDIENTE.value}},
+                {"trazabilidad.origen": ORIGEN_PRUEBA_AUDIO},
+            ]})
+        else:
+            query["trazabilidad.origen"] = {"$ne": ORIGEN_PRUEBA_AUDIO}
 
         fecha_cond: dict[str, any] = {}
         if filters.fecha_desde_utc:

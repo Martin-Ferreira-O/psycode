@@ -53,7 +53,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         let confirmarConsulta;
         const primeraConsulta = new Promise(resolve => { confirmarConsulta = resolve; });
         liberar = null;
-        await page.route(url => url.pathname === '/api/v1/alerts' && url.searchParams.get('revisadas') === 'true', async route => {
+        await page.route(url => url.pathname === '/api/v1/alerts' && url.searchParams.get('registro_evaluaciones') === 'true', async route => {
             if (liberar === null) {
                 await new Promise(resolve => {
                     liberar = resolve;
@@ -111,6 +111,39 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         assert.equal(await page.locator('#tablaEvaluacionesContenedor').isVisible(), false, 'no presenta datos anteriores como actuales');
 
         estado = 200;
+        const alertaPrueba = {
+            ...cuerpo.data.items[0], alerta_id: '33333333-3333-4333-8333-000000000001',
+            es_prueba: true, estado_evaluacion: 'pendiente', evaluacion: null,
+        };
+        await page.route(`**/api/v1/alerts/${alertaPrueba.alerta_id}`, route =>
+            route.fulfill({ json: { success: true, data: alertaPrueba } }));
+        await page.route(`**/api/v1/alerts/${alertaPrueba.alerta_id}/evaluacion`, route => {
+            assert.equal(route.request().method(), 'POST');
+            assert.deepEqual(route.request().postDataJSON(), { evaluacion: 'correcta' });
+            alertaPrueba.estado_evaluacion = 'correcta';
+            alertaPrueba.evaluacion = {
+                alerta_id: alertaPrueba.alerta_id, evaluacion: 'correcta', estado_evaluacion: 'correcta',
+                usuario: 'supervisor-sintetico', fecha_hora: '2026-09-12T15:10:00Z',
+            };
+            return route.fulfill({ status: 201, json: { success: true, data: alertaPrueba.evaluacion } });
+        });
+        registros = [alertaPrueba];
+        await page.getByRole('button', { name: 'Actualizar', exact: true }).click();
+        const filaPrueba = page.locator('#tablaEvaluaciones tr').first();
+        await filaPrueba.getByText('Alerta de prueba', { exact: true }).waitFor();
+        assert.equal(await filaPrueba.getByText('Pendiente', { exact: true }).isVisible(), true);
+        await filaPrueba.getByRole('button').click();
+        const detallePrueba = page.getByRole('dialog');
+        await detallePrueba.getByText('Alerta de prueba', { exact: true }).waitFor();
+        await detallePrueba.getByRole('radio', { name: /escenario simulado/ }).check();
+        await detallePrueba.getByRole('button', { name: 'Guardar evaluación' }).click();
+        const confirmacionPrueba = detallePrueba.locator('#estadoDetalle [data-estado="exito"]');
+        await confirmacionPrueba.waitFor();
+        assert.equal(await confirmacionPrueba.innerText(), 'Evaluación registrada.');
+        await detallePrueba.getByRole('button', { name: 'Cerrar' }).click();
+        await filaPrueba.getByText('Revisada', { exact: true }).waitFor();
+        assert.equal(await filaPrueba.getByText('Alerta de prueba', { exact: true }).isVisible(), true);
+
         const anterior = page.locator('#evaluacionesAnterior');
         const siguiente = page.locator('#evaluacionesSiguiente');
         const filas = page.locator('#tablaEvaluaciones tr');
@@ -146,7 +179,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
             }
             assert.deepEqual(visibles, registros.map(alerta => alerta.alerta_id));
             assert.equal(await siguiente.isDisabled(), true);
-            assert.equal(await page.locator('#resultadoEvaluaciones').innerText(), `Mostrando ${total - 9}–${total} de ${total} evaluaciones`);
+            assert.equal(await page.locator('#resultadoEvaluaciones').innerText(), `Mostrando ${total - 9}–${total} de ${total} registros`);
             await anterior.click();
             await page.getByText(`Página ${paginas - 1} de ${paginas}`, { exact: true }).waitFor();
             console.log(`Registro de evaluaciones: ${total} registros, ${paginas} páginas sin duplicados a ${ancho}px.`);

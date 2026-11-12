@@ -44,7 +44,7 @@ export default function AlertDetail({ id, onClose, returnFocusRef, evaluation, s
     const alert = data && withEvaluation(data, evaluation);
     const pending = alert?.estado_evaluacion === "pendiente";
     const canEvaluate = pending && Boolean(onEvaluate) && !feedback?.conflict;
-    const registered = alert && (!pending || !onEvaluate);
+    const registered = alert && !pending;
     const transcript = typeof alert?.descripcion === "string" ? alert.descripcion : "";
     const title = alert ? codigoAlertaVisible(alert.alerta_id) : "Detalle de alerta";
 
@@ -84,6 +84,7 @@ export default function AlertDetail({ id, onClose, returnFocusRef, evaluation, s
                     <div>
                         <span>Detalle de alerta</span>
                         <h2 id="tituloModal">{title}</h2>
+                        {alert?.es_prueba && <Badge tone="warning">Alerta de prueba</Badge>}
                     </div>
                     <Button ref={closeRef} iconOnly variant="secondary" aria-label="Cerrar" onClick={onClose} data-cerrar-modal>
                         <Icon name="close" />
@@ -94,7 +95,8 @@ export default function AlertDetail({ id, onClose, returnFocusRef, evaluation, s
                     {error && <Status type="error" error={error} onRetry={retry} />}
                     {feedback && !canEvaluate && (
                         <div id="estadoDetalle">
-                            <Status type={feedback.type} error={feedback.error} messages={{ 404: "No encontramos la evaluación registrada." }} onRetry={retry}>
+                            <Status type={feedback.type} error={feedback.error} messages={{ 404: "No encontramos la evaluación registrada." }}
+                                onRetry={feedback.type === "error" ? retry : undefined}>
                                 {feedback.text}
                             </Status>
                         </div>
@@ -109,12 +111,12 @@ export default function AlertDetail({ id, onClose, returnFocusRef, evaluation, s
                                 <DetailValue label="Estado" id="detalleEstado">{pending ? "Pendiente" : obtenerEtiquetaEvaluacion(alert.estado_evaluacion)}</DetailValue>
                                 <DetailValue label="Sesión" id="detalleSesion">{alert.sesion_id || "—"}</DetailValue>
                             </div>
-                            <section id="seccionTranscripcion" className="alert-detail-section" aria-labelledby="tituloTranscripcion">
+                            {!alert.es_prueba && <section id="seccionTranscripcion" className="alert-detail-section" aria-labelledby="tituloTranscripcion">
                                 <h3 id="tituloTranscripcion">Fragmento de transcripción</h3>
                                 <p id="detalleTranscripcion" className="alert-detail-transcript">
                                     {transcript.trim() ? transcript : "Esta alerta no tiene un fragmento de transcripción disponible."}
                                 </p>
-                            </section>
+                            </section>}
                             {canEvaluate && (
                                 <form id="formularioEvaluacion" className="alert-detail-section" onSubmit={submit}>
                                     <fieldset>
@@ -124,7 +126,9 @@ export default function AlertDetail({ id, onClose, returnFocusRef, evaluation, s
                                             {Object.entries(evaluationChoices).map(([value, description]) => (
                                                 <label key={value}>
                                                     <input type="radio" name="evaluacion" value={value} checked={option === value} onChange={() => setOption(value)} disabled={saving} />
-                                                    <span><strong>{obtenerEtiquetaEvaluacion(value)}</strong>{description}</span>
+                                                    <span><strong>{obtenerEtiquetaEvaluacion(value)}</strong>
+                                                        {alert.es_prueba && value === "correcta" ? "La detección coincide con el escenario simulado." : description}
+                                                    </span>
                                                 </label>
                                             ))}
                                         </div>

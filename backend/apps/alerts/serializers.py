@@ -77,6 +77,10 @@ class AlertQueryFilterSerializer(serializers.Serializer):
         return attrs
 
 
+class AlertListFilterSerializer(AlertQueryFilterSerializer):
+    registro_evaluaciones = StrictQueryBooleanField(required=False, default=False)
+
+
 class EvaluacionPublicSerializer(serializers.Serializer):
     alerta_id = serializers.CharField()
     evaluacion = serializers.CharField()
@@ -99,6 +103,7 @@ class EvaluacionCreateSerializer(serializers.Serializer):
 
 class AlertaListItemSerializer(serializers.Serializer):
     alerta_id = serializers.CharField()
+    es_prueba = serializers.BooleanField()
     box = serializers.CharField()
     tipo_riesgo = serializers.CharField()
     nivel_severidad = serializers.IntegerField(min_value=1, max_value=3)

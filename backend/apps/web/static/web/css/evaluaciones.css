@@ -2,6 +2,14 @@
     margin-top: 22px;
 }
 
+.panel-evaluaciones .panel-cabecera {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
 .pie-evaluaciones {
     padding: 16px 20px;
     border-top: 1px solid var(--borde);

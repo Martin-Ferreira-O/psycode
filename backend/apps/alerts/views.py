@@ -13,6 +13,7 @@ from .exceptions import AlertNotFound, EvaluationAlreadyRegistered
 from .ports import AlertQueryFilters
 from .repositories import AlertsRepository
 from .serializers import (
+    AlertListFilterSerializer,
     AlertQueryFilterSerializer,
     EvaluacionCreateSerializer,
     EvaluacionPublicSerializer,
@@ -43,7 +44,7 @@ class AlertListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        query_serializer = AlertQueryFilterSerializer(data=request.query_params)
+        query_serializer = AlertListFilterSerializer(data=request.query_params)
         query_serializer.is_valid(raise_exception=True)
 
         data = query_serializer.validated_data
@@ -56,6 +57,7 @@ class AlertListView(APIView):
             revisadas=data.get("revisadas"),
             limit=data.get("limit", 50),
             offset=data.get("offset", 0),
+            registro_evaluaciones=data["registro_evaluaciones"],
         )
 
         service = get_service()

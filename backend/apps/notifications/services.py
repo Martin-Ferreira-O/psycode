@@ -87,7 +87,8 @@ class NotificationService(AlertNotifier):
             return NotificationResult(ident, False, motivo_omision='NOTIFICATIONS_DISABLED')
 
         confirmed_payload = NotificationPayload(
-            str(alert.semaforo), 'riesgo_suicida', alert.box, alert.fecha_hora.isoformat()
+            str(alert.semaforo), 'riesgo_suicida', alert.box, alert.fecha_hora.isoformat(),
+            es_prueba=alert.es_prueba,
         )
         recipients = self.recipient_resolver.resolve()
         notification = {'id': str(uuid4()), 'mode': (
