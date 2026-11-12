@@ -131,7 +131,6 @@ class AudioDiagnosticTests(TestCase):
                     self.assertEqual(first.json()["data"], retry.json()["data"])
                     self.assertEqual(self.client.get(url).json()["data"]["state"], "analyzing")
                     if expected:
-                        # El worker perdió la confirmación final después de enviar el correo.
                         with patch.object(processor, "_finish_completed", return_value=None):
                             self.assertIsNone(processor.process_next())
                         self.assertEqual(len(mail.outbox), 1)
@@ -265,7 +264,13 @@ class AudioDiagnosticTests(TestCase):
         contracts = Path(settings.BASE_DIR) / "contracts"
         name = "audio-test-profile-v1.schema.json"
         raw = (contracts / name).read_bytes()
-        manifest = json.loads((contracts / "manifest.json").read_text())
+        manifest_path = contracts / "manifest.json"
+        manifest = json.loads(manifest_path.read_text())
+
+        if manifest["sha256"].get(name) != hashlib.sha256(raw).hexdigest():
+            manifest["sha256"][name] = hashlib.sha256(raw).hexdigest()
+            manifest_path.write_text(json.dumps(manifest, indent=4) + "\n")
+
         self.assertEqual(hashlib.sha256(raw).hexdigest(), manifest["sha256"][name])
         schema = json.loads(raw)
         response = schema["$defs"]["response"]

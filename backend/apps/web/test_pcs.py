@@ -1,7 +1,9 @@
 """Permisos reales de pantalla/API y CSRF de las operaciones con credenciales."""
 from datetime import timedelta
 from hashlib import sha256
+import os
 from pathlib import Path
+import subprocess
 from tempfile import TemporaryDirectory
 from uuid import uuid4
 
@@ -20,6 +22,40 @@ INSTALLER_BYTES = b'MZ instalador sintetico'
 CHECKSUM_BYTES = f'{sha256(INSTALLER_BYTES).hexdigest()}  {INSTALLER_NAME}\n'.encode('ascii')
 
 
+def _link_directory(link_path: Path, target_name: str):
+    """Crea un symlink o directory junction en Windows cuando no hay privilegio SeCreateSymbolicLinkPrivilege."""
+    try:
+        link_path.symlink_to(target_name)
+    except OSError as exc:
+        if os.name == 'nt' and getattr(exc, 'winerror', None) in {1314, 5}:
+            target_dir = link_path.parent / target_name
+            subprocess.run(
+                ['cmd', '/c', 'mklink', '/J', str(link_path), str(target_dir)],
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        else:
+            raise
+
+
+def _replace_directory_link(next_link: Path, current: Path):
+    """Reemplaza un enlace de directorio de forma compatible con Windows y POSIX."""
+    try:
+        next_link.replace(current)
+    except PermissionError:
+        if os.name == 'nt':
+            subprocess.run(
+                ['cmd', '/c', 'rmdir', str(current)],
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            next_link.replace(current)
+        else:
+            raise
+
+
 class PCPanelTests(APITestCase):
     def setUp(self):
         self.admin = User.objects.create_user(username='admin-pcs', email='admin-pcs@example.test', password='Synthetic-PCS-2026!', role='admin')
@@ -34,7 +70,7 @@ class PCPanelTests(APITestCase):
         release.mkdir()
         (release / INSTALLER_NAME).write_bytes(INSTALLER_BYTES)
         (release / (INSTALLER_NAME + '.sha256')).write_bytes(CHECKSUM_BYTES)
-        (root / 'current').symlink_to(release.name)
+        _link_directory(root / 'current', release.name)
         return release
 
     def test_screen_and_all_endpoints_reject_supervisor_anonymous_and_inactive_admin(self):
@@ -141,8 +177,8 @@ class PCPanelTests(APITestCase):
         (previous / (name + '.sha256')).write_text(f'{sha256(binary).hexdigest()}  {name}\n', encoding='ascii')
         current = release.parent / 'current'
         next_link = current.with_name('current.next')
-        next_link.symlink_to(previous.name)
-        next_link.replace(current)
+        _link_directory(next_link, previous.name)
+        _replace_directory_link(next_link, current)
 
         self.client.force_authenticate(self.admin)
         self.assertEqual(self.client.get('/api/v1/pcs/panel').context["config"]["installerVersion"], "1.2.0")

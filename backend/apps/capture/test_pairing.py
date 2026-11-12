@@ -1,10 +1,11 @@
 """Contrato de vinculación y salas dinámicas, sin secretos ni servicios reales."""
+import time
 from datetime import timedelta
 from unittest.mock import patch
 
 from django.test import override_settings
 from django.utils import timezone
-from rest_framework.test import APITestCase, APIClient
+from rest_framework.test import APITransactionTestCase, APIClient
 from rest_framework.exceptions import AuthenticationFailed
 
 from backend.apps.accounts.models import User, AuthRateLimit
@@ -17,7 +18,7 @@ from .websocket import RemoteControl
 from uuid import uuid4
 
 
-class PairingTests(APITestCase):
+class PairingTests(APITransactionTestCase):
     def setUp(self):
         self.admin = User.objects.create_user(username='pair-admin', email='pair@example.test', password='Synthetic-only-2026!', role='admin')
         self.client.force_authenticate(self.admin)
@@ -193,8 +194,8 @@ class PairingTests(APITestCase):
 
 
 from concurrent.futures import ThreadPoolExecutor
+from django.db import close_old_connections, OperationalError
 from django.test import TransactionTestCase
-from django.db import close_old_connections
 from .pairing import create_pairable_agent, redeem_pairing_code
 from backend.common.errors import ServiceError
 
@@ -206,6 +207,15 @@ class PairingConcurrencyTests(TransactionTestCase):
     def worker(self, function, *args, **kwargs):
         close_old_connections()
         try:
+            for _ in range(20):
+                try:
+                    return function(*args, **kwargs)
+                except OperationalError as e:
+                    if "locked" in str(e):
+                        time.sleep(0.05)
+                        close_old_connections()
+                        continue
+                    raise
             return function(*args, **kwargs)
         finally:
             close_old_connections()

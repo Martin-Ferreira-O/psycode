@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import IntegrityError, OperationalError, connection, transaction
-from django.test import TestCase, TransactionTestCase
+from django.test import TransactionTestCase
 
 from .domain import CaptureError
 from .ingestion import FragmentIngestionService
@@ -49,7 +49,7 @@ class IngestionFixtures(CaptureFixtures):
         return list(self.root.glob("*.blob"))
 
 
-class FragmentIngestionTests(IngestionFixtures, TestCase):
+class FragmentIngestionTests(IngestionFixtures, TransactionTestCase):
     def test_new_fragment_saves_private_file_pending_job_sequence_and_events(self):
         result, created = self.receive()
         self.assertTrue(created)

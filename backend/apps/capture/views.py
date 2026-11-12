@@ -1,11 +1,15 @@
-﻿from django.db import transaction
+﻿import uuid
+from django.db import transaction
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from django.utils.decorators import method_decorator
 from rest_framework import exceptions, status
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from backend.apps.operational.views import IsActiveAdmin
+from backend.common.audit import AuditWriter
 from backend.common.responses import success_response
 from backend.config.composition import fragment_ingestion_service
 from .authentication import BoxAgentAuthentication
@@ -13,6 +17,7 @@ from .serializers import FragmentSerializer, FragmentV2Serializer, AgentConfigur
 from .storage import FragmentError
 from .uploads import FragmentMultiPartParser
 from .models import AgentRegistration, AgentConfiguration, ConfigurationState
+
 
 @method_decorator(transaction.non_atomic_requests, name="dispatch")
 class FragmentUploadView(APIView):
@@ -58,8 +63,10 @@ class FragmentUploadView(APIView):
             if handler is not None:
                 handler.close()
 
+
 class FragmentV2UploadView(FragmentUploadView):
     serializer_class = FragmentV2Serializer
+
 
 class AgentConfigurationView(APIView):
     permission_classes = [IsAuthenticated, IsActiveAdmin]
@@ -80,25 +87,92 @@ class AgentConfigurationView(APIView):
 
     def put(self, request, agent_id):
         agent = get_object_or_404(AgentRegistration, pk=agent_id)
+        if not isinstance(request.data, dict):
+            raise exceptions.ValidationError({"non_field_errors": ["Formato de solicitud inválido."]})
+
         serializer = AgentConfigurationSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        
+
+        base_version = serializer.validated_data.get("base_version")
+        if base_version is None:
+            base_version = serializer.validated_data.get("expected_version")
+        if base_version is None and "version" in request.data:
+            try:
+                base_version = int(request.data["version"])
+            except (TypeError, ValueError):
+                raise exceptions.ValidationError({"version": ["Versión base inválida."]})
+
+        requested_by = getattr(request.user, "pk", None) or getattr(request.user, "id", None)
+
         with transaction.atomic():
             last_config = agent.configurations.select_for_update().order_by("-version").first()
-            new_version = (last_config.version + 1) if last_config else 1
-            requested_by = request.user.id if hasattr(request.user, 'id') else None
-            
+            current_version = last_config.version if last_config else 0
+
+            # BUG-97-05: Detectar ediciones sobre versiones desactualizadas o con cambios en vuelo
+            conflict = False
+            if base_version is not None and base_version != current_version:
+                conflict = True
+            elif (
+                base_version is None
+                and last_config is not None
+                and last_config.state in {ConfigurationState.PENDING, ConfigurationState.RECEIVED}
+            ):
+                conflict = True
+
+            if conflict:
+                AuditWriter.emit({
+                    "event_id": str(uuid.uuid4()),
+                    "timestamp": timezone.now().isoformat(),
+                    "action": "capture.agent_config.conflict",
+                    "outcome": "failure",
+                    "actor_id": str(requested_by) if requested_by else None,
+                    "agent_id": str(agent.pk),
+                    "box": agent.box,
+                    "version": current_version,
+                    "error_code": "CONFIG_VERSION_CONFLICT",
+                })
+                return Response(
+                    {
+                        "success": False,
+                        "error": {
+                            "code": "CONFIG_VERSION_CONFLICT",
+                            "message": "Conflicto: La configuración fue modificada o tiene una versión pendiente. Recargue antes de volver a editar.",
+                            "details": {
+                                "current_version": current_version,
+                                "base_version": base_version,
+                            },
+                        },
+                        "timestamp": timezone.now().isoformat(),
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
+
+            new_version = current_version + 1
+
             new_config = AgentConfiguration.objects.create(
                 agent=agent,
                 requested_by=requested_by,
                 desired_config=serializer.validated_data["desired_config"],
                 effective_config=last_config.effective_config if last_config else {},
                 version=new_version,
-                state=ConfigurationState.PENDING
+                state=ConfigurationState.PENDING,
             )
-            
+
+            AuditWriter.emit({
+                "event_id": str(uuid.uuid4()),
+                "timestamp": timezone.now().isoformat(),
+                "action": "capture.agent_config.requested",
+                "outcome": "success",
+                "actor_id": str(requested_by) if requested_by else None,
+                "agent_id": str(agent.pk),
+                "box": agent.box,
+                "config_id": str(new_config.pk),
+                "version": new_version,
+                "state": new_config.state,
+            })
+
         return success_response(
             AgentConfigurationSerializer(new_config).data,
             "Nueva configuración solicitada.",
-            status=status.HTTP_201_CREATED
+            status=status.HTTP_201_CREATED,
         )

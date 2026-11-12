@@ -1,4 +1,6 @@
+import time
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone as dt_timezone
 from io import StringIO
@@ -7,8 +9,8 @@ from unittest.mock import patch
 from uuid import uuid4
 
 from django.core.management import call_command
-from django.db import IntegrityError, close_old_connections, connections, transaction
-from django.test import TestCase, TransactionTestCase
+from django.db import IntegrityError, OperationalError, close_old_connections, connections, transaction
+from django.test import TransactionTestCase
 
 from backend.apps.operational.capture_authorization import BoxCaptureAuthorization
 from backend.apps.operational.models import OperationalConfiguration
@@ -55,8 +57,24 @@ class CaptureFixtures:
             function(*args, **kwargs)
         self.assertEqual(caught.exception.code, code)
 
+    @contextmanager
+    def captureOnCommitCallbacks(self, execute=False):
+        """Polyfill para simular el comportamiento nativo de TestCase en TransactionTestCase."""
+        callbacks = []
+        original_on_commit = transaction.on_commit
+        
+        def mock_on_commit(func, *args, **kwargs):
+            callbacks.append(func)
+            
+        with patch('django.db.transaction.on_commit', side_effect=mock_on_commit):
+            yield callbacks
+            
+        if execute:
+            for cb in callbacks:
+                cb()
 
-class CaptureLifecycleTests(CaptureFixtures, TestCase):
+
+class CaptureLifecycleTests(CaptureFixtures, TransactionTestCase):
     def test_creation_is_persistent_unique_and_recoverable_after_service_restart(self):
         session = self.create()
         self.assertEqual(session.state, "iniciada")
@@ -445,7 +463,7 @@ class CaptureLifecycleTests(CaptureFixtures, TestCase):
 
 
 class CaptureConcurrencyTests(CaptureFixtures, TransactionTestCase):
-    """Conexiones SQL independientes y barrera de arranque; sin mocks de ORM."""
+    """Conexiones SQL independientes y barrera de arranque con backoff para bloqueos SQLite."""
     def race(self, *functions):
         barrier = Barrier(len(functions))
 
@@ -453,7 +471,17 @@ class CaptureConcurrencyTests(CaptureFixtures, TransactionTestCase):
             close_old_connections()
             try:
                 barrier.wait(timeout=10)
-                return function()
+                # Reintento exponencial ligero para eludir bloqueos de tabla en SQLite
+                for _ in range(20):
+                    try:
+                        return function()
+                    except OperationalError as exc:
+                        if "locked" in str(exc):
+                            time.sleep(0.05)
+                            close_old_connections()
+                            continue
+                        raise
+                return function()  # Intento final
             finally:
                 connections.close_all()
 

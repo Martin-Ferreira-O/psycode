@@ -63,7 +63,7 @@ class SocketLifecycleTests(TransactionTestCase):
         config.refresh_from_db()
         self.assertEqual(config.state, ConfigurationState.PENDING)
 
-        ack = {"config_id": str(config.pk), "success": True}
+        ack = {"config_id": str(config.pk), "success": True, "effective_config": {"example": True}}
         sent = self.exercise([("config_ack", ack)], capabilities=[CONFIG_CAPABILITY])
         messages = [json.loads(event["text"]) for event in sent if event["type"] == "websocket.send"]
         self.assertEqual([message["type"] for message in messages], ["ready", "config_sync", "config_receipt"])
@@ -144,7 +144,6 @@ class RegistryRegressionTests(APITestCase):
         self.assertIsNone(row["last_seen_at"])
 
     def test_shared_box_pcs_keep_individual_diagnostics(self):
-        # Fixture histórico: los registros duplicados anteriores siguen leyéndose sin mezclar datos.
         from .pc_registry import _generate_credential
         other = AgentRegistration(name="PC segundo", box="box-3")
         token, other.token_sha256 = _generate_credential(other.pk)

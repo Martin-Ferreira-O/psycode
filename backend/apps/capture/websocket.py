@@ -1,29 +1,34 @@
-"""Adaptador ASGI: el dominio conserva órdenes, sesiones y ACK en SQL."""
-import asyncio
+﻿import asyncio
 import json
 import time
 from dataclasses import asdict
 from datetime import datetime
+from functools import partial
 from uuid import UUID, uuid4
 from asgiref.sync import sync_to_async
 from django.conf import settings
 from django.db import close_old_connections, transaction
 from django.utils import timezone
 from rest_framework.exceptions import AuthenticationFailed
-from .authentication import (authenticate_agent_header,ensure_agent_identity_current,)
-from .domain import CaptureError, TECHNICAL_ERRORS
-from .models import AgentCommand, AgentRegistration, AgentStatus, CaptureSession, OPEN_STATES, RuntimeLease, AgentConfiguration, ConfigurationState
-from .services import CaptureSessionService, _snapshot
-from .protocol import MAX_BYTES, decode, envelope, identifier, instant
-from . import leases, chunk_config
-from .server_connectivity import (
-    reconcile_connection,
-    register_server_disconnect,
-    register_server_reconnect,
-)
-from functools import partial
-from backend.common.errors import ServiceError
 from backend.apps.agenda.collector_check import CAPABILITY as SMILE_CHECK_CAPABILITY, sources_for
+from backend.common.audit import AuditWriter
+from backend.common.errors import ServiceError
+from . import leases, chunk_config
+from .authentication import authenticate_agent_header, ensure_agent_identity_current
+from .domain import CaptureError, TECHNICAL_ERRORS
+from .models import (
+    AgentCommand,
+    AgentRegistration,
+    AgentStatus,
+    CaptureSession,
+    OPEN_STATES,
+    RuntimeLease,
+    AgentConfiguration,
+    ConfigurationState,
+)
+from .protocol import MAX_BYTES, decode, envelope, identifier, instant
+from .server_connectivity import reconcile_connection, register_server_disconnect, register_server_reconnect
+from .services import CaptureSessionService, _snapshot
 
 
 CONFIG_CAPABILITY = "agent.config.v1"
@@ -110,17 +115,109 @@ class RemoteControl:
                 last_seen_at=now, diagnostics=diagnostics,
             )
 
-    def acknowledge_config(self, config_id, success, effective_config=None, error_code=""):
-        config = AgentConfiguration.objects.filter(config_id=config_id, agent_id=self.identity.registry_id).first()
+    def mark_config_received(self, config_id):
+        config = AgentConfiguration.objects.select_for_update().filter(
+            config_id=config_id, agent_id=self.identity.registry_id
+        ).first()
         if not config:
             raise ValueError("CONFIG_NOT_FOUND")
-        if config.state != ConfigurationState.PENDING:
+        if config.state == ConfigurationState.PENDING:
+            config.state = ConfigurationState.RECEIVED
+            config.save(update_fields=["state", "updated_at"])
+            AuditWriter.emit({
+                "event_id": str(uuid4()),
+                "timestamp": timezone.now().isoformat(),
+                "action": "capture.agent_config.received",
+                "outcome": "success",
+                "agent_id": str(self.identity.registry_id),
+                "box": self.identity.box,
+                "config_id": str(config.pk),
+                "version": config.version,
+                "state": config.state,
+            })
+        return config
+
+    def acknowledge_config(self, config_id, success=None, effective_config=None, error_code="", received_only=False):
+        config = AgentConfiguration.objects.select_for_update().filter(
+            config_id=config_id, agent_id=self.identity.registry_id
+        ).first()
+        if not config:
+            raise ValueError("CONFIG_NOT_FOUND")
+
+        if config.state not in [ConfigurationState.PENDING, ConfigurationState.RECEIVED]:
             return config
-        config.state = ConfigurationState.APPLIED if success else ConfigurationState.FAILED
-        if effective_config is not None:
+
+        latest_applied = AgentConfiguration.objects.filter(
+            agent_id=self.identity.registry_id,
+            state=ConfigurationState.APPLIED,
+        ).order_by("-version").first()
+
+        # BUG-97-03: Rechazar confirmaciones de versiones obsoletas
+        if latest_applied and config.version <= latest_applied.version:
+            config.state = ConfigurationState.FAILED
+            config.error_code = "OBSOLETE_VERSION_REJECTED"
+            config.save(update_fields=["state", "error_code", "updated_at"])
+            AuditWriter.emit({
+                "event_id": str(uuid4()),
+                "timestamp": timezone.now().isoformat(),
+                "action": "capture.agent_config.obsolete_rejected",
+                "outcome": "failure",
+                "agent_id": str(self.identity.registry_id),
+                "box": self.identity.box,
+                "config_id": str(config.pk),
+                "version": config.version,
+                "state": config.state,
+                "error_code": config.error_code,
+            })
+            return config
+
+        # BUG-97-02: Transición explícita al estado RECEIVED antes de evaluar aplicación
+        if config.state == ConfigurationState.PENDING:
+            config.state = ConfigurationState.RECEIVED
+            config.save(update_fields=["state", "updated_at"])
+
+        if received_only or success is None:
+            return config
+
+        # BUG-97-04: Exigir effective_config coherente para marcar como APPLIED
+        if success:
+            if not isinstance(effective_config, dict) or (config.desired_config and not effective_config):
+                success = False
+                error_code = error_code or "MISSING_EFFECTIVE_CONFIG"
+
+        if success:
+            config.state = ConfigurationState.APPLIED
             config.effective_config = effective_config
-        config.error_code = error_code
-        config.save(update_fields=["state", "effective_config", "error_code", "updated_at"])
+            config.error_code = ""
+            config.save(update_fields=["state", "effective_config", "error_code", "updated_at"])
+
+            # Invalidar versiones anteriores que hayan quedado pendientes/recibidas sin confirmar
+            AgentConfiguration.objects.filter(
+                agent_id=self.identity.registry_id,
+                version__lt=config.version,
+                state__in=[ConfigurationState.PENDING, ConfigurationState.RECEIVED],
+            ).update(
+                state=ConfigurationState.FAILED,
+                error_code="SUPERSEDED_BY_NEWER_VERSION",
+                updated_at=timezone.now(),
+            )
+        else:
+            config.state = ConfigurationState.FAILED
+            config.error_code = error_code or "CONFIG_APPLY_FAILED"
+            config.save(update_fields=["state", "error_code", "updated_at"])
+
+        AuditWriter.emit({
+            "event_id": str(uuid4()),
+            "timestamp": timezone.now().isoformat(),
+            "action": "capture.agent_config.acknowledged",
+            "outcome": "success" if success else "failure",
+            "agent_id": str(self.identity.registry_id),
+            "box": self.identity.box,
+            "config_id": str(config.pk),
+            "version": config.version,
+            "state": config.state,
+            "error_code": config.error_code or None,
+        })
         return config
 
     def poll_configs(self):
@@ -128,11 +225,24 @@ class RemoteControl:
             self._lock_identity()
             self._lock_lease()
             leases.acquire(self.name, self.owner)
+            latest_applied = AgentConfiguration.objects.filter(
+                agent_id=self.identity.registry_id,
+                state=ConfigurationState.APPLIED,
+            ).order_by("-version").first()
             configs = AgentConfiguration.objects.filter(
                 agent_id=self.identity.registry_id,
-                state=ConfigurationState.PENDING
-            ).order_by('version')
-            return [{"config_id": str(c.config_id), "version": c.version, "desired_config": c.desired_config} for c in configs]
+                state__in=[ConfigurationState.PENDING, ConfigurationState.RECEIVED],
+            )
+            if latest_applied:
+                configs = configs.filter(version__gt=latest_applied.version)
+            latest_pending = configs.order_by("-version").first()
+            if not latest_pending:
+                return []
+            return [{
+                "config_id": str(latest_pending.config_id),
+                "version": latest_pending.version,
+                "desired_config": latest_pending.desired_config,
+            }]
 
     def dispatch(self, message):
         with transaction.atomic():
@@ -142,20 +252,34 @@ class RemoteControl:
             box, p, kind = self.identity.box, message["payload"], message["type"]
             if "box" in p and p["box"] != box:
                 raise ValueError("BOX_FORBIDDEN")
-            
-            if kind == "config_ack":
-                required = {"config_id", "success"}
-                if not required <= p.keys() or p.keys() - required - {"effective_config", "error_code"}:
+
+            if kind == "config_received":
+                if "config_id" not in p or p.keys() - {"config_id", "box"}:
                     raise ValueError("INVALID_MESSAGE")
                 cid = identifier(p["config_id"])
-                if type(p["success"]) is not bool:
+                result = self.mark_config_received(cid)
+                return "config_receipt", {"config_id": str(cid), "state": result.state}
+
+            if kind == "config_ack":
+                if "config_id" not in p:
                     raise ValueError("INVALID_MESSAGE")
-                
+                allowed = {"config_id", "success", "state", "effective_config", "error_code", "box"}
+                if p.keys() - allowed:
+                    raise ValueError("INVALID_MESSAGE")
+                cid = identifier(p["config_id"])
+
+                if p.get("state") in {ConfigurationState.RECEIVED, "received"} and "success" not in p:
+                    result = self.acknowledge_config(cid, received_only=True)
+                    return "config_receipt", {"config_id": str(cid), "state": result.state}
+
+                if "success" not in p or type(p["success"]) is not bool:
+                    raise ValueError("INVALID_MESSAGE")
+
                 result = self.acknowledge_config(
                     cid,
                     success=p["success"],
                     effective_config=p.get("effective_config"),
-                    error_code=p.get("error_code", "")
+                    error_code=p.get("error_code", ""),
                 )
                 return "config_receipt", {"config_id": str(cid), "state": result.state}
 
@@ -188,7 +312,7 @@ class RemoteControl:
                     raise ValueError("INVALID_TECHNICAL_ERROR")
                 return "interruption_receipt", {"session": payload(self.service.interrupted(box, sid, error_code=code))}
             if kind == "status":
-                allowed = {"obs", "capturing", "pending", "free_bytes","remaining_seconds", "smile_last_sync", "operational_code"}
+                allowed = {"obs", "capturing", "pending", "free_bytes", "remaining_seconds", "smile_last_sync", "operational_code"}
                 if p.keys() - allowed or len(json.dumps(p)) > 2048:
                     raise ValueError("INVALID_MESSAGE")
                 for key in ("pending", "free_bytes", "remaining_seconds"):
@@ -198,18 +322,18 @@ class RemoteControl:
                     raise ValueError("INVALID_MESSAGE")
                 if "capturing" in p and type(p["capturing"]) is not bool:
                     raise ValueError("INVALID_MESSAGE")
-                if p.get("operational_code", "") not in {"", "RECOVERY_REQUIRED", "DISK_LOW","STORAGE_WARNING","STORAGE_CRITICAL", "UPLOAD_INTERVENTION", "SMILE_UNAVAILABLE"}:
+                if p.get("operational_code", "") not in {"", "RECOVERY_REQUIRED", "DISK_LOW", "STORAGE_WARNING", "STORAGE_CRITICAL", "UPLOAD_INTERVENTION", "SMILE_UNAVAILABLE"}:
                     raise ValueError("INVALID_MESSAGE")
                 if p.get("smile_last_sync") is not None:
                     instant(p["smile_last_sync"])
-                status, _ = AgentStatus.objects.get_or_create(box=box,defaults={"seen_at": timezone.now(),"diagnostics": {},})
+                status, _ = AgentStatus.objects.get_or_create(box=box, defaults={"seen_at": timezone.now(), "diagnostics": {}})
                 diagnostics = {"agent_version": status.diagnostics.get("agent_version")}
                 if status.diagnostics.get("smile_check_supported") is True:
                     diagnostics["smile_check_supported"] = True
                 diagnostics.update(p)
                 status.seen_at = timezone.now()
                 status.diagnostics = diagnostics
-                status.save(update_fields=["seen_at","diagnostics",])
+                status.save(update_fields=["seen_at", "diagnostics"])
                 if self.identity.managed:
                     AgentRegistration.objects.filter(pk=self.identity.registry_id).update(
                         last_seen_at=status.seen_at, diagnostics=diagnostics,
@@ -273,7 +397,7 @@ async def agent_websocket(scope, receive, send):
             })
             return
         raise
-    
+
     if scope["path"] != "/ws/v1/agents":
         await send({"type": "websocket.close", "code": 4404})
         return
@@ -282,8 +406,10 @@ async def agent_websocket(scope, receive, send):
     opened = False
     pending = None
     disconnect_cause = "UNKNOWN"
+
     async def emit(kind, data, correlation=None):
         await send({"type": "websocket.send", "text": json.dumps(envelope(kind, data, correlation), default=serial)})
+
     try:
         event = await asyncio.wait_for(receive(), timeout=10)
         hello = decode(event.get("text"))
