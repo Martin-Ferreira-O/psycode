@@ -120,6 +120,14 @@ def main():
                 if agent.poll() is not None:raise RuntimeError(content)
                 time.sleep(.05)
             else:raise RuntimeError('Agent upload timeout: '+content)
+            first_session = CaptureSession.objects.get(pk=sid)
+            assert first_session.capture_chunk_config == {"audio_chunk_mode": "fixed", "audio_chunk_duration": 60}
+            assert first_session.audio_profile["chunk_samples"] == 60 * 16000
+            # Cambiar el ajuste no modifica la sesión activa; la siguiente toma 600 s.
+            OperationalConfiguration.objects.filter(pk=1).update(audio_chunk_duration=600)
+            coordinate()
+            first_session.refresh_from_db()
+            assert first_session.capture_chunk_config["audio_chunk_duration"] == 60
             # Simula cambio de agenda en el receptor y reinicio del coordinador.
             from backend.apps.agenda.models import AgendaBoxRevision
             AgendaBoxRevision.objects.filter(box='box-3').update(appointments=[])
@@ -178,7 +186,10 @@ def main():
             runtime_log.seek(0);runtime_content=runtime_log.read()
             assert agent.returncode==0,runtime_content
             assert 'autonomous_passed' in runtime_content,runtime_content
-            assert CaptureSession.objects.get(pk=sid2).state=='completada'
+            second_session = CaptureSession.objects.get(pk=sid2)
+            assert second_session.state == 'completada'
+            assert second_session.capture_chunk_config['audio_chunk_duration'] == 600
+            assert second_session.audio_profile['chunk_samples'] == 600 * 16000
             assert FragmentJob.objects.filter(sequence__session_id=sid2).count()==1
             # Ejecutar también la cobertura HTTP v1 y ACK históricos, fuera de la suite ordinaria.
             # Esta instalación temporal del servidor admite el agente solo para esas pruebas.

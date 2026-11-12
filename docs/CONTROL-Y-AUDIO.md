@@ -28,6 +28,11 @@ La recolección de agenda se asigna por HTTP; no existe un tercer kind de captur
 entre fin original y revocación central. Esto permite recortar el último WAV con
 el instante de corte central. `sync` no autoriza ni confirma actividad de captura.
 
+La capacidad negociada `audio.chunk-config.v1` (junto con `audio.v2`) permite
+`audio_chunk_duration` opcional en `inicio`. Se congela por sesión; predeterminado
+60 s, mínimo 10 s y opción sesión completa. Sin negociación se omite el campo.
+[Operación, despliegue y límites](FRAGMENTOS-CONFIGURABLES.md).
+
 La respuesta `command_receipt` sale tras commit. El journal separa preparación,
 ejecución física y confirmación; un outbox adicional conserva los ACK incluso
 si ya no hay reentrega SQL. El reenvío conserva el contenido. La reconexión
@@ -54,12 +59,14 @@ Se transmite solo el código, correlación y recuperabilidad, sin excepción lib
 No incluye posición de sesión suficiente para eliminar repetición por solapamiento.
 El cliente nuevo usa `/api/v2/internal/fragments` solo tras negociar `audio.v2`.
 El servidor admite ambos; instalar primero el servidor. No cambiar de versión ni
-perfil en mitad de una sesión. WAV RIFF PCM mono, 16 kHz, 16 bits, hasta 25 MiB.
+perfil en mitad de una sesión. WAV RIFF PCM mono, 16 kHz, 16 bits; legacy conserva
+el máximo de 25 MiB. Sesiones con duración negociada usan una cota de bytes
+calculada desde la duración autorizada, además del límite del proxy.
 
 V2 añade seis campos enteros al multipart v1: `session_start_sample`,
 `session_end_sample` (exclusivo), `new_audio_start_sample`, `sample_rate`,
-`chunk_samples`, `overlap_samples`. Perfil inicial: 160000/16000 muestras (10 s/1 s).
-Ejemplo: `[0,160000)` nuevo desde 0; `[144000,304000)` nuevo desde 160000;
+`chunk_samples`, `overlap_samples`. Perfil predeterminado nuevo: 960000/16000 muestras (60 s/1 s).
+Ejemplo compatible configurando 10 s/1 s: `[0,160000)` nuevo desde 0; `[144000,304000)` nuevo desde 160000;
 `[288000,448000)` nuevo desde 304000. El último puede ser parcial, pero debe
 contener audio nuevo. No hay secuencias posteriores a un parcial final.
 

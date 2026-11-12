@@ -1,4 +1,4 @@
-﻿"""Adaptador ASGI: el dominio conserva órdenes, sesiones y ACK en SQL."""
+"""Adaptador ASGI: el dominio conserva órdenes, sesiones y ACK en SQL."""
 import asyncio
 import json
 import time
@@ -15,7 +15,7 @@ from .domain import CaptureError, TECHNICAL_ERRORS
 from .models import AgentCommand, AgentRegistration, AgentStatus, CaptureSession, OPEN_STATES, RuntimeLease, AgentConfiguration, ConfigurationState
 from .services import CaptureSessionService, _snapshot
 from .protocol import MAX_BYTES, decode, envelope, identifier, instant
-from . import leases
+from . import leases, chunk_config
 from .server_connectivity import (
     reconcile_connection,
     register_server_disconnect,
@@ -56,6 +56,7 @@ class RemoteControl:
         self.identity, self.owner = identity, owner
         self.name = "control:" + identity.box
         self.service = CaptureSessionService()
+        self.chunk_config_supported = False
 
     def _lock_identity(self):
         if self.identity.managed:
@@ -160,7 +161,7 @@ class RemoteControl:
             if kind == "sync":
                 sessions = CaptureSession.objects.filter(box=box, state__in=OPEN_STATES)
                 return "state", {"sessions": [payload(_snapshot(s)) for s in sessions],
-                                 "commands": [payload(c) for c in self.service.commands(box)]}
+                                 "commands": self.commands()}
             if kind == "command_ack":
                 required = {"command_id", "session_id", "success", "occurred_at"}
                 if not required <= p.keys() or p.keys() - required - {"last_sequence", "error_code"}:
@@ -215,12 +216,27 @@ class RemoteControl:
                 return "state", {"status_persisted": True}
             raise ValueError("INVALID_MESSAGE")
 
+    def command_payload(self, command):
+        data = payload(command)
+        session = CaptureSession.objects.get(pk=command.session_id)
+        if (command.kind == "inicio" and session.capture_chunk_negotiated is True
+                and not self.chunk_config_supported):
+            raise ValueError("CAPABILITIES_CHANGED")
+        if (not self.chunk_config_supported or session.capture_chunk_negotiated is not True
+                or command.kind != "inicio" or command.audio_chunk_duration is None):
+            data.pop("audio_chunk_duration", None)
+        return data
+
+    def commands(self):
+        return [self.command_payload(c) for c in self.service.commands(
+            self.identity.box, chunk_config_supported=self.chunk_config_supported)]
+
     def poll(self):
         with transaction.atomic():
             self._lock_identity()
             self._lock_lease()
             leases.acquire(self.name, self.owner)
-            return [payload(c) for c in self.service.commands(self.identity.box)]
+            return self.commands()
 
 
 async def agent_websocket(scope, receive, send):
@@ -276,10 +292,13 @@ async def agent_websocket(scope, receive, send):
         opened = True
         smile_check = SMILE_CHECK_CAPABILITY in p["capabilities"] and bool(await db(sources_for, identity))
         config_supported = identity.managed and CONFIG_CAPABILITY in p["capabilities"]
+        control.chunk_config_supported = {chunk_config.CAPABILITY, "audio.v2"} <= set(p["capabilities"])
         await db(control.register_hello, p["agent_version"], smile_check)
         await db(register_server_reconnect, identity)
         capabilities = ["audio.v1", "audio.v2", "agenda.excel.v1", "agenda.smile-json.v1",
                         "agent.events.v1", "sessions.capture-ended.v1"]
+        if control.chunk_config_supported:
+            capabilities.append(chunk_config.CAPABILITY)
         if smile_check:
             capabilities.append(SMILE_CHECK_CAPABILITY)
         if config_supported:
@@ -321,8 +340,8 @@ async def agent_websocket(scope, receive, send):
         disconnect_cause = "CREDENTIAL_INVALIDATED"
         await send({"type": "websocket.close", "code": 4401})
     except (ValueError, KeyError, TypeError, TimeoutError) as exc:
-        code = "PROTOCOL_INCOMPATIBLE" if str(exc) == "PROTOCOL_INCOMPATIBLE" else (
-            "CONNECTION_REPLACED" if str(exc) == "CONNECTION_REPLACED" else "INVALID_MESSAGE")
+        allowed_codes = {"PROTOCOL_INCOMPATIBLE", "CONNECTION_REPLACED", "CAPABILITIES_CHANGED"}
+        code = str(exc) if str(exc) in allowed_codes else "INVALID_MESSAGE"
         await emit("error", {"code": code, "recoverable": code == "CONNECTION_REPLACED"})
         await send({"type": "websocket.close", "code": 4406 if code == "PROTOCOL_INCOMPATIBLE" else 4409})
     finally:

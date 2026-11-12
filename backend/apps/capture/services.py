@@ -7,6 +7,7 @@ from django.utils import timezone
 
 from backend.common.audit import AuditWriter
 from backend.common.boxes import is_box
+from . import chunk_config
 from .domain import CaptureError, Command, Session, TECHNICAL_ERRORS
 from .models import (
     AUDIO_TEST_ORIGIN, OPEN_STATES, AcceptedSequence, AgentCommand, CaptureEvent, CaptureSession,
@@ -131,6 +132,7 @@ class CaptureSessionService:
                     session = CaptureSession.objects.create(
                         box=box, state=SessionState.STARTED, origin=authorization.origen,
                         scheduled_start=start, scheduled_end=end, authorized_at=now, last_seen_at=now,
+                        capture_chunk_config=chunk_config.snapshot(),
                     )
             except IntegrityError:
                 # Solo recuperar la carrera de inserción. Los errores en
@@ -234,7 +236,7 @@ class CaptureSessionService:
             raise CaptureError("SESSION_NOT_FOUND")
         return session
 
-    def commands(self, box, *, now=None):
+    def commands(self, box, *, now=None, chunk_config_supported=None):
         now, box = _instant(now), _box(box)
         # Recuperación y entrega comparten la transacción: no se publica un
         # inicio vencido, incluso si el programador externo dejó de ejecutar ticks.
@@ -252,12 +254,19 @@ class CaptureSessionService:
                 commands = stops
             result = []
             for item in commands:
+                session = item.session
+                if (item.kind == CommandKind.START and session.capture_chunk_negotiated is None
+                        and chunk_config_supported is not None):
+                    session.capture_chunk_negotiated = bool(chunk_config_supported and session.capture_chunk_config)
+                    session.save(update_fields=["capture_chunk_negotiated"])
                 item.delivered_at, item.delivery_count = now, item.delivery_count + 1
                 item.save(update_fields=["delivered_at", "delivery_count"])
                 _event(item.session, "command.delivered", now, command=item)
                 result.append(Command(item.command_id, item.session_id, box, item.kind,
                                       item.session.scheduled_start, min(item.session.scheduled_end, item.session.stop_requested_at)
-                                      if item.kind == CommandKind.STOP and item.session.stop_requested_at else item.session.scheduled_end))
+                                      if item.kind == CommandKind.STOP and item.session.stop_requested_at else item.session.scheduled_end,
+                                      chunk_config.duration(session) if item.kind == CommandKind.START
+                                      and session.capture_chunk_negotiated is True else None))
             return tuple(result)
 
     def acknowledge(self, box, command_id, *, success=True, last_sequence=None, error_code="",

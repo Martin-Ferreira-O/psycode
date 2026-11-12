@@ -197,6 +197,10 @@
               "scheduled_end": {
                 "type": "string",
                 "format": "date-time"
+              },
+              "audio_chunk_duration": {
+                "type": "integer",
+                "minimum": 10
               }
             },
             "required": [

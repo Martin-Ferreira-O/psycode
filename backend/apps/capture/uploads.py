@@ -9,14 +9,15 @@ from .storage import FragmentError
 
 
 class FragmentUploadHandler(FileUploadHandler):
-    def __init__(self, request, storage):
+    def __init__(self, request, storage, max_bytes=None):
         super().__init__(request)
         self.storage = storage
+        self.max_bytes = storage.max_bytes if max_bytes is None else max_bytes
         self.received = 0
         self.started = False
 
     def handle_raw_input(self, input_data, META, content_length, boundary, encoding=None):
-        if content_length > self.storage.max_bytes + 64 * 1024:
+        if content_length > self.max_bytes + 64 * 1024:
             raise FragmentError("FRAGMENT_TOO_LARGE", 413)
 
     def new_file(self, field_name, *args, **kwargs):
@@ -27,7 +28,7 @@ class FragmentUploadHandler(FileUploadHandler):
 
     def receive_data_chunk(self, raw_data, start):
         self.received += len(raw_data)
-        if self.received > self.storage.max_bytes:
+        if self.received > self.max_bytes:
             raise FragmentError("FRAGMENT_TOO_LARGE", 413)
         self.file.write(raw_data)
 
@@ -47,10 +48,22 @@ class FragmentMultiPartParser(MultiPartParser):
     def parse(self, stream, media_type=None, parser_context=None):
         from backend.config.composition import fragment_storage
         request = parser_context["request"]
-        handler = FragmentUploadHandler(request._request, fragment_storage())
+        from .chunk_config import byte_limit
+        from .models import CaptureSession
+        storage = fragment_storage()
+        limit = storage.max_bytes
+        # Antes de parsear no se conoce session_id (el multipart no exige orden).
+        # Acotar por sesiones negociadas DEL box autenticado, luego revalidar
+        # contra la sesión exacta antes de almacenar/aceptar el WAV.
+        from .serializers import FragmentV2Serializer
+        view = parser_context.get("view")
+        if getattr(view, "serializer_class", None) is FragmentV2Serializer:
+            for session in CaptureSession.objects.filter(box=request.user.box, capture_chunk_negotiated=True):
+                limit = max(limit, byte_limit(session, storage.max_bytes))
+        handler = FragmentUploadHandler(request._request, storage, limit)
         request._request.upload_handlers = [handler]
         try:
-            guarded = MultipartStream(stream, handler.storage.max_bytes + 64 * 1024)
+            guarded = MultipartStream(stream, handler.max_bytes + 64 * 1024)
             result = super().parse(guarded, media_type, parser_context)
             boundary = parse_header_parameters(media_type)[1].get("boundary", "").encode("ascii")
             if not guarded.tail.rstrip(b"\r\n").endswith(b"--" + boundary + b"--"):

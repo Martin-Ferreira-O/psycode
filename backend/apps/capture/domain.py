@@ -24,6 +24,7 @@ class Command:
     kind: str
     scheduled_start: datetime
     scheduled_end: datetime
+    audio_chunk_duration: int | None = None
 
 
 @dataclass(frozen=True)

@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from backend.apps.accounts.serializers import StrictSerializer, StrictStringField
-from .models import NotificationMode
+from .models import AudioChunkMode, NotificationMode
 
 
 class StrictBooleanField(serializers.BooleanField):
@@ -10,7 +10,16 @@ class StrictBooleanField(serializers.BooleanField):
         return super().to_internal_value(data)
 
 
+class StrictIntegerField(serializers.IntegerField):
+    def to_internal_value(self, data):
+        if type(data) is not int:
+            self.fail("invalid")
+        return super().to_internal_value(data)
+
+
 class OperationalConfigSerializer(StrictSerializer):
+    audio_chunk_duration = StrictIntegerField(min_value=10, required=False)
+    audio_chunk_mode = serializers.ChoiceField(choices=AudioChunkMode.choices, required=False)
     enabled_days = serializers.ListField(child=serializers.IntegerField(min_value=0, max_value=6), required=False)
     open_time = StrictStringField(max_length=5, required=False)
     close_time = StrictStringField(max_length=5, required=False)

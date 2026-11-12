@@ -29,6 +29,8 @@ La integración interna de Speechmatics Batch y JEV está documentada en [implem
 
 [Conservación, panel de almacenamiento, limpieza periódica y cifrado](docs/CONSERVACION-Y-ALMACENAMIENTO.md).
 
+[Duración configurable de fragmentos desde la web, compatibilidad y límites](docs/FRAGMENTOS-CONFIGURABLES.md).
+
 ## Primera instalación
 
 Abre una terminal en la carpeta del proyecto, donde está `manage.py`. Necesitas Python 3.12 o 3.13 y Node.js 22.12 o superior para compilar la interfaz React.
