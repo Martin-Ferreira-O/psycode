@@ -8,6 +8,8 @@ Desplegar juntos la API, la migración `capture.0019_audio_test` y el worker de
 fragmentos. El diagnóstico usa la configuración existente de Speechmatics,
 JEV y almacenamiento privado. El audio sintético sigue la retención del
 worker. Los resultados se consultan con la credencial individual del PC.
+La limpieza del contexto conserva el resumen de cada alerta de prueba
+para que el asistente pueda mostrar el mismo resultado después del análisis.
 
 ## Contrato HTTP v1
 
@@ -32,6 +34,10 @@ Prefijo `/api/v1/internal/audio-tests/<uuid>`. Todas las solicitudes usan
   `indeterminate` y `alerts`. Cada alerta incluye `id`, `category`,
   `severity`, `start` y `end`. Los offsets de alerta se expresan en
   segundos desde el comienzo del clip.
+- `fragment_details=1` añade `data.fragments` a PUT, GET y DELETE. Devuelve
+  cada fragmento aceptado con su secuencia, intervalo en muestras, estado y,
+  cuando está disponible, un motivo técnico. El detalle sigue disponible
+  tras la limpieza. El esquema es `audio-test-fragment-details-v1.schema.json`.
 
 Los estados son `receiving`, `analyzing`, `completed`, `failed`,
 `expired` y `stopped`. El escenario expresa el resultado esperado y no determina la

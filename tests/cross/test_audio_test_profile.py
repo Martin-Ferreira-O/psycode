@@ -61,6 +61,8 @@ class AudioTestProfileIntegrationTests(TestCase):
             self.assertEqual(len(posts), expected + 1)
             self.assertIn(f"Duración configurada de fragmentos: {duration} s", final)
             self.assertIn("Prueba completada", final)
+            self.assertIn("Resultados por fragmento", final)
+            self.assertEqual(final.count("Sin señal detectada"), expected)
 
     def test_configured_ten_minutes_is_one_wav_and_lost_receipt_does_not_duplicate(self):
         self.exercise(600, 1)

@@ -21,6 +21,7 @@ from backend.apps.alerts.tests.test_persistence import FakeDatabase
 from backend.apps.operational.models import OperationalConfiguration
 from backend.config.composition import fragment_job_processor
 from .models import AgentCommand, AgentRegistration, FragmentJob
+from .retention import purge_checkpoints
 from .test_ingestion import wav_bytes
 
 
@@ -83,6 +84,43 @@ class AudioDiagnosticTests(TestCase):
         self.assertFalse(AgentCommand.objects.exists())
         self.assertFalse(FragmentJob.objects.exists())
 
+    def test_fragment_details_show_progress_outcomes_and_reason_after_cleanup(self):
+        url, data = self.start("alerta", samples=28 * 16000)
+        detail_url = url + "?fragment_details=1"
+        self.assertNotIn("fragments", data)
+        self.assertEqual(self.client.get(detail_url).json()["data"]["fragments"], [])
+        self.assertEqual(self.client.get(url + "?fragment_details=2").status_code, 400)
+        intervals = [(0, 10), (9, 19), (18, 28)]
+        for seq, (start, end) in enumerate(intervals):
+            response = self.upload(url + "/fragments", data, seq=seq, offset=start * 16000,
+                                   end=end * 16000, new=(intervals[seq - 1][1] * 16000 if seq else 0))
+            self.assertEqual(response.status_code, 201, response.json())
+        jobs = list(FragmentJob.objects.order_by("sequence__number"))
+        FragmentJob.objects.filter(pk=jobs[1].pk).update(state=FragmentJob.State.PROCESSING)
+        progress = self.client.get(detail_url).json()["data"]
+        self.assertEqual([row["status"] for row in progress["fragments"]], ["queued", "analyzing", "queued"])
+        self.assertEqual(progress["analyzed"], 0)
+
+        outcomes = [FragmentJob.Result.NO_RISK_DETECTED, FragmentJob.Result.RISK_DETECTED,
+                    FragmentJob.Result.INDETERMINATE]
+        for job, result in zip(jobs, outcomes, strict=True):
+            FragmentJob.objects.filter(pk=job.pk).update(state=FragmentJob.State.COMPLETED, result=result)
+        FragmentJob.objects.filter(pk=jobs[-1].pk).update(checkpoint={
+            "block_result": {"error_codes": ["CONTEXT_NOT_EVALUABLE"], "decisions": ["detalle interno"]},
+        })
+        complete = self.client.get(detail_url).json()["data"]
+        self.assertEqual(complete["fragments"], [
+            {"sequence": 0, "start_sample": 0, "end_sample": 160000, "status": "no_signal"},
+            {"sequence": 1, "start_sample": 144000, "end_sample": 304000, "status": "signal"},
+            {"sequence": 2, "start_sample": 288000, "end_sample": 448000, "status": "indeterminate",
+             "reason": "CONTEXT_NOT_EVALUABLE"},
+        ])
+        self.assertNotIn("fragments", self.client.get(url).json()["data"])
+        purge_checkpoints(jobs[-1].sequence.accepted_at + timedelta(minutes=2))
+        self.assertEqual(self.client.get(detail_url).json()["data"], complete)
+        jobs[-1].refresh_from_db()
+        self.assertEqual(jobs[-1].checkpoint, {"test_error_codes": ["CONTEXT_NOT_EVALUABLE"]})
+
     @override_settings(NOTIFICATIONS_ENABLED=True, EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
     def test_clip_persists_and_emails_only_detected_test_alerts(self):
         config = OperationalConfiguration.load()
@@ -144,6 +182,12 @@ class AudioDiagnosticTests(TestCase):
                     self.assertEqual(finished["indeterminate"], 0)
                     self.assertEqual(len(finished["alerts"]), expected)
                     self.assertNotIn(text, str(finished))
+                    job = FragmentJob.objects.get(sequence__session_id=data["test_id"])
+                    self.assertIn("speechmatics", job.checkpoint)
+                    purge_checkpoints(job.sequence.accepted_at + timedelta(minutes=2))
+                    job.refresh_from_db()
+                    self.assertEqual(job.checkpoint, {"test_alerts": finished["alerts"]} if expected else {})
+                    self.assertEqual(self.client.get(url).json()["data"], finished)
                     self.assertEqual(len(db["alerts"].docs), expected)
                     self.assertEqual(len(mail.outbox), expected)
                     self.assertIsNone(processor.process_next())
