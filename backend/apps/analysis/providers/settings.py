@@ -21,6 +21,8 @@ class Settings:
     timeout: float = 300.
     poll_interval: float = 2.
     redact_terms: tuple[str, ...] = field(default=(), repr=False)
+    # Cota de la aplicación en caracteres; no equivale a tokens del proveedor.
+    jev_block_max_chars: int = 262144
 
     @classmethod
     def from_env(cls):
@@ -40,6 +42,7 @@ class Settings:
             timeout=float(os.environ.get("PSYCODE_PROVIDER_TIMEOUT", "300")),
             poll_interval=float(os.environ.get("SPEECHMATICS_POLL_INTERVAL", "2")),
             redact_terms=tuple(terms),
+            jev_block_max_chars=int(os.environ.get("JEV_BLOCK_MAX_CHARS", "262144")),
         )
 
     def validate(self, provider):
@@ -55,6 +58,8 @@ class Settings:
             if not self.speechmatics_key:
                 raise ProviderError("Falta SPEECHMATICS_API_KEY")
         else:
+            if type(self.jev_block_max_chars) is not int or self.jev_block_max_chars <= 0:
+                raise ProviderError("JEV_BLOCK_MAX_CHARS debe ser un entero positivo")
             if self.jev_provider not in {"auto", "typesafe", "openrouter"}:
                 raise ProviderError("JEV_PROVIDER debe ser auto, typesafe u openrouter")
             if not self.analysis_key:

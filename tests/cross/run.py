@@ -121,7 +121,7 @@ def main():
                 time.sleep(.05)
             else:raise RuntimeError('Agent upload timeout: '+content)
             first_session = CaptureSession.objects.get(pk=sid)
-            assert first_session.capture_chunk_config == {"audio_chunk_mode": "fixed", "audio_chunk_duration": 60}
+            assert first_session.capture_chunk_config == {"audio_chunk_mode": "fixed", "audio_chunk_duration": 60, "audio_chunk_overlap": 0, "analysis_unit": "fragment"}
             assert first_session.audio_profile["chunk_samples"] == 60 * 16000
             # Cambiar el ajuste no modifica la sesión activa; la siguiente toma 600 s.
             OperationalConfiguration.objects.filter(pk=1).update(audio_chunk_duration=600)

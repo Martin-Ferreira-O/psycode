@@ -56,7 +56,7 @@ try:
     # Esperar la duración representada en el WAV para no enviar audio futuro.
     metadata=save_fragment(Path(root)/'fragments'/str(start.session_id),'box-3',start.session_id,0,
         b'\0\0'*1600,captured,temporal=dict(session_start_sample=0,session_end_sample=1600,new_audio_start_sample=0,
-        sample_rate=16000,chunk_samples=start.audio_chunk_duration * 16000,overlap_samples=16000))
+        sample_rate=16000,chunk_samples=start.audio_chunk_duration * 16000,overlap_samples=start.audio_chunk_overlap * 16000))
     # Incluye el margen de 200 ms que exige el subidor v2.
     time.sleep(.32)
     client=BackendClient(config)

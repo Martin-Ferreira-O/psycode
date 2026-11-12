@@ -2,7 +2,7 @@
 import wave
 from datetime import timedelta
 from .models import AUDIO_TEST_ORIGIN, FragmentJob
-from .chunk_config import duration
+from .chunk_config import duration, overlap as configured_overlap
 from .storage import FragmentError
 
 KEYS = {"session_start_sample", "session_end_sample", "new_audio_start_sample", "sample_rate", "chunk_samples", "overlap_samples"}
@@ -18,7 +18,7 @@ def validate(temporal, upload, session, number, captured_at, now):
     start, end, new = (t[k] for k in ("session_start_sample", "session_end_sample", "new_audio_start_sample"))
     rate, chunk, overlap = t["sample_rate"], t["chunk_samples"], t["overlap_samples"]
     configured = duration(session) if session.capture_chunk_negotiated is True else None
-    if configured is not None and (chunk != configured * 16000 or overlap != 16000):
+    if configured is not None and (chunk != configured * 16000 or overlap != configured_overlap(session) * 16000):
         reject()
     if rate != 16000 or not 0 <= overlap < chunk <= rate * (configured or 600) or not 0 <= start <= new < end or end - start > chunk:
         reject()

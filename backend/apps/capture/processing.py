@@ -39,6 +39,7 @@ class ClaimedFragmentJob:
     checkpoint: dict | None = None
     session_start: object = None
     audio_test: bool = False
+    analysis_unit: str = "utterance"
 
 
 @dataclass
@@ -120,6 +121,7 @@ class FragmentJobProcessor:
                     session_origin_sample=claimed.temporal.get("session_start_sample", 0),
                     new_audio_start_sample=claimed.temporal.get("new_audio_start_sample"),
                     audio_test=claimed.audio_test,
+                    analysis_unit=claimed.analysis_unit,
                 )
 
                 roles = self.roles_provider(fragment)
@@ -194,12 +196,13 @@ class FragmentJobProcessor:
 
     def _process_durable(self, claimed, now):
         checkpoint = JobCheckpoint(claimed, claimed.checkpoint)
+        checkpoint.data.setdefault("analysis_unit", claimed.analysis_unit)
         previous = FragmentJob.objects.filter(
             sequence__session_id=claimed.session_id,
             sequence__number=claimed.sequence - 1,
             state=FragmentJob.State.COMPLETED,
         ).values_list("checkpoint", flat=True).first() if claimed.sequence else {}
-        if claimed.sequence and not previous:
+        if claimed.analysis_unit != "fragment" and claimed.sequence and not previous:
             if previous is None or not checkpoint.data.get("accept_missing_context"):
                 return self._reschedule(claimed, "ANALYSIS_CONTEXT_LOST", now, review=True)
 
@@ -210,11 +213,12 @@ class FragmentJobProcessor:
                 session_origin_sample=claimed.temporal.get("session_start_sample", 0),
                 new_audio_start_sample=claimed.temporal.get("new_audio_start_sample"),
                 audio_test=claimed.audio_test,
+                analysis_unit=claimed.analysis_unit,
             )
             if roles:
                 resolved_roles = self.roles_provider(fragment)
                 roles = resolved_roles if isinstance(resolved_roles, dict) else {}
-            return self.analysis.resume(fragment, roles=roles or {}, checkpoint=checkpoint, previous=previous)
+            return self.analysis.resume(fragment, roles=roles or {}, checkpoint=checkpoint, previous=previous or {})
 
         try:
             if "result" in checkpoint.data:
@@ -227,7 +231,7 @@ class FragmentJobProcessor:
         except DatabaseError:
             raise
         except AnalysisRetry as exc:
-            return self._reschedule(claimed, exc.code, now, review=exc.code in {"JEV_SUBMISSION_UNCERTAIN", "NOTIFICATION_UNCERTAIN"})
+            return self._reschedule(claimed, exc.code, now, review=exc.code in {"JEV_SUBMISSION_UNCERTAIN", "NOTIFICATION_UNCERTAIN", "JEV_CONTEXT_LIMIT"})
         except PersistenceUnavailable:
             return self._reschedule(claimed, "ALERT_PERSISTENCE_FAILED", now)
         except Exception:
@@ -445,6 +449,10 @@ class FragmentJobProcessor:
                     checkpoint=job.checkpoint,
                     session_start=job.sequence.session.actual_start,
                     audio_test=audio_test,
+                    analysis_unit=job.checkpoint.get("analysis_unit", (
+                        "utterance" if any(key in job.checkpoint for key in
+                            ("utterances", "next_utterance", "jev_pending", "result")) else
+                        "fragment" if job.sequence.session.capture_chunk_config else "utterance")),
                 )
 
         return None

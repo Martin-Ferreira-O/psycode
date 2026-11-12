@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Perfil negociado de diagn\u00f3stico de audio v2",
+  "description": "PUT /api/v1/internal/audio-tests/<uuid>?fragment_profile_version=2. Body scenario/samples sin cambios. PUT, GET y DELETE devuelven versi\u00f3n 2 y audio_chunk_overlap=0. Perfil inmutable, sin solapamiento: 600 s / 60 s = 10 WAV; 600 s / 600 s = 1 WAV. El \u00faltimo parcial contiene solo audio nuevo.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/query"
+    },
+    {
+      "$ref": "#/$defs/response"
+    }
+  ],
+  "$defs": {
+    "query": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fragment_profile_version"
+      ],
+      "properties": {
+        "fragment_profile_version": {
+          "const": "2"
+        }
+      }
+    },
+    "response": {
+      "type": "object",
+      "required": [
+        "test_id",
+        "box",
+        "scenario",
+        "samples",
+        "started_at",
+        "state",
+        "expected",
+        "accepted",
+        "analyzed",
+        "indeterminate",
+        "alerts",
+        "fragment_profile_version",
+        "audio_chunk_duration",
+        "audio_chunk_overlap"
+      ],
+      "properties": {
+        "fragment_profile_version": {
+          "type": "integer",
+          "const": 2
+        },
+        "audio_chunk_duration": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 600
+        },
+        "test_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "box": {
+          "type": "string"
+        },
+        "scenario": {
+          "enum": [
+            "neutral",
+            "alerta"
+          ]
+        },
+        "samples": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9600000
+        },
+        "started_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "state": {
+          "enum": [
+            "receiving",
+            "analyzing",
+            "completed",
+            "failed",
+            "expired",
+            "stopped"
+          ]
+        },
+        "expected": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "accepted": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "analyzed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "indeterminate": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "alerts": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "audio_chunk_overlap": {
+          "type": "integer",
+          "const": 0
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

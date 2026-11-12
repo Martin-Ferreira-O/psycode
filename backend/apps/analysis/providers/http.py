@@ -11,7 +11,7 @@ from ..errors import ProviderError, SubmissionUncertain
 
 
 def request(client, method, url, *, attempts=3, safe=True, sleep=time.sleep,
-            deadline=None, **kwargs):
+            deadline=None, accepted_statuses=(), **kwargs):
     for attempt in range(attempts):
         if deadline is not None:
             remaining = deadline - time.monotonic()
@@ -27,7 +27,8 @@ def request(client, method, url, *, attempts=3, safe=True, sleep=time.sleep,
                 raise ProviderError("Proveedor sin conexión") from None
             delay = 2 ** attempt
         else:
-            if response.is_success or (method == "DELETE" and response.status_code in {404, 410}):
+            if (response.is_success or response.status_code in accepted_statuses
+                    or (method == "DELETE" and response.status_code in {404, 410})):
                 return response
             # A rate-limit refusal did not create a job. Ambiguous 5xx POSTs
             # must not be retried, because Batch has no idempotency guarantee.

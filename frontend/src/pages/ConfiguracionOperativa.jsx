@@ -269,7 +269,9 @@ export default function ConfiguracionOperativa() {
                                 </datalist>
                                 <p className="ayuda-configuracion" id="ayudaDuracionFragmento">
                                     Mínimo: 10 s; valor predeterminado: 60 s. Puedes usar 600 s (10 minutos) u otra duración entera.
-                                    En modo sesión completa, se utiliza un único fragmento hasta el cierre de la sesión;
+                                    Cada bloque se transcribe y recibe un único análisis conjunto de JEV.
+                                    Una sesión de 60 minutos con bloques de 600 s produce 6 análisis.
+                                    En modo sesión completa, se utiliza un único bloque y un análisis al cierre;
                                     la duración fija se conserva para volver a utilizarla.
                                 </p>
                                 <p className="ayuda-configuracion" id="advertenciaFragmentos">
