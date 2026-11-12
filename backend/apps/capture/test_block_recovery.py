@@ -43,8 +43,8 @@ class BlockRecoveryTests(SimpleTestCase):
         self.assertEqual(len(result.signals), 1)
         self.assertEqual(self.alerts.register_alert.call_count, 1)
         current = self.analyzer.evaluate.call_args.args[0]
-        self.assertIn("¿Cómo estás?", current["text"])
-        self.assertIn('"role": "professional"', current["text"])
+        self.assertEqual(current["turns"][1], {"speaker": "voz2", "text": "¿Cómo estás?"})
+        self.assertEqual(current["speaker_roles"], {"voz1": "patient", "voz2": "professional"})
         self.assertEqual(len(context["block_result"]["decisions"]), 1)
         self.assertNotIn("text", context["block_result"])
     def test_saved_provider_response_survives_restart_without_reclassification(self):
