@@ -281,3 +281,75 @@ reintentos y conflictos concurrentes, rollback, commit de resultado incierto,
 privacidad y limpieza concurrente. Una prueba termina abruptamente un proceso
 para verificar la recuperación posterior de su temporal sin ejecutar finalizers.
 Una prueba adicional ejecuta `check` y migraciones sin permitir importar `fcntl`.
+
+## Fragmentos configurables y negociación
+
+La migración `0021` añade `capture_chunk_config`, separado de `audio_profile`,
+y `capture_chunk_negotiated`. Solo una autorización nueva toma un snapshot de
+`OperationalConfiguration`: duración mínima 10 s, predeterminada 60 s y modo
+`fixed`/`session`. Cambiar la configuración web no altera sesiones existentes.
+Las sesiones anteriores a la migración conservan `{}` y el comportamiento legacy.
+
+`commands()` resuelve `fixed` como `min(configured, max(10, ceil(window_seconds)))`
+y `session` como `max(10, ceil(window_seconds))`, usando la ventana original,
+sin reducir la duración por reconexiones o por el tiempo transcurrido.
+El ASGI real es `backend.config.asgi:application`. Solo un hello con
+`audio.chunk-config.v1` **y** `audio.v2` recibe esa capacidad en `ready`.
+El campo entero opcional `audio_chunk_duration` aparece solo en `inicio`, tanto
+en polling como en `sync`. La decisión de la primera entrega queda persistida:
+una sesión entregada a un agente antiguo no se actualiza a mitad de captura.
+Sin negociación el comando omite el campo y el agente conserva su perfil local;
+no se impone el valor web ni se infiere una negociación desde el audio recibido.
+Si una sesión ya negociada tiene un inicio pendiente y la conexión pierde alguna
+de las capacidades requeridas, el servidor rechaza su entrega con
+`CAPABILITIES_CHANGED` y cierra el WebSocket; no degrada el inicio a legacy ni
+borra la negociación persistida. Las detenciones siguen entregándose sin el
+campo a conexiones legacy. Las sesiones sin negociación conservan compatibilidad.
+
+Para sesiones negociadas se exige temporal v2, exactamente los samples de la
+duración solicitada y solapamiento de 16000 samples (1 s). El perfil recibido
+queda estable. Se admiten duraciones superiores a 600 s y archivos mayores de
+25 MiB únicamente con negociación persistida. El límite exacto del archivo es
+`duration * 32000 + 65536` bytes (PCM y margen de cabecera); se conservan checksum,
+RIFF completo, formato PCM, secuencias, continuidad, ventana efectiva, ACK de
+inicio, recepción y confirmación durable. El límite legacy de almacenamiento
+configurado y el máximo temporal de 600 s siguen vigentes sin negociación.
+
+El multipart no garantiza que `session_id` preceda al WAV. Antes de conocerlo,
+el parser usa como máximo la mayor cota de las sesiones negociadas del **box
+autenticado**, solo en endpoints v2. Tras parsear, la ingesta aplica la cota de
+la sesión exacta antes de publicar el archivo. Esto puede permitir escribir un
+temporal mayor que el límite legacy cuando ese mismo box tiene otra sesión
+negociada; no permite aceptarlo ni ampliar sus límites de formato o tiempo.
+El parser limita bytes efectivos, no solo Content-Length, y limpia temporales
+al fallar. Una carga usa archivo temporal de parser más copia de staging.
+
+### Proxy, disco y análisis
+
+`deployment/nginx-capture.conf` y `deployment/vps/nginx.conf` mantienen `26m`
+para el resto del servidor. La excepción exacta `/api/v2/internal/fragments`
+usa `client_max_body_size 3g` y `proxy_request_buffering off`; las cotas de capture
+se aplican durante parseo y almacenamiento. El alias v1 `/fragments/v2` mantiene
+el límite del proxy; para sesiones grandes usar la ruta canónica v2.
+No se despliega automáticamente ninguna plantilla.
+
+**ASGI de Django primero recibe el cuerpo completo en un spool, antes de ejecutar
+la autenticación y el parser.** Desactivar buffering de Nginx no elimina ese spool.
+El límite finito de Nginx acota cada petición antes de la aplicación a 3 GiB,
+suficiente para una ventana clínica de hasta 25 h (cambio horario incluido),
+con margen para WAV y multipart.
+Ajustar ese límite a la máxima ventana institucional. El rechazo del proxy no es
+un ACK: el agente debe conservar el WAV pendiente e intervenir/reintentar sin
+regenerar ni renumerar audio. Se requieren capacidad de disco, cuotas/monitorización
+y control de concurrencia; el acceso directo a ASGI debe quedar restringido al proxy. Dimensionar el temporal ASGI, el directorio
+privado de capture y el espacio de staging; 10 min PCM son 19,2 MB y 1 hora,
+115,2 MB, sin contar copias ni multipart. Permanecen los timeouts de proxy de 90 s
+para inactividad de lectura/escritura. No se verificaron cargas reales a través
+de Nginx ni cuotas del servidor.
+
+El análisis mantiene offsets locales del WAV separados del origen de sesión.
+Speechmatics puede cargar PCM y WAV completos en memoria; dimensionar también RAM
+y los plazos/límites del proveedor para sesiones largas. JEV conserva utterances
+de 15 s, history de 60 s y 12000 caracteres: recibir una sesión completa no implica
+una clasificación monolítica de 10 min. No se cambian estos límites ni se envía
+audio a servicios externos durante las pruebas.

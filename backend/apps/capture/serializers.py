@@ -41,8 +41,8 @@ class FragmentV2Serializer(FragmentSerializer):
     session_end_sample = serializers.IntegerField(min_value=1, max_value=9223372036854775806)
     new_audio_start_sample = serializers.IntegerField(min_value=0, max_value=9223372036854775806)
     sample_rate = serializers.IntegerField(min_value=16000, max_value=16000)
-    chunk_samples = serializers.IntegerField(min_value=1, max_value=16000 * 600)
-    overlap_samples = serializers.IntegerField(min_value=0, max_value=16000 * 600 - 1)
+    chunk_samples = serializers.IntegerField(min_value=1, max_value=9223372036854775806)
+    overlap_samples = serializers.IntegerField(min_value=0, max_value=9223372036854775806 - 1)
 
 class AgentRegistrationCreateSerializer(serializers.Serializer):
     """Datos permitidos al registrar un nuevo PC."""

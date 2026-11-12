@@ -6,7 +6,7 @@ from django.db import transaction
 from backend.common.errors import ServiceError
 from backend.apps.capture.services import CaptureSessionService
 from .capture_authorization import BoxCaptureAuthorization, CaptureAuthorizationService
-from .models import OperationalConfiguration
+from .models import AudioChunkConfigurationChange, OperationalConfiguration
 from .serializers import OperationalConfigSerializer
 
 SANTIAGO_TZ = ZoneInfo("America/Santiago")
@@ -24,6 +24,8 @@ class OperationalService:
     @staticmethod
     def _serialize_config(config):
         return {
+            "audio_chunk_duration": config.audio_chunk_duration,
+            "audio_chunk_mode": config.audio_chunk_mode,
             "enabled_days": config.enabled_days,
             "open_time": config.open_time,
             "close_time": config.close_time,
@@ -49,6 +51,8 @@ class OperationalService:
                     "VALIDATION_ERROR", "Datos de entrada inválidos", 400,
                     details={"fields": serializer.errors},
                 )
+            before_duration = config.audio_chunk_duration
+            before_mode = config.audio_chunk_mode
             data = serializer.validated_data
             enabled_days = data.get("enabled_days")
             open_time = data.get("open_time")
@@ -69,10 +73,17 @@ class OperationalService:
                 config.open_time = open_time
             if close_time is not None:
                 config.close_time = close_time
-            for field in ("notification_mode", "primary_email", "backup_enabled", "backup_email"):
+            for field in ("notification_mode", "primary_email", "backup_enabled", "backup_email",
+                          "audio_chunk_duration", "audio_chunk_mode"):
                 if field in data:
                     setattr(config, field, data[field])
             config.save()
+            if (before_duration, before_mode) != (config.audio_chunk_duration, config.audio_chunk_mode):
+                AudioChunkConfigurationChange.objects.create(
+                    actor_id=str(actor.pk),
+                    before_duration=before_duration, after_duration=config.audio_chunk_duration,
+                    before_mode=before_mode, after_mode=config.audio_chunk_mode,
+                )
 
         return self._serialize_config(config)
 

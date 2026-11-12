@@ -151,7 +151,7 @@ class FragmentStorage:
             return IncomingFragment(stream, self)
 
     @contextmanager
-    def stage(self, upload, checksum):
+    def stage(self, upload, checksum, *, max_bytes=None):
         from .encryption import require_encrypted_storage
         require_encrypted_storage()
         key = uuid4().hex + ".blob"
@@ -170,7 +170,7 @@ class FragmentStorage:
             digest = hashlib.sha256()
             for chunk in upload.chunks(chunk_size=64 * 1024):
                 stored.size += len(chunk)
-                if stored.size > self.max_bytes:
+                if stored.size > (self.max_bytes if max_bytes is None else max_bytes):
                     raise FragmentError("FRAGMENT_TOO_LARGE", 413)
                 digest.update(chunk)
                 stream.write(chunk)

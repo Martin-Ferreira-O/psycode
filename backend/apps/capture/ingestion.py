@@ -8,7 +8,7 @@ from django.db import transaction
 
 from .audio_tests import accept_test_sequence, load_test
 from .domain import CaptureError
-from .models import AcceptedSequence, FragmentJob
+from .models import AUDIO_TEST_ORIGIN, AcceptedSequence, CaptureSession, FragmentJob
 from .services import CaptureSessionService, _box, _event, _instant, _uuid
 from .storage import FragmentError
 
@@ -52,7 +52,15 @@ class FragmentIngestionService:
                 self.control._recover_one(box, session_id, _instant(now))
             else:
                 load_test(session_id, test_agent)
-            with self.storage.stage(upload, checksum) as stored:
+            from .chunk_config import byte_limit
+            session = (load_test(session_id, test_agent).session if test_agent is not None else
+                       CaptureSession.objects.filter(pk=session_id, box=box).exclude(origin=AUDIO_TEST_ORIGIN).first())
+            if session is None:
+                raise CaptureError("SESSION_NOT_FOUND")
+            if session.capture_chunk_negotiated is True and temporal is None:
+                raise FragmentError("AUDIO_VERSION_CONFLICT", 409)
+            limit = byte_limit(session, self.storage.max_bytes)
+            with self.storage.stage(upload, checksum, max_bytes=limit) as stored:
                 received_at = _instant(now)
                 # Vuelve a evaluar vencimiento tras el I/O, fuera de la transacción
                 # de aceptación para conservar la recuperación aunque se rechace.

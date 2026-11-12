@@ -9,7 +9,8 @@ const LISTA = "lista_distribucion";
 const SUPERVISORES = "supervisores_activos";
 const CAMPOS = [
     "enabled_days", "open_time", "close_time", "notification_mode",
-    "primary_email", "backup_enabled", "backup_email", "non_field_errors",
+    "primary_email", "backup_enabled", "backup_email",
+    "audio_chunk_duration", "audio_chunk_mode", "non_field_errors",
 ];
 const DIAS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
 const DENEGADO = "Esta pantalla y sus datos están disponibles únicamente para administradores.";
@@ -23,6 +24,8 @@ function formularioDesdeConfiguracion(configuracion) {
         primary_email: configuracion.primary_email ?? "",
         backup_enabled: Boolean(configuracion.backup_enabled),
         backup_email: configuracion.backup_email ?? "",
+        audio_chunk_duration: configuracion.audio_chunk_duration ?? 60,
+        audio_chunk_mode: configuracion.audio_chunk_mode === "session" ? "session" : "fixed",
         timezone: configuracion.timezone || "America/Santiago",
         updated_at: configuracion.updated_at,
     };
@@ -124,9 +127,17 @@ export default function ConfiguracionOperativa() {
             return;
         }
 
+        const duracion = Number(formulario.audio_chunk_duration);
+        if (formulario.audio_chunk_mode === "fixed" && (!Number.isSafeInteger(duracion) || duracion < 10)) {
+            setAviso({ type: "error", texto: "La duración del fragmento debe ser un número entero de al menos 10 segundos." });
+            form.elements.audio_chunk_duration.focus();
+            return;
+        }
         const payload = {
             enabled_days: formulario.enabled_days, open_time, close_time,
             notification_mode, primary_email, backup_enabled, backup_email,
+            audio_chunk_mode: formulario.audio_chunk_mode,
+            audio_chunk_duration: Number.isSafeInteger(duracion) && duracion >= 10 ? duracion : 60,
         };
         const controlador = new AbortController();
         solicitudGuardado.current = controlador;
@@ -153,12 +164,12 @@ export default function ConfiguracionOperativa() {
     return (
         <>
             <PageHeader title="Configuración operativa"
-                description="Administra los días, el horario clínico y los destinatarios de alertas." />
+                description="Administra el horario clínico, los fragmentos de audio y los destinatarios de alertas." />
             <section className="panel-configuracion panel-configuracion-operativa" aria-labelledby="tituloConfiguracion"
                 aria-busy={!formulario && !errorCarga}>
                 <div className="configuracion-cabecera">
                     <div>
-                        <h2 id="tituloConfiguracion">Horario clínico y alertas</h2>
+                        <h2 id="tituloConfiguracion">Horario clínico, audio y alertas</h2>
                         <p>La configuración vigente se carga desde el servidor.</p>
                     </div>
                     {!errorCarga && <div className="zona-horaria">
@@ -177,7 +188,7 @@ export default function ConfiguracionOperativa() {
                         ? <Status type="error" error={errorCarga} onRetry={reintentar} />
                         : !formulario && (
                             <>
-                                {["Días habilitados", "Horario clínico", "Destinatarios de alertas", "Correo de respaldo"].map(title => (
+                                {["Días habilitados", "Horario clínico", "Fragmentos de audio", "Destinatarios de alertas", "Correo de respaldo"].map(title => (
                                     <fieldset key={title} className="grupo-configuracion">
                                         <legend>{title}</legend>
                                         <Skeleton className="ui-skeleton-field" />
@@ -220,6 +231,53 @@ export default function ConfiguracionOperativa() {
                                     </label>
                                 </div>
                                 <p className="ayuda-configuracion">La hora de apertura debe ser anterior a la de cierre.</p>
+                            </fieldset>
+
+                            <fieldset className="grupo-configuracion" disabled={guardando}
+                                aria-describedby="ayudaFragmentos advertenciaFragmentos">
+                                <legend>Fragmentos de audio</legend>
+                                <p className="ayuda-configuracion" id="ayudaFragmentos">
+                                    Los cambios se aplican a las nuevas sesiones. Las sesiones en curso conservan su configuración.
+                                </p>
+                                <div className="opciones-destinatarios">
+                                    <label className="control-respaldo">
+                                        <input type="radio" name="audio_chunk_mode" value="fixed"
+                                            checked={formulario.audio_chunk_mode === "fixed"}
+                                            onChange={() => actualizar("audio_chunk_mode", "fixed")} />
+                                        <span>Duración fija (recomendado: 60 s)</span>
+                                    </label>
+                                    <label className="control-respaldo">
+                                        <input type="radio" name="audio_chunk_mode" value="session"
+                                            checked={formulario.audio_chunk_mode === "session"}
+                                            onChange={() => actualizar("audio_chunk_mode", "session")} />
+                                        <span>Sesión completa</span>
+                                    </label>
+                                </div>
+                                <label className="campo-configuracion">
+                                    <span>Duración del fragmento (segundos)</span>
+                                    <input id="duracionFragmento" name="audio_chunk_duration" type="number"
+                                        min={10} step={1} required list="duracionesFragmento"
+                                        disabled={formulario.audio_chunk_mode === "session"}
+                                        aria-describedby="ayudaDuracionFragmento advertenciaFragmentos"
+                                        value={formulario.audio_chunk_duration}
+                                        onChange={(evento) => actualizar("audio_chunk_duration", evento.target.value)} />
+                                </label>
+                                <datalist id="duracionesFragmento">
+                                    <option value="10">10 s (mínimo)</option>
+                                    <option value="60">60 s (recomendado)</option>
+                                    <option value="600">600 s (10 minutos)</option>
+                                </datalist>
+                                <p className="ayuda-configuracion" id="ayudaDuracionFragmento">
+                                    Mínimo: 10 s; valor predeterminado: 60 s. Puedes usar 600 s (10 minutos) u otra duración entera.
+                                    En modo sesión completa, se utiliza un único fragmento hasta el cierre de la sesión;
+                                    la duración fija se conserva para volver a utilizarla.
+                                </p>
+                                <p className="ayuda-configuracion" id="advertenciaFragmentos">
+                                    <strong>Advertencia técnica:</strong> se recomienda mantener el valor predeterminado de 60 s.
+                                    Cambiar la duración o utilizar la sesión completa puede afectar las predicciones,
+                                    los falsos positivos y falsos negativos, y la latencia de las alertas.
+                                    En sesión completa, el análisis debe esperar al cierre de la sesión.
+                                </p>
                             </fieldset>
 
                             <fieldset className="grupo-configuracion" disabled={guardando}>

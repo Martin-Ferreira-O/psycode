@@ -39,6 +39,8 @@ class CaptureSession(models.Model):
     reception_intervention_at = models.DateTimeField(null=True)
     reception_extended_until = models.DateTimeField(null=True)
     audio_profile = models.JSONField(default=dict)
+    capture_chunk_config = models.JSONField(default=dict, editable=False)
+    capture_chunk_negotiated = models.BooleanField(null=True, editable=False)
 
     class Meta:
         constraints = [
