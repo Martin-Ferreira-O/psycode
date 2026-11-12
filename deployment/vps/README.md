@@ -208,3 +208,17 @@ y las verificaciones del panel están en
 ```sh
 python3 deployment/vps/test_agent_installer.py
 ```
+
+### Verificar el control al desplegar
+
+Prepara `/srv/psycode/shared/control-probe.json` con permisos 0600 para el
+usuario del despliegue. Debe contener las claves `url` (WSS a través del proxy),
+`box` y `token` de una instalación reservada para ensayo. Esa identidad debe
+estar fuera de los boxes con autorizaciones de captura y no debe compartirse
+con un PC operativo. El script comprueba `hello/ready/sync` con TLS verificado
+antes de declarar sano el despliegue. Valida también en ensayo la emisión de una
+orden sintética por el coordinador; la sonda de salud no solicita una captura.
+
+Los WAV pendientes de sesiones con el micrófono ya cerrado no bloquean la
+actualización. Si vence el plazo de drenaje antes de parar los demás servicios,
+se vuelve a arrancar solo el coordinador.

@@ -126,7 +126,13 @@ class CaptureSessionService:
                 authorization_ended_at=None,
             ).first()
             if previous:
-                return _snapshot(previous)
+                if previous.actual_end is None or previous.capture_end_reason not in {"RECOVERY_STOPPED", "SHUTDOWN"}:
+                    return _snapshot(previous)
+                # Una ventana aún vigente puede tener un nuevo inicio central
+                # tras confirmar el cierre físico de la instalación anterior.
+                previous.authorization_ended_at = now
+                previous.save(update_fields=["authorization_ended_at"])
+                _event(previous, "authorization.ended", now)
             try:
                 with transaction.atomic():
                     session = CaptureSession.objects.create(
@@ -236,25 +242,37 @@ class CaptureSessionService:
             raise CaptureError("SESSION_NOT_FOUND")
         return session
 
-    def commands(self, box, *, now=None, chunk_config_supported=None, chunk_config_v2_supported=False):
+    def commands(self, box, *, now=None, chunk_config_supported=None, chunk_config_v2_supported=False,
+                 limit=None, reconcile=True, redelivery_seconds=0):
         now, box = _instant(now), _box(box)
         # Recuperación y entrega comparten la transacción: no se publica un
         # inicio vencido, incluso si el programador externo dejó de ejecutar ticks.
         with transaction.atomic():
-            sessions = list(CaptureSession.objects.select_for_update().filter(box=box, state__in=OPEN_STATES))
-            for session in sessions:
-                self._expire(session, now)
+            if reconcile:
+                sessions = CaptureSession.objects.select_for_update().filter(
+                    box=box, state__in=OPEN_STATES, actual_end__isnull=True)
+                for session in sessions:
+                    self._expire(session, now)
             pending = AgentCommand.objects.filter(session__box=box, cancelled_at=None).exclude(succeeded=True)
             pending = pending.exclude(kind=CommandKind.STOP, session__actual_end__isnull=False)
             # Fallos de inicio no se reejecutan; las detenciones sí se reintentan.
             pending = pending.exclude(kind=CommandKind.START, acknowledged_at__isnull=False)
-            commands = list(pending.select_for_update().select_related("session").order_by("created_at", "command_id"))
-            stops = [item for item in commands if item.kind == CommandKind.STOP]
-            if stops:
-                commands = stops
+            stops = pending.filter(kind=CommandKind.STOP)
+            if stops.exists():
+                pending = stops
+            pending = pending.select_for_update().select_related("session").order_by("created_at", "command_id")
+            commands = list(pending[:limit]) if limit is not None else list(pending)
             result = []
             for item in commands:
                 session = item.session
+                if (item.kind == CommandKind.START and session.capture_chunk_negotiated is True
+                        and chunk_config_supported is not None
+                        and (not chunk_config_supported or (chunk_config.overlap(session) == 0
+                                                           and not chunk_config_v2_supported))):
+                    self._diagnose(session, "CAPABILITIES_CHANGED", now)
+                    continue
+                if item.kind == CommandKind.START and session.diagnostic_code == "CAPABILITIES_CHANGED":
+                    self._diagnose(session, "", now)
                 if (item.kind == CommandKind.START and session.capture_chunk_negotiated is None
                         and chunk_config_supported is not None):
                     session.capture_chunk_negotiated = bool(chunk_config_supported and session.capture_chunk_config)
@@ -262,9 +280,10 @@ class CaptureSessionService:
                         session.capture_chunk_config = {**session.capture_chunk_config,
                             "audio_chunk_overlap": 0 if chunk_config_v2_supported else 1}
                     session.save(update_fields=["capture_chunk_negotiated", "capture_chunk_config"])
-                item.delivered_at, item.delivery_count = now, item.delivery_count + 1
-                item.save(update_fields=["delivered_at", "delivery_count"])
-                _event(item.session, "command.delivered", now, command=item)
+                if item.delivered_at is None or (now - item.delivered_at).total_seconds() >= redelivery_seconds:
+                    item.delivered_at, item.delivery_count = now, item.delivery_count + 1
+                    item.save(update_fields=["delivered_at", "delivery_count"])
+                    _event(item.session, "command.delivered", now, command=item)
                 result.append(Command(item.command_id, item.session_id, box, item.kind,
                                       item.session.scheduled_start, min(item.session.scheduled_end, item.session.stop_requested_at)
                                       if item.kind == CommandKind.STOP and item.session.stop_requested_at else item.session.scheduled_end,
@@ -308,11 +327,11 @@ class CaptureSessionService:
             occurred = occurred or now
             if not session.authorized_at <= occurred <= now:
                 raise CaptureError("INVALID_TIMESTAMP")
-            if (success and command.kind == CommandKind.STOP and occurred < command.created_at
-                    and occurred < self._capture_limit(session)):
-                raise CaptureError("INVALID_TIMESTAMP")
             if success and command.kind == CommandKind.START:
-                if occurred >= session.scheduled_end or (session.actual_end and occurred > session.actual_end):
+                cut = min(value for value in (session.scheduled_end, session.authorization_ended_at,
+                                               command.cancelled_at, session.stop_requested_at, session.actual_end)
+                          if value is not None)
+                if occurred >= cut:
                     raise CaptureError("INVALID_TIMESTAMP")
                 session.actual_start = occurred
                 if session.state == SessionState.STARTED:
@@ -321,6 +340,10 @@ class CaptureSessionService:
                     else:
                         session.state = SessionState.ACTIVE
             elif success:
+                if (occurred < command.created_at and session.actual_end is None
+                        and occurred < self._capture_limit(session) and session.actual_start is None
+                        and last_sequence >= 0):
+                    raise CaptureError("INVALID_TIMESTAMP")
                 latest = session.sequences.order_by("-number").first()
                 if (last_sequence < session.next_sequence - 1
                         or (session.actual_start and occurred < session.actual_start)
@@ -381,10 +404,7 @@ class CaptureSessionService:
             raise CaptureError("INVALID_TIMESTAMP")
         AcceptedSequence.objects.create(session=session, number=number, captured_at=captured_at, accepted_at=now)
         session.next_sequence += 1
-        session.last_seen_at = max(session.last_seen_at, now)
-        if session.diagnostic_code == "CONTROL_DISCONNECTED":
-            session.diagnostic_code = ""
-        session.save(update_fields=["next_sequence", "last_seen_at", "diagnostic_code"])
+        session.save(update_fields=["next_sequence"])
         _event(session, "sequence.accepted", now, sequence=number)
         self._complete(session, now)
         return True

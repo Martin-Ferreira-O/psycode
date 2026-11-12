@@ -4,9 +4,12 @@ from django.utils import timezone
 from .models import RuntimeLease
 
 
-def acquire(name, owner, *, ttl=30, replace=False):
+def acquire(name, owner, *, ttl=30, replace=False, renew_only=False):
     now = timezone.now()
     with transaction.atomic():
+        if renew_only:
+            return RuntimeLease.objects.filter(name=name, owner=owner, expires_at__gt=now).update(
+                expires_at=now + timedelta(seconds=ttl)) == 1
         row, created = RuntimeLease.objects.select_for_update().get_or_create(
             name=name, defaults={"owner": owner, "expires_at": now + timedelta(seconds=ttl)})
         if not created and not replace and row.owner != owner and row.expires_at > now:

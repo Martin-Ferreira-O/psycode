@@ -51,20 +51,40 @@ def main():
         apython=agent_env/('Scripts/python.exe' if os.name=='nt' else 'bin/python')
         subprocess.run(['uv','pip','install','--reinstall-package','psycode-agent',
                         '--python',str(apython),str(wheel)],check=True,capture_output=True)
+        # CA y certificado de loopback exclusivos de este ensayo; se verifica
+        # certificado y nombre del servidor igual que con HTTPS/WSS reales.
+        key, cert = root / "key.pem", root / "cert.pem"
+        openssl_config = root / "openssl.cnf"
+        openssl_config.write_text("""[req]
+distinguished_name=dn
+x509_extensions=v3
+prompt=no
+[dn]
+CN=127.0.0.1
+[v3]
+subjectAltName=IP:127.0.0.1
+basicConstraints=critical,CA:true
+""", encoding="ascii")
+        subprocess.run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1",
+                        "-config", str(openssl_config), "-keyout", str(key), "-out", str(cert)],
+                       check=True, capture_output=True)
+        env["SSL_CERT_FILE"] = str(cert)
+        os.environ["SSL_CERT_FILE"] = str(cert)
+        tls = ["--ssl-keyfile", str(key), "--ssl-certfile", str(cert)]
         with socket.socket() as sock:
             sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
-        base=f'http://127.0.0.1:{port}'
+        base=f'https://127.0.0.1:{port}'
         log=resources.enter_context((root/'server.log').open('w+'))
         server=subprocess.Popen([sys.executable,'-m','uvicorn','backend.config.asgi:application',
-            '--host','127.0.0.1','--port',str(port),'--log-level','warning','--timeout-graceful-shutdown','2'],
+            '--host','127.0.0.1','--port',str(port),'--log-level','warning','--timeout-graceful-shutdown','2',*tls],
             cwd=ROOT,env=env,stdout=log,stderr=log)
         processes.callback(stop_process, server)
         with socket.socket() as sock:
             sock.bind(('127.0.0.1',0));port2=sock.getsockname()[1]
-        alternate=f'http://127.0.0.1:{port2}'
+        alternate=f'https://127.0.0.1:{port2}'
         second_log=resources.enter_context((root/'server2.log').open('w+'))
         second_server=subprocess.Popen([sys.executable,'-m','uvicorn','backend.config.asgi:application',
-            '--host','127.0.0.1','--port',str(port2),'--log-level','warning','--timeout-graceful-shutdown','2'],
+            '--host','127.0.0.1','--port',str(port2),'--log-level','warning','--timeout-graceful-shutdown','2',*tls],
             cwd=ROOT,env=env,stdout=second_log,stderr=second_log)
         processes.callback(stop_process, second_server)
         try:
@@ -153,8 +173,8 @@ def main():
             FragmentJobProcessor(fragment_storage(),SimulatedAnalysis()).process_next()
             job=FragmentJob.objects.get(sequence__session_id=sid)
             assert job.state=='completado' and job.result=='indeterminado'
-            # Un segundo ciclo usa el runtime autónomo real, con OBS/FFmpeg simulados.
-            from backend.apps.agenda.persistence import receive, issue
+            # Un segundo ciclo usa el runtime autónomo real, con PCM sintético.
+            from backend.apps.agenda.persistence import issue
             from backend.apps.capture.authentication import AgentIdentity
             identity=AgentIdentity('cross-agent','box-3')
             operation=issue(identity,'smile')
@@ -202,7 +222,7 @@ def main():
                 'cross_test_count': int(test_count.group(1)),
                 'coverage':['five concurrent simulated agents with consecutive sessions and old backlog',
                 'lost HTTPS responses after commit for each agent','separate WS/HTTP processes','SQL agenda and coordinator restart','lost ACK after commit',
-                'reconnect','idempotent uploads','stop and final sequence','queue to simulated unknown-speaker analysis','historical v1 HTTP and ACK tests','autonomous runtime with simulated OBS/FFmpeg','lease replacement across two ASGI processes','isolated agent without Django/backend/MongoDB','native delivered Smile JSON through HTTP to authorization']}))
+                'reconnect','idempotent uploads','stop and final sequence','queue to simulated unknown-speaker analysis','historical v1 HTTP and ACK tests','autonomous runtime with synthetic microphone PCM','lease replacement across two ASGI processes','isolated agent without Django/backend/MongoDB','native delivered Smile JSON through HTTP to authorization']}))
         finally:
             processes.close()
             for server_log in (second_log, log):

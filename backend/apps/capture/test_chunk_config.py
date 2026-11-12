@@ -215,29 +215,33 @@ class ChunkHandshakeTests(CaptureFixtures, TransactionTestCase):
                 "hello", {"agent_version": "test", "capabilities": capabilities}))})
             async def send(event):
                 sent.append(event)
-                if event["type"] == "websocket.send" and json.loads(event["text"])["type"] == "command":
+                if event["type"] != "websocket.send":
+                    return
+                message = json.loads(event["text"])
+                if message["type"] == "ready":
+                    await received.put({"type": "websocket.receive", "text": json.dumps(envelope("sync", {}))})
+                if message["type"] == "state":
                     await received.put({"type": "websocket.disconnect"})
-            await application({"type": "websocket", "path": "/ws/v1/agents",
+            await asyncio.wait_for(application({"type": "websocket", "path": "/ws/v1/agents",
                                "headers": [(b"authorization", ("Agent " + TOKEN).encode())],
-                               "query_string": b""}, received.get, send)
+                               "query_string": b""}, received.get, send), timeout=5)
             return [json.loads(e["text"]) for e in sent if "text" in e]
         with patch("django.utils.timezone.now", return_value=NOW):
             messages = asyncio.run(exercise([CAPABILITY, "audio.v2"]))
             legacy = asyncio.run(exercise([]))
             without_v2 = asyncio.run(exercise([CAPABILITY]))
         ready = next(m["payload"] for m in messages if m["type"] == "ready")
-        command = next(m["payload"] for m in messages if m["type"] == "command")
+        command = next(m["payload"]["commands"][0] for m in messages if m["type"] == "state")
         self.assertIn(CAPABILITY, ready["capabilities"])
         self.assertEqual(command["audio_chunk_duration"], 60)
         self.assertNotIn(CAPABILITY, next(m["payload"] for m in legacy if m["type"] == "ready")["capabilities"])
         self.assertFalse(any(m["type"] == "command" for m in legacy))
-        self.assertEqual(next(m["payload"] for m in legacy if m["type"] == "error"),
-                         {"code": "CAPABILITIES_CHANGED", "recoverable": False})
+        self.assertEqual(next(m["payload"]["commands"] for m in legacy if m["type"] == "state"), [])
 
         self.assertNotIn(CAPABILITY, next(m["payload"] for m in without_v2 if m["type"] == "ready")["capabilities"])
         self.assertFalse(any(m["type"] == "command" for m in without_v2))
-        self.assertEqual(next(m["payload"] for m in without_v2 if m["type"] == "error"),
-                         {"code": "CAPABILITIES_CHANGED", "recoverable": False})
+        self.assertEqual(next(m["payload"]["commands"] for m in without_v2 if m["type"] == "state"), [])
+        self.assertEqual(CaptureSession.objects.get().diagnostic_code, "CAPABILITIES_CHANGED")
         self.assertIs(CaptureSession.objects.get().capture_chunk_negotiated, True)
 
         # Revocar cancela el inicio pendiente: aun sin capacidad debe entregarse
@@ -247,7 +251,7 @@ class ChunkHandshakeTests(CaptureFixtures, TransactionTestCase):
         self.service.apply_authorization(denied, now=NOW + timedelta(seconds=30))
         with patch("django.utils.timezone.now", return_value=NOW + timedelta(seconds=31)):
             stopped = asyncio.run(exercise([]))
-        stop = next(m["payload"] for m in stopped if m["type"] == "command")
+        stop = next(m["payload"]["commands"][0] for m in stopped if m["type"] == "state")
         self.assertEqual(stop["kind"], "detencion")
         self.assertNotIn("audio_chunk_duration", stop)
         self.assertFalse(any(m["type"] == "error" for m in stopped))
@@ -270,8 +274,8 @@ class NonOverlappingSnapshotTests(CaptureFixtures, TestCase):
             self.assertEqual(session.capture_chunk_config["audio_chunk_overlap"], 0)
             self.assertEqual(first["audio_chunk_overlap"], 0)
             self.assertEqual(first, self.control().commands()[0])
-            with self.assertRaisesMessage(ValueError, "CAPABILITIES_CHANGED"):
-                self.control(v2=False).commands()
+            self.assertEqual(self.control(v2=False).commands(), [])
+            self.assertEqual(CaptureSession.objects.get().diagnostic_code, "CAPABILITIES_CHANGED")
         session.refresh_from_db()
         self.assertEqual(session.capture_chunk_config["audio_chunk_overlap"], 0)
         self.service.acknowledge("box-3", first["command_id"], now=NOW)

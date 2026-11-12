@@ -50,10 +50,22 @@ ln -sfn "$HOME/shared/server.env" .env
 DJANGO_SETTINGS_MODULE=backend.config.vps_settings .venv/bin/python manage.py check --deploy --fail-level WARNING
 .venv/bin/python manage.py collectstatic --noinput
 
+if [[ ! -r "$HOME/shared/control-probe.json" ]]; then
+  echo 'Configure the dedicated WSS deployment probe before stopping production.' >&2
+  exit 1
+fi
+
 # Preparation above leaves the running release available. Drain in this order.
-sudo /usr/bin/systemctl stop psycode-coordinator.service
+coordinator_stopped=0
+services_touched=0
 resume_on_error() {
   echo 'Deployment failed; retaining the previous release and database backup.' >&2
+  if [[ "$services_touched" == 0 ]]; then
+    if [[ "$coordinator_stopped" == 1 ]]; then
+      sudo /usr/bin/systemctl start psycode-coordinator.service || true
+    fi
+    return
+  fi
   if [[ -n "$previous" && -d "$previous" ]]; then
     if [[ "$storage_service_available" == 1 ]]; then
       sudo /usr/bin/systemctl stop psycode-storage.service || true
@@ -68,11 +80,13 @@ resume_on_error() {
   fi
 }
 trap resume_on_error ERR
+coordinator_stopped=1
+sudo /usr/bin/systemctl stop psycode-coordinator.service
 if [[ -n "$previous" && -f "$HOME/shared/db.sqlite3" ]]; then
   # HTTP and worker stay available while agents finish their sessions.
   for ((attempt=0; attempt<60; attempt++)); do
     open_sessions=$(cd "$previous" && .venv/bin/python manage.py shell -c \
-      'from backend.apps.capture.models import CaptureSession, OPEN_STATES; print(CaptureSession.objects.filter(state__in=OPEN_STATES).count())' | tail -1)
+      'from backend.apps.capture.models import CaptureSession, OPEN_STATES; print(CaptureSession.objects.filter(state__in=OPEN_STATES, actual_end__isnull=True).count())' | tail -1)
     [[ "$open_sessions" == 0 ]] && break
     sleep 5
   done
@@ -81,6 +95,7 @@ if [[ -n "$previous" && -f "$HOME/shared/db.sqlite3" ]]; then
     false
   fi
 fi
+services_touched=1
 if [[ "$storage_service_available" == 1 ]]; then
   sudo /usr/bin/systemctl stop psycode-storage.service
 fi
@@ -108,9 +123,12 @@ if [[ "$storage_service_available" == 1 ]]; then
   sudo /usr/bin/systemctl start psycode-storage.service
 fi
 healthy=0
+probe_file="$HOME/shared/control-probe.json"
 for ((attempt=0; attempt<30; attempt++)); do
   if curl --fail --silent --output /dev/null --max-time 5 \
-      -H 'Host: 144.22.56.52' -H 'X-Forwarded-Proto: https' http://127.0.0.1:8000/; then
+      -H 'Host: 144.22.56.52' -H 'X-Forwarded-Proto: https' http://127.0.0.1:8000/ &&
+      [[ -r "$probe_file" ]] &&
+      PSYCODE_CONTROL_PROBE="$probe_file" .venv/bin/python deployment/vps/check-control.py; then
     healthy=1
     break
   fi
