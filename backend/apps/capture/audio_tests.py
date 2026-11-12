@@ -20,6 +20,24 @@ OVERLAP = RATE
 SCENARIOS = {"neutral", "alerta"}
 MAX_SAMPLES = RATE * 600
 STOPPED = "AUDIO_TEST_STOPPED"
+FRAGMENT_STATES = {
+    FragmentJob.State.PENDING: "queued",
+    FragmentJob.State.PROCESSING: "analyzing",
+    FragmentJob.State.FAILED: "failed",
+    FragmentJob.State.REVIEW: "review",
+}
+FRAGMENT_RESULTS = {
+    FragmentJob.Result.NO_RISK_DETECTED: "no_signal",
+    FragmentJob.Result.RISK_DETECTED: "signal",
+    FragmentJob.Result.INDETERMINATE: "indeterminate",
+}
+FRAGMENT_REASONS = {
+    "ANALYSIS_CONTEXT_LOST", "CONTEXT_NOT_EVALUABLE", "FLOW_INTERRUPTED",
+    "JEV_CONTEXT_LIMIT", "JEV_FAILED", "JEV_SUBMISSION_UNCERTAIN",
+    "NOTIFICATION_UNCERTAIN", "PREVIOUS_FRAGMENT_FAILED", "RETENTION_EXPIRED",
+    "SPEECHMATICS_DELETE_PENDING", "SPEECHMATICS_FAILED", "SPEECHMATICS_UNCERTAIN",
+    "TEXT_NOT_EVALUABLE",
+}
 
 
 def load_test(test_id, agent, *, lock=False):
@@ -51,11 +69,28 @@ def accept_test_sequence(run, number, captured_at, now, temporal):
     session.save(update_fields=["next_sequence"])
 
 
-def status_data(run, now):
+def fragment_detail(job, session, samples):
+    sequence = job["sequence__number"]
+    chunk = session.audio_profile["chunk_samples"]
+    start = sequence * (chunk - session.audio_profile["overlap_samples"])
+    result = {
+        "sequence": sequence, "start_sample": start, "end_sample": min(start + chunk, samples),
+        "status": (FRAGMENT_RESULTS.get(job["result"], "completed") if job["state"] == FragmentJob.State.COMPLETED
+                   else FRAGMENT_STATES[job["state"]]),
+    }
+    checkpoint = job["checkpoint"]
+    codes = checkpoint.get("test_error_codes", checkpoint.get("block_result", {}).get("error_codes", ()))
+    reason = next((code for code in (job["last_error_code"], *codes) if code in FRAGMENT_REASONS), None)
+    if reason is not None:
+        result["reason"] = reason
+    return result
+
+
+def status_data(run, now, *, include_fragments=False):
     session = run.session
     expected = session.final_sequence + 1
     jobs = list(FragmentJob.objects.filter(sequence__session=session).order_by("sequence__number")
-                .values("state", "result", "checkpoint"))
+                .values("state", "result", "checkpoint", "sequence__number", "last_error_code"))
     completed = [job for job in jobs if job["state"] == FragmentJob.State.COMPLETED]
     alerts = [alert for job in completed for alert in job["checkpoint"].get("test_alerts", [])]
     if session.capture_end_reason == STOPPED:
@@ -83,6 +118,7 @@ def status_data(run, now):
         "expected": expected, "accepted": len(jobs), "analyzed": len(completed),
         "indeterminate": sum(job["result"] == FragmentJob.Result.INDETERMINATE for job in completed),
         "alerts": alerts,
+        **({"fragments": [fragment_detail(job, session, run.samples) for job in jobs]} if include_fragments else {}),
     }
 
 
@@ -91,14 +127,21 @@ class AudioTestView(APIView):
     permission_classes = [IsAuthenticated]
     parser_classes = [JSONParser]
 
+    @staticmethod
+    def _status(request, run, now):
+        details = request.query_params.getlist("fragment_details")
+        if details and details != ["1"]:
+            raise FragmentError("VALIDATION_ERROR", 400)
+        return status_data(run, now, include_fragments=bool(details))
+
     def get(self, request, test_id):
-        return success_response(status_data(load_test(test_id, request.user), timezone.now()), "Estado de prueba")
+        return success_response(self._status(request, load_test(test_id, request.user), timezone.now()), "Estado de prueba")
 
     @transaction.atomic
     def delete(self, request, test_id):
         run = load_test(test_id, request.user, lock=True)
         now = timezone.now()
-        state = status_data(run, now)
+        state = self._status(request, run, now)
         if state["state"] in {"receiving", "analyzing"}:
             run.expires_at = now
             run.save(update_fields=["expires_at"])
@@ -129,7 +172,7 @@ class AudioTestView(APIView):
                     or bool(run.session.capture_chunk_config) != negotiated
                     or (negotiated and status_data(run, now)["fragment_profile_version"] != version)):
                 raise FragmentError("AUDIO_TEST_CONFLICT", 409)
-            return success_response(status_data(run, now), "Prueba autorizada")
+            return success_response(self._status(request, run, now), "Prueba autorizada")
         if CaptureSession.objects.filter(pk=test_id).exists():
             raise FragmentError("AUDIO_TEST_CONFLICT", 409)
         # Cerrar la recepción habilita otro tramo mientras se analiza lo aceptado.
@@ -155,4 +198,4 @@ class AudioTestView(APIView):
         )
         run = AudioTest.objects.create(session=session, agent=agent, scenario=scenario, samples=samples,
                                        expires_at=max(now + timedelta(minutes=5), end + timedelta(minutes=2)))
-        return success_response(status_data(run, now), "Prueba autorizada", status=201)
+        return success_response(self._status(request, run, now), "Prueba autorizada", status=201)

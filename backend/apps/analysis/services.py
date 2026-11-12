@@ -93,6 +93,7 @@ class AnalysisService:
                         "questions_version": result.questions_version,
                     }} if fragment.analysis_unit == "fragment" else {}),
                     **({"test_alerts": checkpoint.data.get("test_alerts", [])} if fragment.audio_test else {}),
+                    **({"test_error_codes": result.error_codes} if fragment.audio_test and result.error_codes else {}),
                 }
             finally:
                 self.histories.pop(session_id, None)

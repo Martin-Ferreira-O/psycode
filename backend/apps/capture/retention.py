@@ -12,7 +12,7 @@ from django.utils import timezone
 from .cleanup import MANAGED_FILE
 from .filesystem import lock_file, open_private
 from .provider_cleanup import cleanup_provider_jobs
-from .models import CaptureSession, FragmentJob, StorageCleanupRun, StorageDeletion
+from .models import AUDIO_TEST_ORIGIN, CaptureSession, FragmentJob, StorageCleanupRun, StorageDeletion
 
 AUDIO_MIN_AGE = timedelta(hours=24)
 RECOVERY_WINDOW = timedelta(days=7)
@@ -162,10 +162,19 @@ def purge_checkpoints(now):
         if not expired and any(job.state != FragmentJob.State.COMPLETED for job in jobs):
             continue
         for job in jobs:
-            # Proveedor con borrado pendiente necesita intervención: conservar solo
-            # identidad técnica, nunca transcripción/contexto caducado.
+            # Conservar la identidad técnica del proveedor mientras quede pendiente su borrado.
             speech = job.checkpoint.get("speechmatics", {})
             keep = {"speechmatics": speech} if speech.get("state") not in (None, "deleted") else {}
+            if (session.origin == AUDIO_TEST_ORIGIN and job.state == FragmentJob.State.COMPLETED
+                    and job.result == FragmentJob.Result.RISK_DETECTED and job.checkpoint.get("test_alerts")):
+                # El estado de la prueba muestra estos resultados sin texto ni audio.
+                keep["test_alerts"] = job.checkpoint["test_alerts"]
+            if (session.origin == AUDIO_TEST_ORIGIN and job.state == FragmentJob.State.COMPLETED
+                    and job.result == FragmentJob.Result.INDETERMINATE):
+                codes = job.checkpoint.get("test_error_codes",
+                                           job.checkpoint.get("block_result", {}).get("error_codes", ()))
+                if codes:
+                    keep["test_error_codes"] = codes
             if job.checkpoint != keep:
                 job.checkpoint = keep
                 job.save(update_fields=["checkpoint"])
