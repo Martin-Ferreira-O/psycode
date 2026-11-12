@@ -1,0 +1,57 @@
+[
+  {
+    "id": "0749-bloque-1",
+    "wav": "original-1.wav",
+    "offset": 469.0,
+    "sha256": "624d1a8e24fd819eb11f25de6e72e055429f918812d67451b2367851f705293f",
+    "previous": "contexto-0749"
+  },
+  {
+    "id": "0749-bloque-2",
+    "wav": "original-2.wav",
+    "offset": 499.0,
+    "sha256": "64c967075dcfd63731ce3935282733cd5bf8ab4824e3a9e6d53df933f5a255c4",
+    "previous": "0749-bloque-1"
+  },
+  {
+    "id": "0749-bloque-3",
+    "wav": "original-3.wav",
+    "offset": 529.0,
+    "sha256": "7b62d299bc860056a4a0af0b0ef653b0609ba5f0e466d288eeb07dfc8f56b8fd",
+    "previous": "0749-bloque-2"
+  },
+  {
+    "id": "0749-bloque-4",
+    "wav": "original-4.wav",
+    "offset": 559.0,
+    "sha256": "af39911acfd59f25971c867b2a07ce6d8c715af0029904011ba1eb1cdf5d533b",
+    "previous": "0749-bloque-3"
+  },
+  {
+    "id": "0749-bloque-5",
+    "wav": "original-5.wav",
+    "offset": 589.0,
+    "sha256": "aca1fa4332507fc5207ce6e94a331d023b32844996db2d2bf37031dd62f8d1a7",
+    "previous": "0749-bloque-4"
+  },
+  {
+    "id": "0723-bloque",
+    "wav": "window-0723-exact-method.wav",
+    "offset": 443,
+    "gold": {"1": [10]},
+    "previous": "contexto-0723",
+    "sha256": "b31ed4f4c55421769c3cccaaedb93fb6925c9e5e77264c03b103acff699edd1b"
+  },
+  {
+    "id": "contexto-0749",
+    "wav": "previous-0749.wav",
+    "offset": 439,
+    "context_only": true
+  },
+  {
+    "id": "contexto-0723",
+    "wav": "previous-0723.wav",
+    "offset": 413,
+    "context_only": true
+  }
+]
