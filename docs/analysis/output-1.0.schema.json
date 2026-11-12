@@ -20,7 +20,7 @@
       "const": "1.0"
     },
     "questions_version": {
-      "enum": ["habla-signals-1", "bloque-signals-1", "bloque-signals-2"]
+      "enum": ["habla-signals-1", "bloque-signals-1", "bloque-signals-2", "bloque-signals-3"]
     },
     "session_id": {
       "type": "string",
@@ -187,6 +187,16 @@
           "output_tokens": {
             "type": "integer",
             "minimum": 0
+          },
+          "evidence_turns": {
+            "type": "object",
+            "additionalProperties": false,
+            "patternProperties": {
+              "^[12]$": {
+                "type": "array",
+                "items": {"type": "string", "pattern": "^t[0-9]+$"}
+              }
+            }
           }
         }
       }

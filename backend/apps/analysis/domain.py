@@ -102,6 +102,7 @@ class JevDecision:
     values: tuple[float, ...]
     input_tokens: int
     output_tokens: int
+    evidence_turns: dict[str, list[str]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
