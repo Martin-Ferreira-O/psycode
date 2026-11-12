@@ -25,7 +25,7 @@ Prefijo `/api/v1/internal/audio-tests/<uuid>`. Todas las solicitudes usan
 - `POST /fragments` con el multipart y recibo de audio v2. El `session_id`
   es el UUID de la prueba, `captured_at` es `started_at` más el offset del
   fragmento y el PCM es mono de 16 bits a 16 kHz. Enviar 160 000 muestras por
-  fragmento con 16 000 de solapamiento, salvo el tramo final.
+  fragmento con 16 000 de solapamiento, salvo el tramo final, en modo legacy.
 - `GET` devuelve el estado, cantidades de fragmentos y alertas de prueba. El
   objeto `data` contiene `test_id`, `box`, `scenario`, `samples`,
   `started_at`, `state`, `expected`, `accepted`, `analyzed`,
@@ -54,3 +54,37 @@ El historial y los indicadores clínicos del Dashboard excluyen las alertas de
 prueba. El clip **Sin alerta esperada** solo genera un registro o correo si el análisis
 detecta una señal. Para mostrar el flujo completo, inicia una nueva prueba
 después de actualizar la web y el worker de fragmentos.
+
+## Perfil operativo negociado v1
+
+El cliente solicita `PUT <prefijo>?fragment_profile_version=1`, conservando
+exactamente el JSON `scenario`, `samples`. Sin query se mantiene el perfil legacy
+de 10 s/1 s. Valores distintos de `1`, vacíos o repetidos devuelven 400.
+Cambiar entre legacy y v1 para el mismo UUID devuelve 409; cambiar escenario o
+cantidad de muestras también. Requiere servidor y agente que implementen esta negociación.
+
+Al crear v1 se congela la configuración operativa en `capture_chunk_config` y el
+perfil efectivo en `audio_profile`. La duración es, en modo fijo,
+`min(configuración, max(10, ceil(samples / 16000)))`; en modo sesión es
+`max(10, ceil(samples / 16000))`. No se activa `capture_chunk_negotiated`:
+el diagnóstico tiene su propia negociación, separada de las órdenes de captura.
+Los reintentos conservan perfil, fecha, secuencias y bytes aunque cambie el ajuste.
+
+Todas las respuestas de estado de una prueba v1 (PUT, GET y DELETE) incluyen
+`fragment_profile_version: 1` y `audio_chunk_duration` entero en segundos.
+El solapamiento sigue siendo 1 s. `expected` deriva del perfil: un clip de 600 s
+produce 1 fragmento con duración 600, 11 con duración 60 (cola de 10 s), y 67
+sin negociación. El último tramo contiene audio nuevo. Al saltar en el clip se
+crea otro UUID con las muestras restantes; sus offsets empiezan desde cero.
+
+El contrato central está en
+[`audio-test-profile-v1.schema.json`](../contracts/audio-test-profile-v1.schema.json),
+con hash SHA-256 de sus bytes en `contracts/manifest.json`. La definición `query`
+representa la query decodificada y `response` el objeto `data`, sin el envelope.
+El agente debe incorporar este contrato y solicitar v1 para aplicar el ajuste web.
+
+Verificación local sin proveedores, OBS ni base institucional:
+
+```sh
+PSYCODE_TEST_SQLITE_PATH=/tmp/psycode-audiotest-profile-test.sqlite3 uv run --no-sync python manage.py test backend.apps.capture --settings=backend.config.test_settings --noinput
+```

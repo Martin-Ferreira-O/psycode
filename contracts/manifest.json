@@ -15,6 +15,7 @@
     "smile-room-catalogue-v1.schema.json": "ce8f0b34d179a55a66f44b108beaa7126f86a9a677b25d955335535ffbc7abbf",
     "pc-installation-v2.schema.json": "9830cf765ba7f241db150a00d9048d2e34e2f1d7ea0464aaf2339bf35899831b",
     "smile-collector-check-v1.schema.json": "de0d6462bf71adb4e1b545540a110efc4b1a2691e15a9b59f400eaf3677927d6",
-    "smile-collector-check-valid.json": "bec1de9dae76b9c685f19288c02e07ccfe96e9759c98a00b2c20dd80dc28e32f"
+    "smile-collector-check-valid.json": "bec1de9dae76b9c685f19288c02e07ccfe96e9759c98a00b2c20dd80dc28e32f",
+    "audio-test-profile-v1.schema.json": "d8555bb0ac006b66dea834b534aa0f7effa299d6e605e853f2dad8821eadd70a"
   }
 }

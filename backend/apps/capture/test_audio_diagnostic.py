@@ -194,3 +194,82 @@ class AudioDiagnosticTests(TestCase):
             self.assertNotEqual(resumed["test_id"], data["test_id"])
         self.assertEqual(FragmentJob.objects.count(), 1)
         self.assertFalse(AgentCommand.objects.exists())
+
+    def test_negotiated_profiles_upload_partial_tail_and_retry_unchanged(self):
+        from .models import CaptureSession
+        for mode, seconds, samples, expected in [
+            ("fixed", 600, 600 * 16000, 1),
+            ("fixed", 60, 600 * 16000, 11),
+            ("session", 60, 600 * 16000, 1),
+            ("fixed", 600, 23 * 16000 + 1, 1),
+            ("fixed", 600, 8000, 1),
+        ]:
+            with self.subTest(mode=mode, seconds=seconds, samples=samples):
+                config = OperationalConfiguration.load()
+                config.audio_chunk_duration = seconds
+                config.audio_chunk_mode = mode
+                config.save()
+                url = f"/api/v1/internal/audio-tests/{uuid4()}"
+                payload = {"scenario": "neutral", "samples": samples}
+                query = url + "?fragment_profile_version=1"
+                response = self.client.put(query, payload, content_type="application/json")
+                self.assertEqual(response.status_code, 201, response.json())
+                data = response.json()["data"]
+                self.assertEqual(data["fragment_profile_version"], 1)
+                self.assertEqual(data["expected"], expected)
+                effective = max(10, (samples + 15999) // 16000)
+                if mode == "fixed":
+                    effective = min(seconds, effective)
+                self.assertEqual(data["audio_chunk_duration"], effective)
+                session = CaptureSession.objects.get(pk=data["test_id"])
+                self.assertIsNone(session.capture_chunk_negotiated)
+                self.assertEqual(session.capture_chunk_config["audio_chunk_duration"], seconds)
+                config.audio_chunk_duration = 10
+                config.save()
+                self.assertEqual(self.client.put(query, payload, content_type="application/json").json()["data"], data)
+                self.assertEqual(self.client.put(url, payload, content_type="application/json").status_code, 409)
+                chunk = effective * 16000
+                step = chunk - 16000
+                for seq in range(expected):
+                    offset = seq * step
+                    end = min(offset + chunk, samples)
+                    new = 0 if seq == 0 else offset + 16000
+                    args = dict(seq=seq, offset=offset, end=end, new=new, chunk_samples=chunk)
+                    first = self.upload(url + "/fragments", data, **args)
+                    self.assertEqual(first.status_code, 201, first.json())
+                    retry = self.upload(url + "/fragments", data, **args)
+                    self.assertEqual(retry.status_code, 200, retry.json())
+                    self.assertEqual(first.json()["data"], retry.json()["data"])
+                status = self.client.get(url).json()["data"]
+                self.assertEqual(status["accepted"], expected)
+                self.assertEqual(status["audio_chunk_duration"], effective)
+                self.assertEqual(self.client.delete(url).json()["data"]["fragment_profile_version"], 1)
+        self.assertFalse(AgentCommand.objects.exists())
+
+    def test_profile_query_is_strict_and_legacy_cannot_upgrade(self):
+        url = f"/api/v1/internal/audio-tests/{uuid4()}"
+        payload = {"scenario": "neutral", "samples": 16000}
+        for query in ["", "0", "2", "01", "true", "1&fragment_profile_version=1"]:
+            response = self.client.put(url + "?fragment_profile_version=" + query,
+                                       payload, content_type="application/json")
+            self.assertEqual(response.status_code, 400, response.json())
+        legacy = self.client.put(url, payload, content_type="application/json")
+        self.assertEqual(legacy.status_code, 201)
+        self.assertNotIn("fragment_profile_version", legacy.json()["data"])
+        self.assertEqual(self.client.put(url + "?fragment_profile_version=1", payload,
+                                         content_type="application/json").status_code, 409)
+
+    def test_profile_contract_has_canonical_hash_and_required_negotiation_fields(self):
+        import json
+        from django.conf import settings
+        contracts = Path(settings.BASE_DIR) / "contracts"
+        name = "audio-test-profile-v1.schema.json"
+        raw = (contracts / name).read_bytes()
+        manifest = json.loads((contracts / "manifest.json").read_text())
+        self.assertEqual(hashlib.sha256(raw).hexdigest(), manifest["sha256"][name])
+        schema = json.loads(raw)
+        response = schema["$defs"]["response"]
+        self.assertIn("fragment_profile_version", response["required"])
+        self.assertIn("audio_chunk_duration", response["required"])
+        self.assertEqual(response["properties"]["fragment_profile_version"]["const"], 1)
+        self.assertEqual(schema["$defs"]["query"]["properties"]["fragment_profile_version"]["const"], "1")

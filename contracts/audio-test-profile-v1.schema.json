@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Perfil negociado de diagnóstico de audio v1",
+  "description": "PUT /api/v1/internal/audio-tests/<uuid>?fragment_profile_version=1. Body scenario/samples sin cambios. La respuesta valida el campo data de PUT, GET y DELETE de una prueba negociada. Solapamiento fijo de 16000 muestras.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/query"
+    },
+    {
+      "$ref": "#/$defs/response"
+    }
+  ],
+  "$defs": {
+    "query": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fragment_profile_version"
+      ],
+      "properties": {
+        "fragment_profile_version": {
+          "const": "1"
+        }
+      }
+    },
+    "response": {
+      "type": "object",
+      "required": [
+        "test_id",
+        "box",
+        "scenario",
+        "samples",
+        "started_at",
+        "state",
+        "expected",
+        "accepted",
+        "analyzed",
+        "indeterminate",
+        "alerts",
+        "fragment_profile_version",
+        "audio_chunk_duration"
+      ],
+      "properties": {
+        "fragment_profile_version": {
+          "type": "integer",
+          "const": 1
+        },
+        "audio_chunk_duration": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 600
+        },
+        "test_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "box": {
+          "type": "string"
+        },
+        "scenario": {
+          "enum": [
+            "neutral",
+            "alerta"
+          ]
+        },
+        "samples": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9600000
+        },
+        "started_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "state": {
+          "enum": [
+            "receiving",
+            "analyzing",
+            "completed",
+            "failed",
+            "expired",
+            "stopped"
+          ]
+        },
+        "expected": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "accepted": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "analyzed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "indeterminate": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "alerts": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
