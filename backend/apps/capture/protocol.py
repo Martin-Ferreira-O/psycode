@@ -1,4 +1,3 @@
-"""Control v1: límites y representación explícita sin dependencias de dominio."""
 import json
 from datetime import datetime, timezone
 from uuid import UUID, uuid4

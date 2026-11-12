@@ -1,4 +1,3 @@
-"""Permisos reales de pantalla/API y CSRF de las operaciones con credenciales."""
 from datetime import timedelta
 from hashlib import sha256
 import os
@@ -23,7 +22,6 @@ CHECKSUM_BYTES = f'{sha256(INSTALLER_BYTES).hexdigest()}  {INSTALLER_NAME}\n'.en
 
 
 def _link_directory(link_path: Path, target_name: str):
-    """Crea un symlink o directory junction en Windows cuando no hay privilegio SeCreateSymbolicLinkPrivilege."""
     try:
         link_path.symlink_to(target_name)
     except OSError as exc:
@@ -40,7 +38,6 @@ def _link_directory(link_path: Path, target_name: str):
 
 
 def _replace_directory_link(next_link: Path, current: Path):
-    """Reemplaza un enlace de directorio de forma compatible con Windows y POSIX."""
     try:
         next_link.replace(current)
     except PermissionError:
@@ -58,9 +55,15 @@ def _replace_directory_link(next_link: Path, current: Path):
 
 class PCPanelTests(APITestCase):
     def setUp(self):
-        self.admin = User.objects.create_user(username='admin-pcs', email='admin-pcs@example.test', password='Synthetic-PCS-2026!', role='admin')
-        self.supervisor = User.objects.create_user(username='supervisor-pcs', email='supervisor-pcs@example.test', password='Synthetic-PCS-2026!')
-        self.room = SmileRoom.objects.create(source='smile', box='box-8', name='BOX 8', smile_box_id='77', last_seen_at=timezone.now())
+        self.admin = User.objects.create_user(
+            username='admin-pcs', email='admin-pcs@example.test', password='Synthetic-PCS-2026!', role='admin'
+        )
+        self.supervisor = User.objects.create_user(
+            username='supervisor-pcs', email='supervisor-pcs@example.test', password='Synthetic-PCS-2026!'
+        )
+        self.room = SmileRoom.objects.create(
+            source='smile', box='box-8', name='BOX 8', smile_box_id='77', last_seen_at=timezone.now()
+        )
         self.pc, _ = create_agent(name='PC sintético', box='box-3')
 
     def publish_installer(self):
@@ -75,10 +78,25 @@ class PCPanelTests(APITestCase):
 
     def test_screen_and_all_endpoints_reject_supervisor_anonymous_and_inactive_admin(self):
         self.publish_installer()
-        routes = [('/api/v1/pcs/panel', 'get'), ('/api/v1/pcs', 'get'), ('/api/v1/pcs/salas', 'get'), ('/api/v1/pcs/alta', 'post'), ('/api/v1/pcs', 'post'),
-                  (INSTALLER_URL, 'get'), (INSTALLER_URL + '/sha256', 'get')]
-        routes += [(f'/api/v1/pcs/{self.pc.pk}/{action}', method) for action, method in
-                   [('revocar', 'post'), ('renovar', 'post'), ('vinculacion', 'post'), ('cancelar-instalacion', 'post'), ('historial', 'get')]]
+        routes = [
+            ('/api/v1/pcs/panel', 'get'),
+            ('/api/v1/pcs', 'get'),
+            ('/api/v1/pcs/salas', 'get'),
+            ('/api/v1/pcs/alta', 'post'),
+            ('/api/v1/pcs', 'post'),
+            (INSTALLER_URL, 'get'),
+            (INSTALLER_URL + '/sha256', 'get'),
+        ]
+        routes += [
+            (f'/api/v1/pcs/{self.pc.pk}/{action}', method)
+            for action, method in [
+                ('revocar', 'post'),
+                ('renovar', 'post'),
+                ('vinculacion', 'post'),
+                ('cancelar-instalacion', 'post'),
+                ('historial', 'get'),
+            ]
+        ]
         for actor, expected in [(None, 401), (self.supervisor, 403)]:
             client = APIClient()
             if actor:
@@ -110,16 +128,25 @@ class PCPanelTests(APITestCase):
         client = APIClient(enforce_csrf_checks=True)
         client.get('/', secure=True)
         csrf = client.cookies['csrftoken'].value
-        login = client.post('/api/v1/auth/login', {'usuario': self.admin.username, 'password': 'Synthetic-PCS-2026!'},
-                            format='json', secure=True, HTTP_ORIGIN='https://testserver', HTTP_X_PSYCODE_BROWSER='1', HTTP_X_CSRFTOKEN=csrf)
+        login = client.post(
+            '/api/v1/auth/login',
+            {'usuario': self.admin.username, 'password': 'Synthetic-PCS-2026!'},
+            format='json',
+            secure=True,
+            HTTP_ORIGIN='https://testserver',
+            HTTP_X_PSYCODE_BROWSER='1',
+            HTTP_X_CSRFTOKEN=csrf,
+        )
         self.assertEqual(login.status_code, 200)
         panel = client.get('/api/v1/pcs/panel', secure=True)
         config = panel.context["config"]
         self.assertEqual(config["installerVersion"], "1.2.1")
         self.assertEqual(config["installerUrl"], INSTALLER_URL)
         self.assertEqual(config["checksumUrl"], f"{INSTALLER_URL}/sha256")
-        for url, filename, expected in [(INSTALLER_URL, INSTALLER_NAME, INSTALLER_BYTES),
-                                        (INSTALLER_URL + '/sha256', INSTALLER_NAME + '.sha256', CHECKSUM_BYTES)]:
+        for url, filename, expected in [
+            (INSTALLER_URL, INSTALLER_NAME, INSTALLER_BYTES),
+            (INSTALLER_URL + '/sha256', INSTALLER_NAME + '.sha256', CHECKSUM_BYTES),
+        ]:
             response = client.get(url, secure=True)
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response['Content-Disposition'], f'attachment; filename="{filename}"')
@@ -128,7 +155,12 @@ class PCPanelTests(APITestCase):
         self.assertFalse(PCPairingCode.objects.exists())
         self.assertEqual(AgentRegistration.objects.count(), 1)
         self.assertEqual(client.post('/api/v1/pcs/alta', {'name': 'PC inseguro'}, format='json').status_code, 403)
-        good = client.post('/api/v1/pcs/alta', {'name': 'PC permitido', 'room_id': str(self.room.pk)}, format='json', HTTP_X_CSRFTOKEN=client.cookies['csrftoken'].value)
+        good = client.post(
+            '/api/v1/pcs/alta',
+            {'name': 'PC permitido', 'room_id': str(self.room.pk)},
+            format='json',
+            HTTP_X_CSRFTOKEN=client.cookies['csrftoken'].value,
+        )
         self.assertEqual(good.status_code, 201)
         self.assertNotIn('api_key', good.data['data'])
         self.assertRegex(good.data['data']['pairing_code'], r'^[A-HJ-NP-Z2-9]{5}$')
@@ -145,8 +177,13 @@ class PCPanelTests(APITestCase):
         prepared = machine.post('/api/v1/internal/pcs/vincular', payload, format='json', secure=True)
         self.assertEqual(prepared.status_code, 200)
         self.assertEqual(prepared.data['data']['agent_id'], enrollment['agent_id'])
-        confirmed = machine.post('/api/v1/internal/pcs/confirmar', {'installation_id': payload['installation_id']},
-                                 format='json', secure=True, HTTP_AUTHORIZATION='Agent ' + prepared.data['data']['api_key'])
+        confirmed = machine.post(
+            '/api/v1/internal/pcs/confirmar',
+            {'installation_id': payload['installation_id']},
+            format='json',
+            secure=True,
+            HTTP_AUTHORIZATION='Agent ' + prepared.data['data']['api_key'],
+        )
         self.assertEqual(confirmed.status_code, 200)
         self.assertTrue(AgentRegistration.objects.get(pk=grant.agent_id).is_active)
 
@@ -161,7 +198,9 @@ class PCPanelTests(APITestCase):
         self.assertEqual(response.status_code, 201)
         pc_id = response.data['data']['agent_id']
         PCPairingCode.objects.filter(agent_id=pc_id).update(expires_at=timezone.now() - timedelta(seconds=1))
-        replacement = self.client.post('/api/v1/pcs/alta', {'name': 'PC nuevo', 'room_id': str(self.room.pk)}, format='json')
+        replacement = self.client.post(
+            '/api/v1/pcs/alta', {'name': 'PC nuevo', 'room_id': str(self.room.pk)}, format='json'
+        )
         self.assertEqual(replacement.status_code, 201)
         self.assertNotEqual(replacement.data['data']['agent_id'], pc_id)
         self.assertFalse(AgentRegistration.objects.filter(pk=pc_id).exists())

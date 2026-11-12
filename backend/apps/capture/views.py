@@ -42,20 +42,44 @@ class FragmentUploadView(APIView):
             if test_id is not None and test_id != data["session_id"]:
                 raise FragmentError("AUDIO_TEST_CONFLICT", 409)
             result, created = fragment_ingestion_service().receive(
-                box=request.user.box, session_id=data["session_id"], number=data["secuencia"],
-                format=data["formato"], checksum=data["checksum"], captured_at=data["captured_at"],
+                box=request.user.box,
+                session_id=data["session_id"],
+                number=data["secuencia"],
+                format=data["formato"],
+                checksum=data["checksum"],
+                captured_at=data["captured_at"],
                 upload=data["archivo"],
                 agent_id=request.user.agent_id if test_id is None else "",
                 test_agent=request.user if test_id is not None else None,
-                temporal={k: data[k] for k in ("session_start_sample", "session_end_sample", "new_audio_start_sample",
-                    "sample_rate", "chunk_samples", "overlap_samples")} if self.serializer_class is FragmentV2Serializer else None,
+                temporal={
+                    k: data[k]
+                    for k in (
+                        "session_start_sample",
+                        "session_end_sample",
+                        "new_audio_start_sample",
+                        "sample_rate",
+                        "chunk_samples",
+                        "overlap_samples",
+                    )
+                }
+                if self.serializer_class is FragmentV2Serializer
+                else None,
             )
-            return success_response({
-                "job_id": str(result.job_id), "session_id": str(result.session_id), "box": result.box,
-                "secuencia": result.sequence, "formato": result.format, "checksum": result.checksum,
-                "size_bytes": result.size, "accepted_at": result.accepted_at.isoformat().replace("+00:00", "Z"),
-                "estado": "aceptado",
-            }, "Fragmento recibido", status=201 if created else 200)
+            return success_response(
+                {
+                    "job_id": str(result.job_id),
+                    "session_id": str(result.session_id),
+                    "box": result.box,
+                    "secuencia": result.sequence,
+                    "formato": result.format,
+                    "checksum": result.checksum,
+                    "size_bytes": result.size,
+                    "accepted_at": result.accepted_at.isoformat().replace("+00:00", "Z"),
+                    "estado": "aceptado",
+                },
+                "Fragmento recibido",
+                status=201 if created else 200,
+            )
         except exceptions.UnsupportedMediaType:
             raise FragmentError("UNSUPPORTED_MEDIA_TYPE", 415) from None
         finally:
@@ -75,12 +99,15 @@ class AgentConfigurationView(APIView):
         agent = get_object_or_404(AgentRegistration, pk=agent_id)
         config = agent.configurations.order_by("-version").first()
         if not config:
-            return success_response({
-                "version": 0,
-                "desired_config": {},
-                "effective_config": {},
-                "state": ConfigurationState.APPLIED
-            }, "El equipo no tiene configuraciones remotas aún.")
+            return success_response(
+                {
+                    "version": 0,
+                    "desired_config": {},
+                    "effective_config": {},
+                    "state": ConfigurationState.APPLIED,
+                },
+                "El equipo no tiene configuraciones remotas aún.",
+            )
 
         serializer = AgentConfigurationSerializer(config)
         return success_response(serializer.data, "Configuración obtenida con éxito.")
@@ -108,7 +135,6 @@ class AgentConfigurationView(APIView):
             last_config = agent.configurations.select_for_update().order_by("-version").first()
             current_version = last_config.version if last_config else 0
 
-            # BUG-97-05: Detectar ediciones sobre versiones desactualizadas o con cambios en vuelo
             conflict = False
             if base_version is not None and base_version != current_version:
                 conflict = True
@@ -120,17 +146,19 @@ class AgentConfigurationView(APIView):
                 conflict = True
 
             if conflict:
-                AuditWriter.emit({
-                    "event_id": str(uuid.uuid4()),
-                    "timestamp": timezone.now().isoformat(),
-                    "action": "capture.agent_config.conflict",
-                    "outcome": "failure",
-                    "actor_id": str(requested_by) if requested_by else None,
-                    "agent_id": str(agent.pk),
-                    "box": agent.box,
-                    "version": current_version,
-                    "error_code": "CONFIG_VERSION_CONFLICT",
-                })
+                AuditWriter.emit(
+                    {
+                        "event_id": str(uuid.uuid4()),
+                        "timestamp": timezone.now().isoformat(),
+                        "action": "capture.agent_config.conflict",
+                        "outcome": "failure",
+                        "actor_id": str(requested_by) if requested_by else None,
+                        "agent_id": str(agent.pk),
+                        "box": agent.box,
+                        "version": current_version,
+                        "error_code": "CONFIG_VERSION_CONFLICT",
+                    }
+                )
                 return Response(
                     {
                         "success": False,
@@ -158,18 +186,20 @@ class AgentConfigurationView(APIView):
                 state=ConfigurationState.PENDING,
             )
 
-            AuditWriter.emit({
-                "event_id": str(uuid.uuid4()),
-                "timestamp": timezone.now().isoformat(),
-                "action": "capture.agent_config.requested",
-                "outcome": "success",
-                "actor_id": str(requested_by) if requested_by else None,
-                "agent_id": str(agent.pk),
-                "box": agent.box,
-                "config_id": str(new_config.pk),
-                "version": new_version,
-                "state": new_config.state,
-            })
+            AuditWriter.emit(
+                {
+                    "event_id": str(uuid.uuid4()),
+                    "timestamp": timezone.now().isoformat(),
+                    "action": "capture.agent_config.requested",
+                    "outcome": "success",
+                    "actor_id": str(requested_by) if requested_by else None,
+                    "agent_id": str(agent.pk),
+                    "box": agent.box,
+                    "config_id": str(new_config.pk),
+                    "version": new_version,
+                    "state": new_config.state,
+                }
+            )
 
         return success_response(
             AgentConfigurationSerializer(new_config).data,

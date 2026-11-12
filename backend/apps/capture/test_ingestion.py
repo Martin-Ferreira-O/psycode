@@ -37,11 +37,16 @@ class IngestionFixtures(CaptureFixtures):
 
     def receive(self, *, content=None, **changes):
         content = wav_bytes() if content is None else content
-        args = dict(box="box-3", session_id=self.session.session_id, number=0,
-                    format="wav", checksum=hashlib.sha256(content).hexdigest(),
-                    captured_at=NOW + timedelta(seconds=10),
-                    upload=SimpleUploadedFile("sensitive-client-name.wav", content),
-                    now=NOW + timedelta(seconds=20))
+        args = dict(
+            box="box-3",
+            session_id=self.session.session_id,
+            number=0,
+            format="wav",
+            checksum=hashlib.sha256(content).hexdigest(),
+            captured_at=NOW + timedelta(seconds=10),
+            upload=SimpleUploadedFile("sensitive-client-name.wav", content),
+            now=NOW + timedelta(seconds=20),
+        )
         args.update(changes)
         return self.ingestion.receive(**args)
 
@@ -79,8 +84,10 @@ class FragmentIngestionTests(IngestionFixtures, TransactionTestCase):
 
     def test_different_checksum_or_capture_time_conflicts_without_changing_original(self):
         first, _ = self.receive()
-        for changes in (dict(content=wav_bytes(b"\x01\x00" * 160)),
-                        dict(captured_at=NOW + timedelta(seconds=11))):
+        for changes in (
+            dict(content=wav_bytes(b"\x01\x00" * 160)),
+            dict(captured_at=NOW + timedelta(seconds=11)),
+        ):
             with self.subTest(changes=tuple(changes)), self.assertRaises(FragmentError) as caught:
                 self.receive(**changes)
             self.assertEqual(caught.exception.code, "SEQUENCE_CONFLICT")
@@ -100,8 +107,9 @@ class FragmentIngestionTests(IngestionFixtures, TransactionTestCase):
         self.ack_stop(self.stop(), last_sequence=0)
         self.assert_code("SEQUENCE_OUT_OF_ORDER", self.receive, number=1, now=NOW + timedelta(seconds=36))
         self.receive(now=NOW + timedelta(seconds=36))
-        self.assert_code("SESSION_NOT_ACCEPTING_SEQUENCES", self.receive, number=1,
-                         now=NOW + timedelta(seconds=37))
+        self.assert_code(
+            "SESSION_NOT_ACCEPTING_SEQUENCES", self.receive, number=1, now=NOW + timedelta(seconds=37)
+        )
         self.assertEqual(FragmentJob.objects.count(), 1)
         self.assertEqual(len(self.blobs()), 1)
 
@@ -150,14 +158,16 @@ class FragmentIngestionTests(IngestionFixtures, TransactionTestCase):
             self.receive()
         self.assertEqual(caught.exception.code, "FRAGMENT_TOO_LARGE")
         self.storage.max_bytes = 25 * 1024 * 1024
-        cases = [(dict(content=b""), "EMPTY_FRAGMENT"),
-                 (dict(checksum="0" * 64), "CHECKSUM_MISMATCH"),
-                 (dict(content=b"not-a-wave"), "INVALID_FRAGMENT_FILE"),
-                 (dict(content=wav_bytes()[:-1]), "INVALID_FRAGMENT_FILE"),
-                 (dict(content=wav_bytes() + b"extra"), "INVALID_FRAGMENT_FILE"),
-                 (dict(content=wav_bytes(b"")), "INVALID_FRAGMENT_FILE"),
-                 (dict(content=wav_bytes(b"\x00")), "INVALID_FRAGMENT_FILE"),
-                 (dict(format="mp3"), "FRAGMENT_FORMAT_UNSUPPORTED")]
+        cases = [
+            (dict(content=b""), "EMPTY_FRAGMENT"),
+            (dict(checksum="0" * 64), "CHECKSUM_MISMATCH"),
+            (dict(content=b"not-a-wave"), "INVALID_FRAGMENT_FILE"),
+            (dict(content=wav_bytes()[:-1]), "INVALID_FRAGMENT_FILE"),
+            (dict(content=wav_bytes() + b"extra"), "INVALID_FRAGMENT_FILE"),
+            (dict(content=wav_bytes(b"")), "INVALID_FRAGMENT_FILE"),
+            (dict(content=wav_bytes(b"\x00")), "INVALID_FRAGMENT_FILE"),
+            (dict(format="mp3"), "FRAGMENT_FORMAT_UNSUPPORTED"),
+        ]
         for args, code in cases:
             with self.subTest(code=code), self.assertRaises(FragmentError) as caught:
                 self.receive(**args)
@@ -167,9 +177,13 @@ class FragmentIngestionTests(IngestionFixtures, TransactionTestCase):
 
     def test_rejects_other_pcm_profiles_compression_and_forged_chunks(self):
         original = wav_bytes()
-        for offset, packed in ((20, struct.pack("<H", 3)), (22, struct.pack("<H", 2)),
-                               (24, struct.pack("<I", 44100)), (34, struct.pack("<H", 8))):
-            content = original[:offset] + packed + original[offset + len(packed):]
+        for offset, packed in (
+            (20, struct.pack("<H", 3)),
+            (22, struct.pack("<H", 2)),
+            (24, struct.pack("<I", 44100)),
+            (34, struct.pack("<H", 8)),
+        ):
+            content = original[:offset] + packed + original[offset + len(packed) :]
             with self.subTest(offset=offset), self.assertRaises(FragmentError) as caught:
                 self.receive(content=content)
             self.assertEqual(caught.exception.code, "FRAGMENT_FORMAT_UNSUPPORTED")
@@ -191,8 +205,12 @@ class FragmentIngestionTests(IngestionFixtures, TransactionTestCase):
         self.assertEqual(len(self.blobs()), 2)
         job = FragmentJob.objects.first()
         with self.assertRaises(IntegrityError), transaction.atomic():
-            FragmentJob.objects.create(sequence=job.sequence, storage_key="0" * 32 + ".blob",
-                                       checksum=job.checksum, size=job.size)
+            FragmentJob.objects.create(
+                sequence=job.sequence,
+                storage_key="0" * 32 + ".blob",
+                checksum=job.checksum,
+                size=job.size,
+            )
 
     def test_does_not_attach_a_job_to_a_sequence_registered_by_the_legacy_port(self):
         self.accept(self.session)
@@ -247,6 +265,7 @@ class FragmentConcurrencyTests(IngestionFixtures, TransactionTestCase):
                 return self.receive(content=content)[1]
             except FragmentError as exc:
                 return exc.code
+
         results = self.race(lambda: send(wav_bytes()), lambda: send(wav_bytes(b"\x01\x00" * 160)))
         self.assertCountEqual(results, [True, "SEQUENCE_CONFLICT"])
         job = FragmentJob.objects.get()
@@ -274,7 +293,7 @@ class FragmentConcurrencyTests(IngestionFixtures, TransactionTestCase):
             nonlocal calls
             calls += 1
             original()
-            if calls == 3:  # Recuperaciones previas y commit de aceptación.
+            if calls == 3:
                 raise OperationalError("Simulated lost commit acknowledgement")
 
         with patch.object(connection, "commit", side_effect=commit):

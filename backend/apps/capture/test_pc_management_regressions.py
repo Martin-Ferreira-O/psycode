@@ -1,4 +1,3 @@
-"""Regresiones de SCRUM-96 sobre ASGI real e identidad, con datos sintéticos."""
 import asyncio
 import json
 from datetime import timedelta
@@ -7,11 +6,19 @@ from uuid import uuid4
 from django.contrib.auth import get_user_model
 from django.test import TransactionTestCase
 from django.utils import timezone
+from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.test import APITestCase
 
 from .authentication import authenticate_agent_header
-from .models import (AgentConfiguration, AgentConnectivityEvent, AgentRegistration, AgentStatus,
-                     ConfigurationState, RuntimeLease, ServerConnectivityOutage)
+from .models import (
+    AgentConfiguration,
+    AgentConnectivityEvent,
+    AgentRegistration,
+    AgentStatus,
+    ConfigurationState,
+    RuntimeLease,
+    ServerConnectivityOutage,
+)
 from .pc_registry import create_agent, revoke_agent, renew_agent
 from .protocol import envelope
 from .websocket import CONFIG_CAPABILITY, RemoteControl, agent_websocket, db
@@ -25,22 +32,40 @@ class SocketLifecycleTests(TransactionTestCase):
         async def run():
             incoming, sent = asyncio.Queue(), []
             await incoming.put({"type": "websocket.connect"})
-            await incoming.put({"type": "websocket.receive", "text": json.dumps(envelope(
-                "hello", {"agent_version": "test-96", "capabilities": list(capabilities)}))})
+            await incoming.put(
+                {
+                    "type": "websocket.receive",
+                    "text": json.dumps(
+                        envelope("hello", {"agent_version": "test-96", "capabilities": list(capabilities)})
+                    ),
+                }
+            )
             for kind, data in messages:
                 await incoming.put({"type": "websocket.receive", "text": json.dumps(envelope(kind, data))})
             if not invalidate:
                 await incoming.put({"type": "websocket.disconnect", "code": 1000})
+
             async def send(event):
                 sent.append(event)
                 if invalidate and event["type"] == "websocket.send" and json.loads(event["text"])["type"] == "ready":
                     await db(invalidate, self.agent)
-            await asyncio.wait_for(agent_websocket({
-                "type": "websocket", "path": "/ws/v1/agents", "query_string": b"",
-                "headers": [(b"authorization", f"Agent {self.token}".encode())],
-                "client": ("192.0.2.96", 9000),
-            }, incoming.get, send), timeout=3)
+
+            await asyncio.wait_for(
+                agent_websocket(
+                    {
+                        "type": "websocket",
+                        "path": "/ws/v1/agents",
+                        "query_string": b"",
+                        "headers": [(b"authorization", f"Agent {self.token}".encode())],
+                        "client": ("192.0.2.96", 9000),
+                    },
+                    incoming.get,
+                    send,
+                ),
+                timeout=3,
+            )
             return sent
+
         return asyncio.run(run())
 
     def test_socket_processes_multiple_messages_and_records_disconnect(self):
@@ -68,9 +93,14 @@ class SocketLifecycleTests(TransactionTestCase):
         messages = [json.loads(event["text"]) for event in sent if event["type"] == "websocket.send"]
         self.assertEqual([message["type"] for message in messages], ["ready", "config_sync", "config_receipt"])
         self.assertIn(CONFIG_CAPABILITY, messages[0]["payload"]["capabilities"])
-        self.assertEqual(messages[1]["payload"], {
-            "config_id": str(config.pk), "version": 1, "desired_config": {"example": True},
-        })
+        self.assertEqual(
+            messages[1]["payload"],
+            {
+                "config_id": str(config.pk),
+                "version": 1,
+                "desired_config": {"example": True},
+            },
+        )
         config.refresh_from_db()
         self.assertEqual(config.state, ConfigurationState.APPLIED)
 
@@ -103,6 +133,7 @@ class SocketLifecycleTests(TransactionTestCase):
         RuntimeLease.objects.update(expires_at=timezone.now() - timedelta(seconds=1))
         new.open()
         from .server_connectivity import register_server_reconnect
+
         register_server_reconnect(identity)
         outage = ServerConnectivityOutage.objects.get()
         self.assertIsNotNone(outage.recovered_at)
@@ -118,23 +149,121 @@ class SocketLifecycleTests(TransactionTestCase):
             with self.assertRaisesRegex(ValueError, "CONNECTION_REPLACED"):
                 operation()
 
+    def test_qa_multiple_pending_versions(self):
+        v1 = AgentConfiguration.objects.create(agent=self.agent, version=1, desired_config={"qa": 10})
+        v2 = AgentConfiguration.objects.create(agent=self.agent, version=2, desired_config={"qa": 20})
+        ack2 = {"config_id": str(v2.pk), "success": True, "effective_config": {"qa": 20}}
+        ack1 = {"config_id": str(v1.pk), "success": True, "effective_config": {"qa": 10}}
+        self.exercise([("config_ack", ack2), ("config_ack", ack1)], capabilities=[CONFIG_CAPABILITY])
+        v1.refresh_from_db()
+        v2.refresh_from_db()
+        self.assertEqual(v2.state, ConfigurationState.APPLIED)
+        self.assertEqual(v1.state, ConfigurationState.FAILED)
+
+    def test_qa_configuracion_otro_pc(self):
+        other_agent, _ = create_agent(name="Otro PC", box="box-4")
+        other_config = AgentConfiguration.objects.create(agent=other_agent, version=1, desired_config={"qa": 10})
+        ack = {"config_id": str(other_config.pk), "success": True, "effective_config": {"qa": 10}}
+        sent = self.exercise([("config_ack", ack)], capabilities=[CONFIG_CAPABILITY])
+        messages = [json.loads(e["text"])["type"] for e in sent if e["type"] == "websocket.send"]
+        other_config.refresh_from_db()
+        self.assertEqual(messages, ["ready", "error"])
+        self.assertEqual(other_config.state, ConfigurationState.PENDING)
+
+    def test_qa_ack_duplicado(self):
+        config = AgentConfiguration.objects.create(agent=self.agent, version=1, desired_config={"qa": 10})
+        ack = {"config_id": str(config.pk), "success": True, "effective_config": {"qa": 10}}
+        self.exercise([("config_ack", ack)], capabilities=[CONFIG_CAPABILITY])
+        config.refresh_from_db()
+        first_updated = config.updated_at
+        self.exercise([("config_ack", ack)], capabilities=[CONFIG_CAPABILITY])
+        config.refresh_from_db()
+        self.assertEqual(config.state, ConfigurationState.APPLIED)
+        self.assertEqual(config.updated_at, first_updated)
+
+    def test_qa_reconexion_pendiente(self):
+        config = AgentConfiguration.objects.create(agent=self.agent, version=1, desired_config={"qa": 10})
+        sent1 = self.exercise([], capabilities=[CONFIG_CAPABILITY])
+        sent2 = self.exercise([], capabilities=[CONFIG_CAPABILITY])
+        sync1 = [
+            json.loads(e["text"])
+            for e in sent1
+            if e["type"] == "websocket.send" and json.loads(e["text"])["type"] == "config_sync"
+        ]
+        sync2 = [
+            json.loads(e["text"])
+            for e in sent2
+            if e["type"] == "websocket.send" and json.loads(e["text"])["type"] == "config_sync"
+        ]
+        config.refresh_from_db()
+        self.assertEqual(config.state, ConfigurationState.PENDING)
+        self.assertEqual(len(sync1), 1)
+        self.assertEqual(len(sync2), 1)
+
+    def test_qa_token_antiguo(self):
+        old_token = self.token
+        renewed = renew_agent(self.agent)
+        new_token = renewed[1] if isinstance(renewed, tuple) else renewed
+        with self.assertRaises(AuthenticationFailed):
+            authenticate_agent_header(f"Agent {old_token}".encode())
+        identity = authenticate_agent_header(f"Agent {new_token}".encode())
+        self.assertEqual(identity.box, "box-3")
+        self.assertEqual(identity.registry_id, str(self.agent.pk))
+
+    def test_qa_configuracion_efectiva(self):
+        config = AgentConfiguration.objects.create(agent=self.agent, version=1, desired_config={"qa": 30})
+        ack = {"config_id": str(config.pk), "success": True}
+        self.exercise([("config_ack", ack)], capabilities=[CONFIG_CAPABILITY])
+        config.refresh_from_db()
+        self.assertEqual(config.state, ConfigurationState.FAILED)
+        self.assertEqual(config.error_code, "MISSING_EFFECTIVE_CONFIG")
+
+    def test_qa_fallo_conserva_configuracion(self):
+        v1 = AgentConfiguration.objects.create(agent=self.agent, version=1, desired_config={"qa": 1})
+        ack1 = {"config_id": str(v1.pk), "success": True, "effective_config": {"qa": 1}}
+        self.exercise([("config_ack", ack1)], capabilities=[CONFIG_CAPABILITY])
+        v1.refresh_from_db()
+        v2 = AgentConfiguration.objects.create(
+            agent=self.agent, version=2, desired_config={"qa": 2}, effective_config=v1.effective_config
+        )
+        ack2 = {"config_id": str(v2.pk), "success": False, "error_code": "QA_APPLY_FAILED"}
+        self.exercise([("config_ack", ack2)], capabilities=[CONFIG_CAPABILITY])
+        v2.refresh_from_db()
+        self.assertEqual(v1.state, ConfigurationState.APPLIED)
+        self.assertEqual(v1.effective_config, {"qa": 1})
+        self.assertEqual(v2.state, ConfigurationState.FAILED)
+        self.assertEqual(v2.effective_config, {"qa": 1})
+        self.assertEqual(v2.error_code, "QA_APPLY_FAILED")
+
 
 class RegistryRegressionTests(APITestCase):
     def setUp(self):
-        self.admin = get_user_model().objects.create_user(username="regression96", email="regression96@example.test", password="Synthetic-96-only!", role="admin")
+        self.admin = get_user_model().objects.create_user(
+            username="regression96", email="regression96@example.test", password="Synthetic-96-only!", role="admin"
+        )
         self.client.force_authenticate(self.admin)
         self.agent, self.token = create_agent(name="PC nuevo", box="box-3")
         self.history = f"/api/v1/pcs/{self.agent.pk}/historial"
 
     def event(self, kind, when, outage_id, box="box-3"):
         return AgentConnectivityEvent.objects.create(
-            agent_id=str(self.agent.pk), event_id=uuid4(), box=box, kind=kind,
-            occurred_at=when, received_at=when, outage_id=outage_id, cause="UNKNOWN",
+            agent_id=str(self.agent.pk),
+            event_id=uuid4(),
+            box=box,
+            kind=kind,
+            occurred_at=when,
+            received_at=when,
+            outage_id=outage_id,
+            cause="UNKNOWN",
         )
 
     def test_new_pc_does_not_inherit_box_telemetry_or_connection(self):
-        AgentStatus.objects.create(box="box-3", seen_at=timezone.now(), diagnostics={"agent_version": "other", "pending": 7})
-        RuntimeLease.objects.create(name="control:box-3", owner=uuid4(), expires_at=timezone.now() + timedelta(minutes=1))
+        AgentStatus.objects.create(
+            box="box-3", seen_at=timezone.now(), diagnostics={"agent_version": "other", "pending": 7}
+        )
+        RuntimeLease.objects.create(
+            name="control:box-3", owner=uuid4(), expires_at=timezone.now() + timedelta(minutes=1)
+        )
         row = self.client.get("/api/v1/pcs").data["data"][0]
         self.assertEqual(row["connection"], "offline")
         self.assertEqual(row["pending"], 0)
@@ -145,14 +274,17 @@ class RegistryRegressionTests(APITestCase):
 
     def test_shared_box_pcs_keep_individual_diagnostics(self):
         from .pc_registry import _generate_credential
+
         other = AgentRegistration(name="PC segundo", box="box-3")
         token, other.token_sha256 = _generate_credential(other.pk)
         other.save()
         first = RemoteControl(authenticate_agent_header(f"Agent {self.token}".encode()), uuid4())
-        first.open(); first.register_hello("first")
+        first.open()
+        first.register_hello("first")
         first.dispatch(envelope("status", {"pending": 7}))
         second = RemoteControl(authenticate_agent_header(f"Agent {token}".encode()), uuid4())
-        second.open(); second.register_hello("second")
+        second.open()
+        second.register_hello("second")
         rows = {r["agent_id"]: r for r in self.client.get("/api/v1/pcs").data["data"]}
         self.assertEqual(rows[str(self.agent.pk)]["pending"], 7)
         self.assertEqual(rows[str(self.agent.pk)]["connection"], "offline")
@@ -162,7 +294,8 @@ class RegistryRegressionTests(APITestCase):
 
     def test_expired_lease_is_persisted_once_and_recovers(self):
         control = RemoteControl(authenticate_agent_header(f"Agent {self.token}".encode()), uuid4())
-        control.open(); control.register_hello("test")
+        control.open()
+        control.register_hello("test")
         RuntimeLease.objects.update(expires_at=timezone.now() - timedelta(seconds=1))
         self.client.get("/api/v1/pcs")
         self.client.get(self.history)

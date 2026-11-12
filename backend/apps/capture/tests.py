@@ -17,7 +17,7 @@ from backend.apps.operational.models import OperationalConfiguration
 from backend.apps.operational.services import OperationalService
 from backend.config.composition import capture_session_service
 from .domain import CaptureError
-from .models import AcceptedSequence, AgentCommand, CaptureEvent, CaptureSession, CommandKind, SessionState
+from .models import AcceptedSequence, AgentCommand, CaptureEvent, CaptureSession, CommandKind
 from .services import CaptureSessionService
 
 NOW = datetime(2026, 10, 19, 12, tzinfo=dt_timezone.utc)
@@ -45,12 +45,14 @@ class CaptureFixtures:
         return command
 
     def ack_stop(self, command, last_sequence=0):
-        return self.service.acknowledge("box-3", command.command_id, last_sequence=last_sequence,
-                                        now=NOW + timedelta(seconds=35))
+        return self.service.acknowledge(
+            "box-3", command.command_id, last_sequence=last_sequence, now=NOW + timedelta(seconds=35)
+        )
 
     def accept(self, session, number=0, seconds=10, received=20):
-        return self.service.accept_sequence("box-3", session.session_id, number,
-                                            NOW + timedelta(seconds=seconds), now=NOW + timedelta(seconds=received))
+        return self.service.accept_sequence(
+            "box-3", session.session_id, number, NOW + timedelta(seconds=seconds), now=NOW + timedelta(seconds=received)
+        )
 
     def assert_code(self, code, function, *args, **kwargs):
         with self.assertRaises(CaptureError) as caught:
@@ -59,16 +61,14 @@ class CaptureFixtures:
 
     @contextmanager
     def captureOnCommitCallbacks(self, execute=False):
-        """Polyfill para simular el comportamiento nativo de TestCase en TransactionTestCase."""
         callbacks = []
-        original_on_commit = transaction.on_commit
-        
+
         def mock_on_commit(func, *args, **kwargs):
             callbacks.append(func)
-            
-        with patch('django.db.transaction.on_commit', side_effect=mock_on_commit):
+
+        with patch("django.db.transaction.on_commit", side_effect=mock_on_commit):
             yield callbacks
-            
+
         if execute:
             for cb in callbacks:
                 cb()
@@ -85,7 +85,9 @@ class CaptureLifecycleTests(CaptureFixtures, TransactionTestCase):
         self.assertEqual(same.session_id, session.session_id)
         self.assertEqual(CaptureSession.objects.count(), 1)
         self.assertEqual(AgentCommand.objects.count(), 1)
-        self.assertEqual(list(CaptureEvent.objects.values_list("action", flat=True)).count("capture.session.created"), 1)
+        self.assertEqual(
+            list(CaptureEvent.objects.values_list("action", flat=True)).count("capture.session.created"), 1
+        )
 
     def test_start_command_sees_saved_session_and_rolls_back_together(self):
         original = self.service._command
@@ -287,8 +289,15 @@ class CaptureLifecycleTests(CaptureFixtures, TransactionTestCase):
         self.assertEqual(result.error_code, "AGENT_START_FAILED")
         stop, = self.service.commands(3, now=NOW)
         self.assertEqual(stop.kind, "detencion")
-        self.assert_code("INVALID_CONFIRMATION", self.service.acknowledge, 3, stop.command_id,
-                         success=False, error_code="sensitive free text", now=NOW)
+        self.assert_code(
+            "INVALID_CONFIRMATION",
+            self.service.acknowledge,
+            3,
+            stop.command_id,
+            success=False,
+            error_code="sensitive free text",
+            now=NOW,
+        )
 
     def test_stop_failure_is_retried_and_blocks_new_authorization_until_cleanup(self):
         self.active()
@@ -341,8 +350,7 @@ class CaptureLifecycleTests(CaptureFixtures, TransactionTestCase):
         self.create()
         start, = self.service.commands(3, now=NOW)
         self.service.interrupted(3, start.session_id, now=NOW + timedelta(seconds=10))
-        result = self.service.acknowledge(3, start.command_id, occurred_at=NOW,
-                                          now=NOW + timedelta(seconds=121))
+        result = self.service.acknowledge(3, start.command_id, occurred_at=NOW, now=NOW + timedelta(seconds=121))
         self.assertEqual(result.state, "fallida")
         self.assertEqual(result.actual_start, NOW)
         self.assertEqual(result.error_code, "AGENT_INTERRUPTED")
@@ -369,8 +377,9 @@ class CaptureLifecycleTests(CaptureFixtures, TransactionTestCase):
         session = self.active()
         self.assertTrue(self.accept(session, received=121))
         self.assertEqual(CaptureSession.objects.get().state, "activa")
-        self.assert_code("SEQUENCE_OUTSIDE_CAPTURE_WINDOW", self.accept, session, number=1,
-                         seconds=3601, received=4000)
+        self.assert_code(
+            "SEQUENCE_OUTSIDE_CAPTURE_WINDOW", self.accept, session, number=1, seconds=3601, received=4000
+        )
 
     def test_missing_stop_confirmation_remains_pending_with_diagnostic(self):
         self.active()
@@ -398,11 +407,17 @@ class CaptureLifecycleTests(CaptureFixtures, TransactionTestCase):
         self.assertEqual(CaptureSession.objects.count(), 1)
 
     def test_invalid_authorization_and_timestamps_are_rejected(self):
-        for changed in (replace(self.authorization, inicio=None), replace(self.authorization, origen="patient-name"),
-                        replace(self.authorization, termino=NOW), replace(self.authorization, box="box-0")):
+        for changed in (
+            replace(self.authorization, inicio=None),
+            replace(self.authorization, origen="patient-name"),
+            replace(self.authorization, termino=NOW),
+            replace(self.authorization, box="box-0"),
+        ):
             with self.assertRaises(CaptureError):
                 self.service.apply_authorization(changed, now=NOW)
-        self.assert_code("INVALID_TIMESTAMP", self.service.apply_authorization, self.authorization, now=NOW.replace(tzinfo=None))
+        self.assert_code(
+            "INVALID_TIMESTAMP", self.service.apply_authorization, self.authorization, now=NOW.replace(tzinfo=None)
+        )
 
     def test_operational_scrum70_entry_point_persists_and_revokes_session(self):
         OperationalConfiguration.objects.create(enabled_days=[0], open_time="08:00", close_time="18:00")
@@ -463,7 +478,6 @@ class CaptureLifecycleTests(CaptureFixtures, TransactionTestCase):
 
 
 class CaptureConcurrencyTests(CaptureFixtures, TransactionTestCase):
-    """Conexiones SQL independientes y barrera de arranque con backoff para bloqueos SQLite."""
     def race(self, *functions):
         barrier = Barrier(len(functions))
 
@@ -471,7 +485,6 @@ class CaptureConcurrencyTests(CaptureFixtures, TransactionTestCase):
             close_old_connections()
             try:
                 barrier.wait(timeout=10)
-                # Reintento exponencial ligero para eludir bloqueos de tabla en SQLite
                 for _ in range(20):
                     try:
                         return function()
@@ -481,7 +494,7 @@ class CaptureConcurrencyTests(CaptureFixtures, TransactionTestCase):
                             close_old_connections()
                             continue
                         raise
-                return function()  # Intento final
+                return function()
             finally:
                 connections.close_all()
 
@@ -506,13 +519,15 @@ class CaptureConcurrencyTests(CaptureFixtures, TransactionTestCase):
         original = self.active()
         self.ack_stop(self.stop(), last_sequence=-1)
         now = NOW + timedelta(seconds=40)
-        sessions = self.race(*[
-            lambda: CaptureSessionService().apply_authorization(self.authorization, now=now)
-        ] * 6)
+        sessions = self.race(
+            *[lambda: CaptureSessionService().apply_authorization(self.authorization, now=now)] * 6
+        )
         self.assertEqual(len({session.session_id for session in sessions}), 1)
         self.assertNotEqual(sessions[0].session_id, original.session_id)
         self.assertEqual(CaptureSession.objects.count(), 2)
-        self.assertEqual(AgentCommand.objects.filter(session_id=sessions[0].session_id, kind=CommandKind.START).count(), 1)
+        self.assertEqual(
+            AgentCommand.objects.filter(session_id=sessions[0].session_id, kind=CommandKind.START).count(), 1
+        )
         self.assertEqual(CaptureEvent.objects.filter(action="capture.session.created").count(), 2)
 
     def test_concurrent_polls_preserve_command_identity_and_delivery_count(self):
@@ -562,8 +577,13 @@ class CaptureConcurrencyTests(CaptureFixtures, TransactionTestCase):
         session = self.active()
         with self.assertRaises(IntegrityError), transaction.atomic():
             CaptureSession.objects.create(
-                box="box-3", state="activa", origin="agenda", scheduled_start=NOW,
-                scheduled_end=NOW + timedelta(hours=2), authorized_at=NOW, last_seen_at=NOW,
+                box="box-3",
+                state="activa",
+                origin="agenda",
+                scheduled_start=NOW,
+                scheduled_end=NOW + timedelta(hours=2),
+                authorized_at=NOW,
+                last_seen_at=NOW,
             )
         self.accept(session)
         with self.assertRaises(IntegrityError), transaction.atomic():

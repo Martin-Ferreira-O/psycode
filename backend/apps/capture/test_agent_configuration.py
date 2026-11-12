@@ -62,25 +62,21 @@ class AgentConfigurationTests(APITestCase):
         control = RemoteControl(identity, uuid4())
         control.open()
 
-        # BUG-97-02: Transición explícita a estado recibido
         control.mark_config_received(v2.pk)
         v2.refresh_from_db()
         self.assertEqual(v2.state, ConfigurationState.RECEIVED)
 
-        # BUG-97-04: Omitir effective_config no debe marcar como aplicado
         v_missing = AgentConfiguration.objects.create(agent=self.agent, version=3, desired_config={"qa": 30})
         control.acknowledge_config(v_missing.pk, success=True, effective_config=None)
         v_missing.refresh_from_db()
         self.assertEqual(v_missing.state, ConfigurationState.FAILED)
         self.assertEqual(v_missing.error_code, "MISSING_EFFECTIVE_CONFIG")
 
-        # Aplicar versión 2 con effective_config válido
         control.acknowledge_config(v2.pk, success=True, effective_config={"qa": 30})
         v2.refresh_from_db()
         self.assertEqual(v2.state, ConfigurationState.APPLIED)
         self.assertEqual(v2.effective_config, {"qa": 30})
 
-        # BUG-97-03: Intentar confirmar versión 1 obsoleta después de versión 2 aplicada
         control.acknowledge_config(v1.pk, success=True, effective_config={"qa": 10})
         v1.refresh_from_db()
         self.assertNotEqual(v1.state, ConfigurationState.APPLIED)
@@ -99,13 +95,54 @@ class AgentConfigurationTests(APITestCase):
             self.assertEqual(first.data["data"]["version"], 1)
             self.assertGreaterEqual(emit.call_count, 1)
 
-            # Segundo PUT basado en la versión 0 desactualizada debe ser rechazado con 409
             stale = self.client.put(self.url, {"desired_config": {"qa": 20}, "base_version": 0}, format="json")
             self.assertEqual(stale.status_code, 409)
 
-            # Segundo PUT sin base_version mientras la versión 1 sigue pendiente también es rechazado con 409
             blind_stale = self.client.put(self.url, {"desired_config": {"qa": 25}}, format="json")
             self.assertEqual(blind_stale.status_code, 409)
+
+    def test_qa_auditoria_configuracion(self):
+        admin = User(role=Role.ADMIN, is_active=True, is_staff=False)
+        self.client.force_authenticate(admin)
+        with patch("backend.common.audit.AuditWriter.emit") as emit:
+            response = self.client.put(self.url, {"desired_config": {"qa": 10}}, format="json")
+            sql_count = AgentConfiguration.objects.filter(agent=self.agent).count()
+            audit_count = emit.call_count
+            self.assertEqual(response.status_code, 201)
+            self.assertEqual(sql_count, 1)
+            self.assertGreaterEqual(audit_count, 1)
+
+    def test_qa_ediciones_concurrentes(self):
+        admin = User(role=Role.ADMIN, is_active=True, is_staff=False)
+        self.client.force_authenticate(admin)
+        v_init = self.client.get(self.url).data["data"]["version"]
+        r1 = self.client.put(self.url, {"desired_config": {"qa": 10}, "base_version": v_init}, format="json")
+        r2 = self.client.put(self.url, {"desired_config": {"qa": 20}, "base_version": v_init}, format="json")
+        self.assertEqual(r1.status_code, 201)
+        self.assertEqual(r2.status_code, 409)
+
+    def test_qa_multiple_pending_versions(self):
+        v1 = AgentConfiguration.objects.create(agent=self.agent, version=1, desired_config={"qa": 10})
+        v2 = AgentConfiguration.objects.create(agent=self.agent, version=2, desired_config={"qa": 20})
+        identity = authenticate_agent_header(f"Agent {self.token}".encode())
+        control = RemoteControl(identity, uuid4())
+        control.open()
+        control.acknowledge_config(v2.pk, success=True, effective_config={"qa": 20})
+        control.acknowledge_config(v1.pk, success=True, effective_config={"qa": 10})
+        v1.refresh_from_db()
+        v2.refresh_from_db()
+        self.assertEqual(v2.state, ConfigurationState.APPLIED)
+        self.assertEqual(v1.state, ConfigurationState.FAILED)
+
+    def test_qa_configuracion_efectiva(self):
+        v1 = AgentConfiguration.objects.create(agent=self.agent, version=1, desired_config={"qa": 30})
+        identity = authenticate_agent_header(f"Agent {self.token}".encode())
+        control = RemoteControl(identity, uuid4())
+        control.open()
+        control.acknowledge_config(v1.pk, success=True, effective_config=None)
+        v1.refresh_from_db()
+        self.assertEqual(v1.state, ConfigurationState.FAILED)
+        self.assertEqual(v1.error_code, "MISSING_EFFECTIVE_CONFIG")
 
 
 class ConfigurationProtocolTests(SimpleTestCase):

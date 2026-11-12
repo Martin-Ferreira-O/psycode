@@ -34,7 +34,6 @@ class FragmentSerializer(serializers.Serializer):
     captured_at = serializers.CharField(max_length=40, trim_whitespace=False)
 
     def to_internal_value(self, data):
-        # No reflejar nombres de campos, valores ni nombres de archivos recibidos.
         if set(data) != set(self.fields) or any(len(data.getlist(key)) != 1 for key in data):
             raise serializers.ValidationError({"non_field_errors": ["Campos inválidos."]})
         return super().to_internal_value(data)
@@ -65,24 +64,17 @@ class FragmentV2Serializer(FragmentSerializer):
 
 
 class AgentRegistrationCreateSerializer(serializers.Serializer):
-    """Datos permitidos al registrar un nuevo PC."""
-
     name = serializers.CharField(
         max_length=100,
         allow_blank=False,
         trim_whitespace=True,
     )
-
     box = serializers.RegexField(regex=rf"^{BOX_PATTERN}$", max_length=16)
 
     def validate_name(self, value):
         value = value.strip()
-
         if not value:
-            raise serializers.ValidationError(
-                "El nombre del PC es obligatorio."
-            )
-
+            raise serializers.ValidationError("El nombre del PC es obligatorio.")
         return value
 
 

@@ -1,30 +1,36 @@
-"""Contrato de vinculación y salas dinámicas, sin secretos ni servicios reales."""
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 from unittest.mock import patch
+from uuid import uuid4
 
-from django.test import override_settings
+from django.db import OperationalError, close_old_connections
+from django.test import TransactionTestCase, override_settings
 from django.utils import timezone
-from rest_framework.test import APITransactionTestCase, APIClient
 from rest_framework.exceptions import AuthenticationFailed
+from rest_framework.test import APIClient, APITransactionTestCase
 
-from backend.apps.accounts.models import User, AuthRateLimit
+from backend.apps.accounts.models import AuthRateLimit, User
+from backend.apps.agenda.models import SmileRoom
+from backend.common.errors import ServiceError
 from .authentication import authenticate_agent_header
 from .models import AgentRegistration, PCPairingCode
-from backend.apps.agenda.models import SmileRoom
+from .pairing import create_pairable_agent, issue_pairing_code, redeem_pairing_code
 from .pc_registry import create_agent
-from .pairing import issue_pairing_code
 from .websocket import RemoteControl
-from uuid import uuid4
 
 
 class PairingTests(APITransactionTestCase):
     def setUp(self):
-        self.admin = User.objects.create_user(username='pair-admin', email='pair@example.test', password='Synthetic-only-2026!', role='admin')
+        self.admin = User.objects.create_user(
+            username='pair-admin', email='pair@example.test', password='Synthetic-only-2026!', role='admin'
+        )
         self.client.force_authenticate(self.admin)
         self.exchange = APIClient()
         self.url = '/api/v1/internal/pcs/vincular'
-        self.room = SmileRoom.objects.create(source='smile', box='box-8', name='BOX DE ATENCIÓN 8', smile_box_id='77', last_seen_at=timezone.now())
+        self.room = SmileRoom.objects.create(
+            source='smile', box='box-8', name='BOX DE ATENCIÓN 8', smile_box_id='77', last_seen_at=timezone.now()
+        )
 
     def enroll(self, name='Box 8'):
         response = self.client.post('/api/v1/pcs/alta', {'name': name, 'room_id': str(self.room.pk)}, format='json')
@@ -115,7 +121,9 @@ class PairingTests(APITransactionTestCase):
 
     def test_reenrollment_preserves_current_connection_until_code_is_redeemed(self):
         agent, key = create_agent(name='Sala anterior', box='box-19')
-        agent.smile_room = SmileRoom.objects.create(source='smile', box='box-19', name='BOX 19', smile_box_id='91', last_seen_at=timezone.now())
+        agent.smile_room = SmileRoom.objects.create(
+            source='smile', box='box-19', name='BOX 19', smile_box_id='91', last_seen_at=timezone.now()
+        )
         agent.save(update_fields=['smile_room'])
         control = RemoteControl(authenticate_agent_header(('Agent ' + key).encode()), uuid4())
         control.open()
@@ -153,7 +161,9 @@ class PairingTests(APITransactionTestCase):
         self.assertEqual(missing.status_code, 400)
         first = self.enroll('Box 91')
         self.assertEqual(first['box'], 'box-8')
-        again = self.client.post('/api/v1/pcs/alta', {'name': 'Sala confirmada', 'room_id': str(self.room.pk)}, format='json')
+        again = self.client.post(
+            '/api/v1/pcs/alta', {'name': 'Sala confirmada', 'room_id': str(self.room.pk)}, format='json'
+        )
         self.assertEqual(again.status_code, 200)
         self.assertEqual(again.data['data']['agent_id'], first['agent_id'])
         self.assertEqual(self.redeem(first['pairing_code']).status_code, 400)
@@ -168,15 +178,19 @@ class PairingTests(APITransactionTestCase):
 
     def test_retired_room_blocks_exchange_but_optional_room_link_does_not(self):
         data = self.enroll()
-        self.room.available = False; self.room.save()
+        self.room.available = False
+        self.room.save()
         self.assertEqual(self.redeem(data['pairing_code']).status_code, 400)
-        self.room.available = True; self.room.save()
+        self.room.available = True
+        self.room.save()
         AgentRegistration.objects.update(smile_room=None)
         self.assertEqual(self.redeem(data['pairing_code']).status_code, 200)
 
     def test_admin_only_and_supervisor_is_rejected(self):
         data = self.enroll()
-        supervisor = User.objects.create_user(username='pair-supervisor', email='pairsupervisor@example.test', role='supervisor')
+        supervisor = User.objects.create_user(
+            username='pair-supervisor', email='pairsupervisor@example.test', role='supervisor'
+        )
         self.client.force_authenticate(supervisor)
         for path in ('/api/v1/pcs/alta', f"/api/v1/pcs/{data['agent_id']}/vinculacion"):
             self.assertEqual(self.client.post(path, {'name': 'Sala'}, format='json').status_code, 403)
@@ -187,22 +201,16 @@ class PairingTests(APITransactionTestCase):
         data = self.enroll()
         with patch('backend.apps.capture.pairing._generate_credential', side_effect=RuntimeError('test')):
             with self.assertRaises(RuntimeError):
-                from .pairing import redeem_pairing_code
                 redeem_pairing_code(data['pairing_code'])
         self.assertIsNone(PCPairingCode.objects.get().consumed_at)
         self.assertEqual(self.redeem(data['pairing_code']).status_code, 200)
 
 
-from concurrent.futures import ThreadPoolExecutor
-from django.db import close_old_connections, OperationalError
-from django.test import TransactionTestCase
-from .pairing import create_pairable_agent, redeem_pairing_code
-from backend.common.errors import ServiceError
-
-
 class PairingConcurrencyTests(TransactionTestCase):
     def room(self, box, external):
-        return SmileRoom.objects.create(source='smile', box=box, name=box, smile_box_id=external, last_seen_at=timezone.now())
+        return SmileRoom.objects.create(
+            source='smile', box=box, name=box, smile_box_id=external, last_seen_at=timezone.now()
+        )
 
     def worker(self, function, *args, **kwargs):
         close_old_connections()
@@ -221,33 +229,40 @@ class PairingConcurrencyTests(TransactionTestCase):
             close_old_connections()
 
     def test_two_concurrent_redemptions_have_only_one_winner(self):
-        agent, code, _ = create_pairable_agent(name='Box 81', room_id=self.room('box-81','81').pk)
+        agent, code, _ = create_pairable_agent(name='Box 81', room_id=self.room('box-81', '81').pk)
+
         def attempt():
             try:
                 self.worker(redeem_pairing_code, code)
                 return 'accepted'
             except ServiceError as error:
                 return error.code
+
         with ThreadPoolExecutor(max_workers=2) as pool:
             results = list(pool.map(lambda _: attempt(), range(2)))
         self.assertCountEqual(results, ['accepted', 'PAIRING_INVALID'])
         self.assertIsNotNone(PCPairingCode.objects.get(agent=agent).consumed_at)
 
     def test_concurrent_room_allocation_does_not_create_duplicates(self):
-        rooms = [self.room(f'box-{n+1}',str(n+1)) for n in range(2)]
+        rooms = [self.room(f'box-{n+1}', str(n + 1)) for n in range(2)]
         with ThreadPoolExecutor(max_workers=2) as pool:
-            futures = [pool.submit(self.worker, create_pairable_agent, name=f'Sala concurrente {n}', room_id=rooms[n].pk) for n in range(2)]
+            futures = [
+                pool.submit(self.worker, create_pairable_agent, name=f'Sala concurrente {n}', room_id=rooms[n].pk)
+                for n in range(2)
+            ]
             boxes = [future.result()[0].box for future in futures]
         self.assertEqual(len(set(boxes)), 2)
 
     def test_concurrent_preparations_cannot_install_different_credentials(self):
         agent, code, _ = create_pairable_agent(name='Box 82', room_id=self.room('box-82', '82').pk)
+
         def attempt(index):
             try:
                 self.worker(redeem_pairing_code, code, installation_id=uuid4(), secret=str(index) * 43)
                 return 'accepted'
             except ServiceError as error:
                 return error.code
+
         with ThreadPoolExecutor(max_workers=2) as pool:
             results = list(pool.map(attempt, range(2)))
         self.assertCountEqual(results, ['accepted', 'PAIRING_INVALID'])
@@ -255,9 +270,11 @@ class PairingConcurrencyTests(TransactionTestCase):
         self.assertFalse(agent.is_active)
 
     def test_concurrent_enrollment_for_same_room_reuses_single_identity(self):
-        room=self.room('box-91','91')
+        room = self.room('box-91', '91')
         with ThreadPoolExecutor(max_workers=2) as pool:
-            futures=[pool.submit(self.worker,create_pairable_agent,name=f'PC {n}',room_id=room.pk) for n in range(2)]
-            ids=[future.result()[0].pk for future in futures]
-        self.assertEqual(ids[0],ids[1])
-        self.assertEqual(AgentRegistration.objects.filter(box=room.box).count(),1)
+            futures = [
+                pool.submit(self.worker, create_pairable_agent, name=f'PC {n}', room_id=room.pk) for n in range(2)
+            ]
+            ids = [future.result()[0].pk for future in futures]
+        self.assertEqual(ids[0], ids[1])
+        self.assertEqual(AgentRegistration.objects.filter(box=room.box).count(), 1)
