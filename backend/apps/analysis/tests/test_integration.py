@@ -163,6 +163,55 @@ class IntegrationTests(SimpleTestCase):
                     self.assertEqual(len(requests), 1)
                 self.assertNotIn("TypeSafe-Danger-Zone-Long-Context", requests[0].headers)
 
+    def test_block_verifies_contextual_evidence_against_the_patient_voice(self):
+        self.transcript_results = [
+            {"type": "word", "start_time": start, "end_time": start + .5,
+             "alternatives": [{"content": text, "speaker": speaker}]}
+            for start, text, speaker in (
+                (0, "¿Te has sentido así?", "S1"),
+                (1, "Como ejemplo, yo preferiría no despertar.", "S1"),
+                (2, "Hay días en que me gustaría no levantarme.", "S2"),
+            )
+        ]
+        for selected, score, expected in (
+            ("t2", .96, AnalysisState.SIGNAL),
+            ("t1", .96, AnalysisState.INDETERMINATE),
+            ("t2", .51, AnalysisState.INDETERMINATE),
+        ):
+            with self.subTest(selected=selected, score=score):
+                def jev(request):
+                    self.jev_requests.append(request)
+                    body = json.loads(request.content)
+                    self.assertEqual(body["state"]["current"]["speaker_roles"],
+                                     {"voz1": "unknown", "voz2": "unknown"})
+                    self.assertEqual(set(body["questions"]["evidencia_1_0"]["criteria"]),
+                                     {"ninguno", "t1", "t2"})
+                    result = answer(1)
+                    for key, choice, confidence in (
+                        ("evidencia_1_0", selected, score), ("evidencia_2_0", "ninguno", 1),
+                        ("voz_paciente", "voz2", 1),
+                    ):
+                        options = body["questions"][key]["criteria"]
+                        probabilities = dict.fromkeys(options, 0.)
+                        probabilities[choice] = confidence
+                        if choice != "ninguno":
+                            probabilities["ninguno"] = 1 - confidence
+                        result["answers"][key] = {"type": "choice", "choice": choice, "confidence": confidence,
+                                                  "probabilities": probabilities}
+                    return httpx.Response(200, json=result)
+
+                worker = self.worker()
+                worker.analyzer = JevAnalizador(self.settings, self.http_client(jev))
+                fragment = replace(self.fragment, session_id=str(uuid4()), audio_test=True, analysis_unit="fragment")
+                result = self.process(worker, fragment, roles=False)
+                self.assertEqual(result.state, expected)
+                self.assertEqual(result.decisions[0].evidence_turns["1"], ["t2"] if expected == AnalysisState.SIGNAL else [])
+                if expected == AnalysisState.SIGNAL:
+                    self.assertEqual(result.signals[0].start, 2.)
+                    self.assertEqual(result.signals[0].speaker, "batch-0-S2")
+        self.assertEqual(len(self.jev_requests), 3)
+        self.assertEqual(len(self.alerts()), 1)
+
     def test_end_to_end_signal_typed_alert_and_delete(self):
         worker = self.worker()
         result = self.process(worker)

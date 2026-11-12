@@ -22,11 +22,13 @@ las etiquetas de diarización identifican voces dentro del trabajo Batch.
 Las sesiones operativas nuevas usan `Fragment.analysis_unit="fragment"`. JEV
 recibe el diálogo completo redactado, con turnos cronológicos y alias locales
 de voz. Los tiempos se conservan en el trabajador para verificar evidencia.
-`bloque-signals-2` conserva las claves de salida 1.0 y guía a JEV para distinguir
-entrevistador y paciente según el diálogo cuando el rol falta. Los puntajes se
-guardan en `FragmentJob.checkpoint.block_result`. Emitir una alerta sigue
-requiriendo evidencia local de una voz con rol de paciente confirmado. Los clips
-ficticios del diagnóstico mantienen su convención de paciente simulado.
+`bloque-signals-3` pide a JEV identificar el turno que contiene la evidencia para
+los niveles 1 y 2 en la misma solicitud. Esto permite verificar afirmaciones
+indirectas que se entienden por el diálogo. El trabajador comprueba la atribución
+del turno y conserva los puntajes en `FragmentJob.checkpoint.block_result`.
+Las alertas clínicas requieren un rol de paciente confirmado. En los clips de
+diagnóstico con varias voces, JEV identifica al paciente simulado antes de
+aceptar el turno seleccionado como evidencia.
 
 La cola durable puede procesar un bloque mientras otro queda en revisión. Los
 trabajos por intervención conservan su dependencia del contexto anterior. Se

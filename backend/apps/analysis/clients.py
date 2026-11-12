@@ -6,7 +6,7 @@ import httpx
 from .errors import JevContextLimit, ProviderError, SubmissionUncertain
 from .domain import JevDecision, Transcription, Word
 from .providers.http import json_body, request
-from .providers.jev_contract import questions, validate_response
+from .providers.jev_contract import localized_evidence, questions, validate_response
 from .providers.speechmatics import BatchClient
 
 
@@ -43,7 +43,11 @@ class JevAnalizador:
             # Solo contenido redactado y etiquetas técnicas locales. Sin metadatos de sesión.
             headers = {"X-Request-Id": request_id} if request_id else {}
             deadline = time.monotonic() + self.settings.timeout
-            payload = {"model": self.settings.analysis_model, "state": state, "questions": questions(unit)}
+            evidence_turns = [turn["id"] for turn in current.get("turns", ()) if "id" in turn]
+            unknown_speakers = [speaker for speaker, role in current.get("speaker_roles", {}).items()
+                                if role == "unknown"]
+            requested = questions(unit, evidence_turns, unknown_speakers)
+            payload = {"model": self.settings.analysis_model, "state": state, "questions": requested}
 
             def send():
                 return request(client, "POST", self.settings.analysis_endpoint,
@@ -63,11 +67,12 @@ class JevAnalizador:
             try:
                 data = json_body(response)
                 values, context, usage = validate_response(data, self.settings.analysis_model,
-                                                           self.settings.analysis_provider)
+                                                           self.settings.analysis_provider, requested)
             except ProviderError:
                 raise SubmissionUncertain("Respuesta JEV no recuperable; requiere revisión") from None
             return JevDecision(data["model"], context["choice"], tuple(values),
-                               usage["input_tokens"], usage["output_tokens"])
+                               usage["input_tokens"], usage["output_tokens"],
+                               localized_evidence(data["answers"], requested, current))
         finally:
             if own:
                 client.close()
