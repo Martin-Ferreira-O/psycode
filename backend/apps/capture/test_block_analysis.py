@@ -1,7 +1,9 @@
 """Regresión de unidad operativa: una hora produce seis análisis, o uno completo."""
 from datetime import timedelta
+from io import StringIO
 from unittest.mock import Mock
 
+from django.core.management import call_command
 from django.test import TestCase
 from backend.apps.analysis.domain import Transcription, Word, JevDecision
 from backend.apps.analysis.services import AnalysisService
@@ -42,7 +44,9 @@ class BlockAnalysisPipelineTests(IngestionFixtures, TestCase):
             self.assertEqual(job.checkpoint["analysis_unit"], "fragment")
             self.assertEqual(len(job.checkpoint["block_result"]["decisions"]), 1)
         for call in analyzer.evaluate.call_args_list:
-            self.assertIn("Texto sintético neutral.", call.args[0]["text"])
+            turns = call.args[0]["turns"]
+            self.assertEqual(len(turns), len(words))
+            self.assertTrue(all(turn["text"] == "Texto sintético neutral." for turn in turns))
         processor.process_next(now=NOW + timedelta(hours=2))
         self.assertEqual(analyzer.evaluate.call_count, count)
         alerts.register_alert.assert_not_called()
@@ -65,16 +69,32 @@ class BlockAnalysisPipelineTests(IngestionFixtures, TestCase):
     def test_context_limit_requires_review_and_preserves_audio(self):
         from backend.apps.analysis.errors import JevContextLimit
         self.receive()
+        self.receive(number=1, captured_at=NOW + timedelta(seconds=11))
         transcriber, analyzer = Mock(), Mock()
         words = (Word("Texto sintético neutral.", 0, 1, "S1"),)
         transcriber.transcribe.side_effect = lambda fragment, **kw: self.transcribe(words, **kw)
-        analyzer.evaluate.side_effect = JevContextLimit("JEV_CONTEXT_LIMIT")
+        analyzer.evaluate.side_effect = [
+            JevContextLimit("JEV_CONTEXT_LIMIT"),
+            JevDecision("simulated", "incierto", (.1,) * 8, 10, 1),
+            JevDecision("simulated", "incierto", (.1,) * 8, 10, 1),
+        ]
         processor = FragmentJobProcessor(self.storage, AnalysisService(
             transcriber, analyzer, QueueFragmentLedger(), Mock(), Mock()))
         processor.process_next(now=NOW + timedelta(hours=2))
-        job = FragmentJob.objects.get()
+        job = FragmentJob.objects.get(sequence__number=0)
         self.assertEqual(job.state, FragmentJob.State.REVIEW)
         self.assertEqual(job.last_error_code, "JEV_CONTEXT_LIMIT")
         self.assertTrue((self.root / job.storage_key).exists())
-        processor.process_next(now=NOW + timedelta(hours=2))
-        self.assertEqual(analyzer.evaluate.call_count, 1)
+        self.assertEqual(processor.process_next(now=NOW + timedelta(hours=2)), FragmentJob.State.COMPLETED)
+        self.assertEqual(analyzer.evaluate.call_count, 2)
+        self.assertEqual(FragmentJob.objects.get(sequence__number=1).state, FragmentJob.State.COMPLETED)
+
+        # Compatibilidad con trabajos en revisión guardados por el worker anterior.
+        request_id = analyzer.evaluate.call_args_list[0].kwargs["request_id"]
+        job.checkpoint.pop("jev_retry_request_id")
+        job.checkpoint["jev_pending"] = {"analysis_unit": "fragment", "request_id": request_id}
+        job.save(update_fields=["checkpoint"])
+        call_command("process_fragment_jobs", "--resume-job", str(job.pk), stdout=StringIO())
+        self.assertEqual(processor.process_next(now=NOW + timedelta(hours=2)), FragmentJob.State.COMPLETED)
+        self.assertEqual(analyzer.evaluate.call_args.kwargs["request_id"], request_id)
+        self.assertEqual(transcriber.transcribe.call_count, 2)

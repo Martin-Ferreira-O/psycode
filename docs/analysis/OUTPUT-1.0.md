@@ -5,7 +5,7 @@ Tipos ejecutables: [`domain.py`](../../backend/apps/analysis/domain.py). No es u
 | Campo | Tipo y significado |
 | --- | --- |
 | `contract_version` | Literal `1.0`. |
-| `questions_version` | `habla-signals-1`: Choice de contexto y ocho preguntas Noul del origen. |
+| `questions_version` | `habla-signals-1` por intervención, `bloque-signals-1` en bloques históricos y `bloque-signals-2` para la entrevista psicológica. Todas usan una pregunta Choice de contexto y ocho Noul. |
 | `session_id`, `sequence` | UUID canónico y secuencia entera desde 0. Solo uso interno. |
 | `state` | `senal`, `sin_riesgo` o `indeterminado`. |
 | `transcription` | `null` si falló Speechmatics; en otro caso `{text, words, cleanup}`. |

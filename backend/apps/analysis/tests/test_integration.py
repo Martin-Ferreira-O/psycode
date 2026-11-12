@@ -1,6 +1,8 @@
 """Pruebas sintéticas: toda la red se sustituye por httpx.MockTransport."""
 from dataclasses import replace
 from datetime import datetime, timezone
+from email import policy
+from email.parser import BytesParser
 import json
 from pathlib import Path
 import socket
@@ -17,6 +19,7 @@ from backend.apps.alerts.tests.test_persistence import FakeDatabase
 from backend.apps.analysis.audit import AnalysisAudit
 from backend.apps.analysis.clients import JevAnalizador, SpeechmaticsTranscriptor
 from backend.apps.analysis.domain import AnalysisResult, AnalysisState, Fragment, FragmentRejected
+from backend.apps.analysis.errors import JevContextLimit
 from backend.apps.analysis.ledger import FileFragmentLedger
 from backend.apps.analysis.providers.http import ProviderError, SubmissionUncertain, request
 from backend.apps.analysis.providers.jev_contract import CONTEXT_CHOICES, validate_response
@@ -98,6 +101,67 @@ class IntegrationTests(SimpleTestCase):
 
     def alerts(self):
         return self.db["alerts"].docs
+
+    def test_psychology_block_transcribes_and_classifies_both_roles(self):
+        self.transcript_results = [
+            {"type": "word", "start_time": start, "end_time": start + 1,
+             "alternatives": [{"content": text, "speaker": speaker}]}
+            for start, text, speaker in (
+                (0, "¿Cómo se ha sentido?", "S1"),
+                (2, "Ojalá no despertar. Soy Nombre Prueba.", "S2"),
+            )
+        ]
+        result = self.process(fragment=replace(self.fragment, analysis_unit="fragment"), roles=False)
+        request = self.requests[0]
+        content_type = request.headers["Content-Type"]
+        multipart = BytesParser(policy=policy.default).parsebytes(
+            f"Content-Type: {content_type}\r\n\r\n".encode() + request.read()
+        )
+        config_part = next(part for part in multipart.iter_parts()
+                           if part.get_param("name", header="Content-Disposition") == "config")
+        config = json.loads(config_part.get_payload(decode=True))["transcription_config"]
+        self.assertEqual(config["language"], "es")
+        self.assertEqual(config["domain"], "medical")
+        self.assertEqual(config["diarization"], "speaker")
+        self.assertEqual(config["speaker_diarization_config"]["speaker_sensitivity"], 0.5)
+        self.assertIn({"content": "ideación suicida"}, config["additional_vocab"])
+
+        self.assertEqual(len(self.jev_requests), 1)
+        body = json.loads(self.jev_requests[0].content)
+        self.assertEqual(body["state"]["current"]["speaker_roles"], {"voz1": "unknown", "voz2": "unknown"})
+        self.assertEqual([turn["speaker"] for turn in body["state"]["current"]["turns"]], ["voz1", "voz2"])
+        self.assertNotIn("Nombre Prueba", json.dumps(body))
+        self.assertNotIn("batch-0-S1", json.dumps(body))
+        self.assertIn("entrevista psicológica", body["questions"]["signal_1"]["instructions"])
+        self.assertEqual(result.decisions[0].values[1], .9)
+        self.assertEqual(result.state, AnalysisState.INDETERMINATE)
+        self.assertFalse(self.alerts())
+
+    def test_typesafe_retries_only_a_confirmed_context_rejection_with_long_context(self):
+        current = {"analysis_unit": "fragment", "turns": [{"text": "Diálogo sintético."}]}
+        for provider in ("typesafe", "openrouter"):
+            with self.subTest(provider=provider):
+                requests = []
+                settings = replace(self.settings, jev_provider=provider, openrouter_key="fake-openrouter-key")
+
+                def handle(req):
+                    requests.append(req)
+                    if len(requests) == 1:
+                        return httpx.Response(422, json={"error": {"code": "per_question_context"}})
+                    return httpx.Response(200, json=answer())
+
+                analyzer = JevAnalizador(settings, self.http_client(handle))
+                if provider == "typesafe":
+                    analyzer.evaluate(current, [], request_id="block-test")
+                    self.assertEqual(len(requests), 2)
+                    self.assertEqual(requests[1].headers["TypeSafe-Danger-Zone-Long-Context"], "true")
+                    self.assertEqual(requests[1].headers["X-Request-Id"], "block-test")
+                    self.assertEqual(requests[0].content, requests[1].content)
+                else:
+                    with self.assertRaises(JevContextLimit):
+                        analyzer.evaluate(current, [])
+                    self.assertEqual(len(requests), 1)
+                self.assertNotIn("TypeSafe-Danger-Zone-Long-Context", requests[0].headers)
 
     def test_end_to_end_signal_typed_alert_and_delete(self):
         worker = self.worker()

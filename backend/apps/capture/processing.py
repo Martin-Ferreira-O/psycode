@@ -197,13 +197,14 @@ class FragmentJobProcessor:
     def _process_durable(self, claimed, now):
         checkpoint = JobCheckpoint(claimed, claimed.checkpoint)
         checkpoint.data.setdefault("analysis_unit", claimed.analysis_unit)
-        previous = FragmentJob.objects.filter(
-            sequence__session_id=claimed.session_id,
-            sequence__number=claimed.sequence - 1,
-            state=FragmentJob.State.COMPLETED,
-        ).values_list("checkpoint", flat=True).first() if claimed.sequence else {}
-        if claimed.analysis_unit != "fragment" and claimed.sequence and not previous:
-            if previous is None or not checkpoint.data.get("accept_missing_context"):
+        previous = {}
+        if claimed.analysis_unit == "utterance" and claimed.sequence:
+            previous = FragmentJob.objects.filter(
+                sequence__session_id=claimed.session_id,
+                sequence__number=claimed.sequence - 1,
+                state=FragmentJob.State.COMPLETED,
+            ).values_list("checkpoint", flat=True).first()
+            if previous is None or (not previous and not checkpoint.data.get("accept_missing_context")):
                 return self._reschedule(claimed, "ANALYSIS_CONTEXT_LOST", now, review=True)
 
         def run(path, frames, roles):
@@ -391,9 +392,18 @@ class FragmentJobProcessor:
 
             for job in jobs:
                 error_code = ""
-                audio_test = job.sequence.session.origin == AUDIO_TEST_ORIGIN
+                session = job.sequence.session
+                audio_test = session.origin == AUDIO_TEST_ORIGIN
+                analysis_unit = job.checkpoint.get("analysis_unit")
+                if analysis_unit is None:
+                    legacy_started = any(key in job.checkpoint for key in
+                                         ("utterances", "next_utterance", "jev_pending", "result"))
+                    analysis_unit = "utterance"
+                    if session.capture_chunk_config and not legacy_started:
+                        analysis_unit = session.capture_chunk_config.get("analysis_unit", "fragment")
                 blocked = (
-                    FragmentJob.objects
+                    (not self.durable or analysis_unit == "utterance")
+                    and FragmentJob.objects
                     .filter(
                         sequence__session_id=job.sequence.session_id,
                         sequence__number__lt=job.sequence.number,
@@ -441,18 +451,15 @@ class FragmentJobProcessor:
                     storage_key=job.storage_key,
                     session_id=str(job.sequence.session_id),
                     sequence=job.sequence.number,
-                    box=job.sequence.session.box,
+                    box=session.box,
                     captured_at=job.sequence.captured_at,
                     attempts=job.attempts,
                     temporal=job.temporal,
                     error_code=error_code,
                     checkpoint=job.checkpoint,
-                    session_start=job.sequence.session.actual_start,
+                    session_start=session.actual_start,
                     audio_test=audio_test,
-                    analysis_unit=job.checkpoint.get("analysis_unit", (
-                        "utterance" if any(key in job.checkpoint for key in
-                            ("utterances", "next_utterance", "jev_pending", "result")) else
-                        "fragment" if job.sequence.session.capture_chunk_config else "utterance")),
+                    analysis_unit=analysis_unit,
                 )
 
         return None
@@ -531,7 +538,7 @@ class FragmentJobProcessor:
             )
         )
 
-        if updated and context is not None and claimed.sequence:
+        if updated and context is not None and claimed.sequence and claimed.analysis_unit == "utterance":
             previous = FragmentJob.objects.filter(
                 sequence__session_id=claimed.session_id, sequence__number=claimed.sequence - 1,
                 state=FragmentJob.State.COMPLETED,

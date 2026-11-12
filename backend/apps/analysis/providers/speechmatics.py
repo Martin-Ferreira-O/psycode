@@ -14,6 +14,13 @@ from .http import ProviderError, SubmissionUncertain, json_body, request
 from .settings import Settings
 
 RATE = 16000
+PSYCHOLOGY_VOCABULARY = (
+    "anhedonia",
+    "autolesión",
+    "ideación suicida",
+    "psicoeducación",
+    "rumiación",
+)
 
 
 def save_job(path, record):
@@ -175,12 +182,20 @@ class BatchClient:
                     wav.writeframes(pcm)
                 record["state"] = "submitting"
                 persist()
+                transcription_config = {
+                    "language": "es",
+                    "model": self.settings.model,
+                    "diarization": "speaker",
+                    "speaker_diarization_config": {"speaker_sensitivity": 0.5, "prefer_current_speaker": False},
+                    "additional_vocab": [{"content": term} for term in PSYCHOLOGY_VOCABULARY],
+                }
+                if self.settings.model == "enhanced":
+                    transcription_config["domain"] = "medical"
                 try:
                     response = request(client, "POST", base + "/jobs/", safe=False, sleep=self.sleep,
                                        deadline=deadline, data={"config": json.dumps({"type": "transcription",
                                        "tracking": {"reference": reference},
-                                       "transcription_config": {"language": "es", "model": self.settings.model,
-                                                                "diarization": "speaker"}})},
+                                       "transcription_config": transcription_config})},
                                        files={"data_file": ("fragment.wav", audio.getvalue(), "audio/wav")})
                     try:
                         job_id = json_body(response).get("id")

@@ -1,7 +1,6 @@
 """Compatibilidad del diagnóstico sintético sin inferir roles clínicos."""
 from dataclasses import replace
 from datetime import datetime, timezone
-import json
 from pathlib import Path
 from unittest import TestCase
 from unittest.mock import Mock
@@ -35,7 +34,7 @@ class BlockAudioTestRolesTests(TestCase):
                 analyzer.evaluate.assert_called_once()
                 self.assertEqual(len(result.decisions), 1)
                 self.assertEqual(alerts.register_alert.call_count, int(expected == AnalysisState.SIGNAL))
-                turns = [json.loads(line) for line in analyzer.evaluate.call_args.args[0]["text"].splitlines()]
-                self.assertEqual(len(turns), 2)
-                if not audio_test or speaker is None:
-                    self.assertTrue(all(turn["role"] == "unknown" for turn in turns))
+                current = analyzer.evaluate.call_args.args[0]
+                self.assertEqual(len(current["turns"]), 2)
+                expected_roles = {"voz1": roles.get("S1", "patient" if audio_test else "unknown")} if speaker else {}
+                self.assertEqual(current["speaker_roles"], expected_roles)

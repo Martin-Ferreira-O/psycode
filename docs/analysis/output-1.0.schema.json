@@ -20,7 +20,7 @@
       "const": "1.0"
     },
     "questions_version": {
-      "const": "habla-signals-1"
+      "enum": ["habla-signals-1", "bloque-signals-1", "bloque-signals-2"]
     },
     "session_id": {
       "type": "string",

@@ -71,6 +71,11 @@ class Command(BaseCommand):
             ).exists():
                 raise CommandError("Se requiere un tramo anterior confirmado y aceptar la ausencia de contexto.")
             data["accept_missing_context"] = True
+        if data.get("review_code") == "JEV_CONTEXT_LIMIT":
+            # El límite se comprobó localmente o el proveedor rechazó la solicitud.
+            data.pop("review_code")
+            if "jev_pending" in data:
+                data["jev_retry_request_id"] = data.pop("jev_pending")["request_id"]
         if "jev_pending" in data and "jev_response" not in data:
             if not options["confirm_provider_not_accepted"]:
                 raise CommandError("Verifique la aceptación de JEV antes de autorizar el reenvío.")

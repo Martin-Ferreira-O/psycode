@@ -1,6 +1,7 @@
 """Adaptadores HTTP. No instancian procesos ni cargan archivos de entorno."""
-import time
+import json
 import re
+import time
 import httpx
 from .errors import JevContextLimit, ProviderError, SubmissionUncertain
 from .domain import JevDecision, Transcription, Word
@@ -30,7 +31,9 @@ class JevAnalizador:
     def evaluate(self, current, history, *, request_id=None):
         self.settings.validate("jev")
         unit = current.get("analysis_unit", "utterance")
-        if unit == "fragment" and len(current["text"]) > self.settings.jev_block_max_chars:
+        state = {"current": current, "history": history}
+        if (unit == "fragment"
+                and len(json.dumps(state, ensure_ascii=False, separators=(",", ":"))) > self.settings.jev_block_max_chars):
             raise JevContextLimit("JEV_CONTEXT_LIMIT")
         own = self.client is None
         client = self.client or httpx.Client(
@@ -38,14 +41,21 @@ class JevAnalizador:
             timeout=30, trust_env=False, follow_redirects=False)
         try:
             # Solo contenido redactado y etiquetas técnicas locales. Sin metadatos de sesión.
-            response = request(client, "POST", self.settings.analysis_endpoint,
-                               safe=False, sleep=self.sleep,
-                               accepted_statuses=(400, 413, 422),
-                               headers={"X-Request-Id": request_id} if request_id else None,
-                               deadline=time.monotonic() + self.settings.timeout,
-                               json={"model": self.settings.analysis_model,
-                                     "state": {"current": current, "history": history},
-                                     "questions": questions(unit)})
+            headers = {"X-Request-Id": request_id} if request_id else {}
+            deadline = time.monotonic() + self.settings.timeout
+            payload = {"model": self.settings.analysis_model, "state": state, "questions": questions(unit)}
+
+            def send():
+                return request(client, "POST", self.settings.analysis_endpoint,
+                               safe=False, sleep=self.sleep, accepted_statuses=(400, 413, 422),
+                               headers=headers, deadline=deadline, json=payload)
+
+            response = send()
+            context_rejected = not response.is_success and self._context_limit(response)
+            if unit == "fragment" and self.settings.analysis_provider == "typesafe" and context_rejected:
+                # El rechazo de contexto es definitivo. Reintentar el mismo bloque completo una vez.
+                headers["TypeSafe-Danger-Zone-Long-Context"] = "true"
+                response = send()
             if not response.is_success:
                 if response.status_code == 413 or self._context_limit(response):
                     raise JevContextLimit("JEV_CONTEXT_LIMIT")
@@ -81,5 +91,5 @@ class JevAnalizador:
         return any(re.search(
             r"context[_ -]?(?:length|window|limit|size).*(?:exceed|long|large|limit)|"
             r"(?:exceed|maximum|max).*(?:context|tokens)|"
-            r"too many tokens|context_length_exceeded|JEV_CONTEXT_LIMIT",
+            r"too many tokens|\b(?:per_question_context|per_request_context|jev_context_limit)\b",
             message, re.IGNORECASE) for message in messages(data))
