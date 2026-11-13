@@ -5,7 +5,7 @@
     "agenda-v1.schema.json": "a59a2a90975bbfaa519df59ccd0f02324add8b8521eb587102cf598ffcc2dfaf",
     "audio-v2.schema.json": "250a20e5287be86c529fd474fa98bb2940306b0e170e0ef66b31fd1b20d43407",
     "control-invalid.json": "570b44f24d31cd872ff50aa117c528521c0ae365e6f1b1a3d4f3d77ca28dfea6",
-    "control-v1.schema.json": "d3c69eab97d49deb71a0e0e2e7e8fd0fcbc58e40c595e94f18995557a6c0e84e",
+    "control-v1.schema.json": "f5a41e624a11a2ed025aca8897244f277be1d10d72a9647f8c36554264f8ff94",
     "control-valid.json": "6243d534b2fb4f90d3f9fb61c07a2a3793680c8d970f6d1e157d491b5c5ca577",
     "smile-native-synthetic.json": "afcec6ac86fcbb932346f3884129fd8c0be397d659b2f4a87c5228c34341be83",
     "smile-native-v1.schema.json": "a61bd796d3d5d3b999f8469677bceab073ab826466fc9664a0edb6adb66051ed",
@@ -19,5 +19,8 @@
     "audio-test-profile-v1.schema.json": "a31e93ab417ff97b16789b7cb29ed453c9b598740fcb89a1d8e8347eda32c82b",
     "audio-test-profile-v2.schema.json": "069bd2d6669da62a816fc3e05676cf710b5763b5a825fd9bd7cfd1f4aa21e587",
     "audio-test-fragment-details-v1.schema.json": "0a7e9dd45d2a79fc54a6d44b526d6ed3e87316a88afc3d12d1b573329d623a8b"
-  }
+  },
+  "extensions": [
+    "agent.config.v1"
+  ]
 }

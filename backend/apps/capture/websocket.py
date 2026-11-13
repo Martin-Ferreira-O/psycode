@@ -26,7 +26,7 @@ from .models import (
     AgentConfiguration,
     ConfigurationState,
 )
-from .protocol import MAX_BYTES, decode, envelope, identifier, instant
+from .protocol import MAX_BYTES, decode, envelope, identifier, instant, configuration, CONFIG_ERRORS, CONFIG_KEYS
 from .server_connectivity import (
     reconcile_connection,
     register_server_disconnect,
@@ -75,6 +75,7 @@ class RemoteControl:
         self.yield_replaced = False
         self.chunk_config_supported = False
         self.chunk_config_v2_supported = False
+        self.config_supported = False
 
     def _lock_identity(self):
         if self.identity.managed:
@@ -171,7 +172,7 @@ class RemoteControl:
             config.state = ConfigurationState.FAILED
             config.error_code = "OBSOLETE_VERSION_REJECTED"
             if not config.effective_config and latest_applied.effective_config:
-                config.effective_config = latest_applied.effective_config
+                config.effective_config = configuration(latest_applied.effective_config, effective=True)
             config.save(update_fields=["state", "effective_config", "error_code", "updated_at"])
             AuditWriter.emit(
                 {
@@ -196,10 +197,19 @@ class RemoteControl:
         if received_only or success is None:
             return config
 
+        error_code = error_code if isinstance(error_code, str) and (not error_code or error_code in CONFIG_ERRORS) else "CONFIG_APPLY_FAILED"
+        if effective_config is not None:
+            try:
+                effective_config = configuration(effective_config, effective=True)
+            except ValueError:
+                effective_config, success, error_code = None, False, "INVALID_EFFECTIVE_CONFIG"
+
         if success:
             if not isinstance(effective_config, dict) or (config.desired_config and not effective_config):
                 success = False
                 error_code = error_code or "MISSING_EFFECTIVE_CONFIG"
+            elif any(effective_config.get(key) != value for key, value in config.desired_config.items()):
+                success, error_code = False, "INVALID_EFFECTIVE_CONFIG"
 
         if success:
             config.state = ConfigurationState.APPLIED
@@ -221,10 +231,8 @@ class RemoteControl:
         else:
             config.state = ConfigurationState.FAILED
             config.error_code = error_code or "CONFIG_APPLY_FAILED"
-            if effective_config is not None and isinstance(effective_config, dict) and effective_config:
-                config.effective_config = effective_config
-            elif not config.effective_config and latest_applied and latest_applied.effective_config:
-                config.effective_config = latest_applied.effective_config
+            if latest_applied:
+                config.effective_config = configuration(latest_applied.effective_config, effective=True)
             config.save(update_fields=["state", "effective_config", "error_code", "updated_at"])
 
         AuditWriter.emit(
@@ -242,6 +250,47 @@ class RemoteControl:
             }
         )
         return config
+
+    def local_configuration(self, data):
+        if not self.config_supported or not self.identity.managed or set(data) != {"base_version", "local_revision", "effective_config"}:
+            raise ValueError("INVALID_MESSAGE")
+        if any(type(data[k]) is not int or not 0 <= data[k] <= 9223372036854775806
+               for k in ("base_version", "local_revision")):
+            raise ValueError("INVALID_MESSAGE")
+        effective = configuration(data["effective_config"], effective=True)
+        if effective.keys() != CONFIG_KEYS:
+            raise ValueError("INVALID_CONFIGURATION")
+        configs = AgentConfiguration.objects.filter(agent_id=self.identity.registry_id)
+        latest = configs.order_by("-version").first()
+        local = configs.filter(source="local").order_by("-version").first()
+        applied = configs.filter(state=ConfigurationState.APPLIED).order_by("-version").first()
+        revision = data["local_revision"]
+        if local and revision < local.local_revision:
+            raise ValueError("CONFIG_VERSION_CONFLICT")
+        if local and revision == local.local_revision:
+            if applied and (data["base_version"] < applied.version or effective != configuration(applied.effective_config, effective=True)):
+                raise ValueError("CONFIG_VERSION_CONFLICT")
+            return {"version": applied.version if applied else 0, "local_revision": revision}
+        # The first report records the initial baseline at revision zero. It
+        # must not obsolete a web request already waiting for that baseline.
+        initial = local is None and revision == 0 and applied is None
+        for pending in configs.filter(state__in=[ConfigurationState.PENDING, ConfigurationState.RECEIVED]):
+            if pending.local_revision != revision:
+                pending.state, pending.error_code = ConfigurationState.FAILED, "CONFIG_VERSION_CONFLICT"
+                pending.save(update_fields=["state", "error_code", "updated_at"])
+                AuditWriter.emit({"event_id": str(uuid4()), "timestamp": timezone.now().isoformat(),
+                    "action": "capture.agent_config.conflict", "outcome": "failure",
+                    "actor_id": self.identity.registry_id, "agent_id": self.identity.registry_id,
+                    "box": self.identity.box, "config_id": str(pending.pk), "version": pending.version,
+                    "local_revision": revision, "error_code": pending.error_code})
+        version = 0 if initial else (latest.version + 1 if latest else 0)
+        row = configs.create(agent_id=self.identity.registry_id, version=version, source="local", local_revision=revision,
+            desired_config=effective, effective_config=effective, state=ConfigurationState.APPLIED)
+        AuditWriter.emit({"event_id": str(uuid4()), "timestamp": timezone.now().isoformat(),
+            "action": "capture.agent_config.local", "outcome": "success", "actor_id": self.identity.registry_id,
+            "agent_id": self.identity.registry_id, "box": self.identity.box,
+            "config_id": str(row.pk), "version": version, "local_revision": revision, "state": row.state})
+        return {"version": row.version, "local_revision": revision}
 
     def poll_configs(self):
         with transaction.atomic():
@@ -265,6 +314,7 @@ class RemoteControl:
                     "config_id": str(latest_pending.config_id),
                     "version": latest_pending.version,
                     "desired_config": latest_pending.desired_config,
+                    "base_local_revision": latest_pending.local_revision,
                 }
             ]
 
@@ -276,6 +326,9 @@ class RemoteControl:
             if "box" in p and p["box"] != box:
                 raise ValueError("BOX_FORBIDDEN")
 
+            if kind == "config_local":
+                return "config_receipt", self.local_configuration(p)
+
             if kind == "config_received":
                 if "config_id" not in p or p.keys() - {"config_id", "box"}:
                     raise ValueError("INVALID_MESSAGE")
@@ -286,17 +339,27 @@ class RemoteControl:
             if kind == "config_ack":
                 if "config_id" not in p:
                     raise ValueError("INVALID_MESSAGE")
-                allowed = {"config_id", "success", "state", "effective_config", "error_code", "box"}
+                allowed = {"config_id", "success", "state", "effective_config", "error_code", "box", "local_revision"}
                 if p.keys() - allowed:
                     raise ValueError("INVALID_MESSAGE")
                 cid = identifier(p["config_id"])
 
-                if p.get("state") in {ConfigurationState.RECEIVED, "received"} and "success" not in p:
+                if "state" in p and (not isinstance(p["state"], str) or p["state"] not in {ConfigurationState.RECEIVED, "received"}):
+                    raise ValueError("INVALID_MESSAGE")
+                if "state" in p and "success" not in p:
                     result = self.acknowledge_config(cid, received_only=True)
                     return "config_receipt", {"config_id": str(cid), "state": result.state}
 
                 if "success" not in p or type(p["success"]) is not bool:
                     raise ValueError("INVALID_MESSAGE")
+                if "local_revision" in p:
+                    if type(p["local_revision"]) is not int or p["local_revision"] < 0:
+                        raise ValueError("INVALID_MESSAGE")
+                    config = AgentConfiguration.objects.filter(pk=cid, agent_id=self.identity.registry_id).first()
+                    local = AgentConfiguration.objects.filter(agent_id=self.identity.registry_id, source="local").order_by("-version").first()
+                    if config and (p["local_revision"] != config.local_revision
+                            or (local and local.local_revision != config.local_revision)):
+                        p = {**p, "success": False, "error_code": "CONFIG_VERSION_CONFLICT"}
 
                 result = self.acknowledge_config(
                     cid,
@@ -407,6 +470,10 @@ class RemoteControl:
         return data
 
     def commands(self):
+        pending = None
+        if self.config_supported:
+            rows = AgentConfiguration.objects.filter(agent_id=self.identity.registry_id)
+            pending = rows.filter(state__in=[ConfigurationState.PENDING, ConfigurationState.RECEIVED]).exists()
         return [
             self.command_payload(c)
             for c in self.service.commands(
@@ -415,6 +482,7 @@ class RemoteControl:
                 chunk_config_v2_supported=self.chunk_config_v2_supported,
                 limit=MAX_COMMAND_BATCH,
                 redelivery_seconds=15,
+                configuration_pending=bool(pending),
             )
         ]
 
@@ -530,6 +598,7 @@ async def agent_websocket(scope, receive, send):
             raise ValueError("CONNECTION_REPLACED")
         smile_check = SMILE_CHECK_CAPABILITY in p["capabilities"] and bool(await db(sources_for, identity))
         config_supported = identity.managed and CONFIG_CAPABILITY in p["capabilities"]
+        control.config_supported = config_supported
         control.chunk_config_v2_supported = {chunk_config.CAPABILITY_V2, "audio.v2"} <= set(p["capabilities"])
         control.chunk_config_supported = (
             control.chunk_config_v2_supported or {chunk_config.CAPABILITY, "audio.v2"} <= set(p["capabilities"])
@@ -592,6 +661,7 @@ async def agent_websocket(scope, receive, send):
                             "BOX_FORBIDDEN",
                             "CONFIG_NOT_FOUND",
                             "INVALID_TECHNICAL_ERROR",
+                            "CONFIG_VERSION_CONFLICT",
                         }
                         else "INVALID_MESSAGE"
                     )

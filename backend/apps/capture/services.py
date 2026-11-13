@@ -243,7 +243,7 @@ class CaptureSessionService:
         return session
 
     def commands(self, box, *, now=None, chunk_config_supported=None, chunk_config_v2_supported=False,
-                 limit=None, reconcile=True, redelivery_seconds=0):
+                 limit=None, reconcile=True, redelivery_seconds=0, configuration_pending=False):
         now, box = _instant(now), _box(box)
         # Recuperación y entrega comparten la transacción: no se publica un
         # inicio vencido, incluso si el programador externo dejó de ejecutar ticks.
@@ -265,6 +265,8 @@ class CaptureSessionService:
             result = []
             for item in commands:
                 session = item.session
+                if item.kind == CommandKind.START and configuration_pending:
+                    continue
                 if (item.kind == CommandKind.START and session.capture_chunk_negotiated is True
                         and chunk_config_supported is not None
                         and (not chunk_config_supported or (chunk_config.overlap(session) == 0

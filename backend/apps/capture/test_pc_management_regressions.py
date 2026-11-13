@@ -65,7 +65,7 @@ class SocketLifecycleTests(TransactionTestCase):
         self.assertFalse(RuntimeLease.objects.filter(name="control:box-3").exists())
 
     def test_pending_config_is_delivered_only_after_capability_negotiation(self):
-        config = AgentConfiguration.objects.create(agent=self.agent, version=1, desired_config={"example": True})
+        config = AgentConfiguration.objects.create(agent=self.agent, version=1, desired_config={'heartbeat_interval': 15})
         sent = self.exercise([("sync", {})])
         messages = [json.loads(event["text"]) for event in sent if event["type"] == "websocket.send"]
         self.assertEqual([message["type"] for message in messages], ["ready", "state"])
@@ -73,13 +73,13 @@ class SocketLifecycleTests(TransactionTestCase):
         config.refresh_from_db()
         self.assertEqual(config.state, ConfigurationState.PENDING)
 
-        ack = {"config_id": str(config.pk), "success": True, "effective_config": {"example": True}}
+        ack = {"config_id": str(config.pk), "success": True, "effective_config": {'heartbeat_interval': 15}}
         sent = self.exercise([("config_ack", ack)], capabilities=[CONFIG_CAPABILITY])
         messages = [json.loads(event["text"]) for event in sent if event["type"] == "websocket.send"]
         self.assertEqual([message["type"] for message in messages], ["ready", "config_sync", "config_receipt"])
         self.assertIn(CONFIG_CAPABILITY, messages[0]["payload"]["capabilities"])
         self.assertEqual(messages[1]["payload"], {
-            "config_id": str(config.pk), "version": 1, "desired_config": {"example": True},
+            "config_id": str(config.pk), "version": 1, "desired_config": {'heartbeat_interval': 15}, "base_local_revision": 0,
         })
         config.refresh_from_db()
         self.assertEqual(config.state, ConfigurationState.APPLIED)
@@ -142,10 +142,10 @@ class SocketLifecycleTests(TransactionTestCase):
 
 
     def test_qa_multiple_pending_versions(self):
-        v1 = AgentConfiguration.objects.create(agent=self.agent, version=1, desired_config={"qa": 10})
-        v2 = AgentConfiguration.objects.create(agent=self.agent, version=2, desired_config={"qa": 20})
-        ack2 = {"config_id": str(v2.pk), "success": True, "effective_config": {"qa": 20}}
-        ack1 = {"config_id": str(v1.pk), "success": True, "effective_config": {"qa": 10}}
+        v1 = AgentConfiguration.objects.create(agent=self.agent, version=1, desired_config={'heartbeat_interval': 10})
+        v2 = AgentConfiguration.objects.create(agent=self.agent, version=2, desired_config={'heartbeat_interval': 20})
+        ack2 = {"config_id": str(v2.pk), "success": True, "effective_config": {'heartbeat_interval': 20}}
+        ack1 = {"config_id": str(v1.pk), "success": True, "effective_config": {'heartbeat_interval': 10}}
         self.exercise([("config_ack", ack2), ("config_ack", ack1)], capabilities=[CONFIG_CAPABILITY])
         v1.refresh_from_db()
         v2.refresh_from_db()
@@ -154,8 +154,8 @@ class SocketLifecycleTests(TransactionTestCase):
 
     def test_qa_configuracion_otro_pc(self):
         other_agent, _ = create_agent(name="Otro PC", box="box-4")
-        other_config = AgentConfiguration.objects.create(agent=other_agent, version=1, desired_config={"qa": 10})
-        ack = {"config_id": str(other_config.pk), "success": True, "effective_config": {"qa": 10}}
+        other_config = AgentConfiguration.objects.create(agent=other_agent, version=1, desired_config={'heartbeat_interval': 10})
+        ack = {"config_id": str(other_config.pk), "success": True, "effective_config": {'heartbeat_interval': 10}}
         sent = self.exercise([("config_ack", ack)])
         messages = [json.loads(e["text"])["type"] for e in sent if e["type"] == "websocket.send"]
         other_config.refresh_from_db()
@@ -163,8 +163,8 @@ class SocketLifecycleTests(TransactionTestCase):
         self.assertEqual(other_config.state, ConfigurationState.PENDING)
 
     def test_qa_ack_duplicado(self):
-        config = AgentConfiguration.objects.create(agent=self.agent, version=1, desired_config={"qa": 10})
-        ack = {"config_id": str(config.pk), "success": True, "effective_config": {"qa": 10}}
+        config = AgentConfiguration.objects.create(agent=self.agent, version=1, desired_config={'heartbeat_interval': 10})
+        ack = {"config_id": str(config.pk), "success": True, "effective_config": {'heartbeat_interval': 10}}
         self.exercise([("config_ack", ack)], capabilities=[CONFIG_CAPABILITY])
         config.refresh_from_db()
         first_updated = config.updated_at
@@ -174,7 +174,7 @@ class SocketLifecycleTests(TransactionTestCase):
         self.assertEqual(config.updated_at, first_updated)
 
     def test_qa_reconexion_pendiente(self):
-        config = AgentConfiguration.objects.create(agent=self.agent, version=1, desired_config={"qa": 10})
+        config = AgentConfiguration.objects.create(agent=self.agent, version=1, desired_config={'heartbeat_interval': 10})
         sent1 = self.exercise([], capabilities=[CONFIG_CAPABILITY])
         sent2 = self.exercise([], capabilities=[CONFIG_CAPABILITY])
         sync1 = [json.loads(e["text"]) for e in sent1 if e["type"] == "websocket.send" and json.loads(e["text"])["type"] == "config_sync"]
@@ -195,7 +195,7 @@ class SocketLifecycleTests(TransactionTestCase):
         self.assertEqual(identity.registry_id, str(self.agent.pk))
 
     def test_qa_configuracion_efectiva(self):
-        config = AgentConfiguration.objects.create(agent=self.agent, version=1, desired_config={"qa": 30})
+        config = AgentConfiguration.objects.create(agent=self.agent, version=1, desired_config={'heartbeat_interval': 15})
         ack = {"config_id": str(config.pk), "success": True}
         self.exercise([("config_ack", ack)], capabilities=[CONFIG_CAPABILITY])
         config.refresh_from_db()
@@ -203,21 +203,21 @@ class SocketLifecycleTests(TransactionTestCase):
         self.assertEqual(config.error_code, "MISSING_EFFECTIVE_CONFIG")
 
     def test_qa_fallo_conserva_configuracion(self):
-        v1 = AgentConfiguration.objects.create(agent=self.agent, version=1, desired_config={"qa": 1})
-        ack1 = {"config_id": str(v1.pk), "success": True, "effective_config": {"qa": 1}}
+        v1 = AgentConfiguration.objects.create(agent=self.agent, version=1, desired_config={'heartbeat_interval': 10})
+        ack1 = {"config_id": str(v1.pk), "success": True, "effective_config": {'heartbeat_interval': 10}}
         self.exercise([("config_ack", ack1)], capabilities=[CONFIG_CAPABILITY])
         v1.refresh_from_db()
         v2 = AgentConfiguration.objects.create(
-            agent=self.agent, version=2, desired_config={"qa": 2}, effective_config=v1.effective_config
+            agent=self.agent, version=2, desired_config={'heartbeat_interval': 20}, effective_config=v1.effective_config
         )
-        ack2 = {"config_id": str(v2.pk), "success": False, "error_code": "QA_APPLY_FAILED"}
+        ack2 = {"config_id": str(v2.pk), "success": False, "error_code": "CONFIG_APPLY_FAILED"}
         self.exercise([("config_ack", ack2)], capabilities=[CONFIG_CAPABILITY])
         v2.refresh_from_db()
         self.assertEqual(v1.state, ConfigurationState.APPLIED)
-        self.assertEqual(v1.effective_config, {"qa": 1})
+        self.assertEqual(v1.effective_config, {'heartbeat_interval': 10})
         self.assertEqual(v2.state, ConfigurationState.FAILED)
-        self.assertEqual(v2.effective_config, {"qa": 1})
-        self.assertEqual(v2.error_code, "QA_APPLY_FAILED")
+        self.assertEqual(v2.effective_config, {'heartbeat_interval': 10})
+        self.assertEqual(v2.error_code, "CONFIG_APPLY_FAILED")
 
 
 class RegistryRegressionTests(APITestCase):

@@ -396,3 +396,6 @@ class AgentConfiguration(models.Model):
         constraints = [
             models.UniqueConstraint(fields=["agent", "version"], name="capture_unique_agent_config_version")
         ]
+
+    source = models.CharField(max_length=8, default="remote", choices=[("remote", "Web"), ("local", "Local")])
+    local_revision = models.PositiveBigIntegerField(default=0)

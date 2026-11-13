@@ -1,4 +1,5 @@
 import json
+import math
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
@@ -22,7 +23,31 @@ TYPES = {
     "config_received",
     "config_ack",
     "config_receipt",
+    "config_local",
 }
+
+CONFIG_CAPABILITY = "agent.config.v1"
+CONFIG_KEYS = {"heartbeat_interval"}
+CONFIG_ERRORS = {"CONFIG_APPLY_FAILED", "CONFIG_VERSION_CONFLICT", "CONFIG_RECOVERY_FAILED",
+                 "INVALID_EFFECTIVE_CONFIG", "MISSING_EFFECTIVE_CONFIG"}
+
+
+def configuration(value, *, effective=False):
+    """Per-PC control only; audio belongs to the global session profile."""
+    legacy = {"audio_chunk_duration", "audio_chunk_overlap"} if effective else set()
+    if not isinstance(value, dict) or value.keys() - CONFIG_KEYS - legacy:
+        raise ValueError("INVALID_CONFIGURATION")
+    value = {key:item for key,item in value.items() if key in CONFIG_KEYS}
+    for key, item in value.items():
+        # Legacy reports may include audio; discard those fields rather than
+        # present a local default as the effective global/session profile.
+        if effective and key == "heartbeat_interval":
+            if type(item) not in (int, float) or not math.isfinite(item) or item <= 0:
+                raise ValueError("INVALID_CONFIGURATION")
+            continue
+        if type(item) is not int or not 1 <= item <= 30:
+            raise ValueError("INVALID_CONFIGURATION")
+    return dict(value)
 
 
 def instant(value):

@@ -2,26 +2,11 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from rest_framework import serializers
 from backend.common.boxes import BOX_PATTERN
-from .models import AgentConfiguration
+from .models import AgentConfiguration, ConfigurationState
+from .protocol import configuration, CONFIG_KEYS
 
 
-ALLOWED_REMOTE_CONFIG_KEYS = {
-    "audio_chunk_duration",
-    "audio_chunk_mode",
-    "audio_chunk_overlap",
-    "analysis_unit",
-    "sample_rate",
-    "chunk_samples",
-    "overlap_samples",
-    "heartbeat_interval",
-    "sync_interval",
-    "log_level",
-    "rtsp_url",
-    "obs_host",
-    "obs_port",
-    "qa",
-    "example",
-}
+ALLOWED_REMOTE_CONFIG_KEYS = CONFIG_KEYS
 
 
 class FragmentSerializer(serializers.Serializer):
@@ -82,6 +67,9 @@ class AgentConfigurationSerializer(serializers.ModelSerializer):
     desired_config = serializers.JSONField(required=True)
     base_version = serializers.IntegerField(write_only=True, required=False, min_value=0)
     expected_version = serializers.IntegerField(write_only=True, required=False, min_value=0)
+    desired_version = serializers.IntegerField(source="version", read_only=True)
+    effective_version = serializers.SerializerMethodField()
+    effective_local_revision = serializers.SerializerMethodField()
 
     class Meta:
         model = AgentConfiguration
@@ -96,6 +84,7 @@ class AgentConfigurationSerializer(serializers.ModelSerializer):
             "updated_at",
             "base_version",
             "expected_version",
+            "desired_version", "effective_version", "effective_local_revision", "source", "local_revision",
         ]
         read_only_fields = [
             "config_id",
@@ -105,35 +94,45 @@ class AgentConfigurationSerializer(serializers.ModelSerializer):
             "error_code",
             "created_at",
             "updated_at",
+            "source", "local_revision",
         ]
 
     def validate_desired_config(self, value):
-        if not isinstance(value, dict):
-            raise serializers.ValidationError("La configuración deseada debe ser un diccionario JSON válido.")
+        try:
+            return configuration(value)
+        except ValueError:
+            raise serializers.ValidationError("Parámetros de configuración inválidos.") from None
 
-        unknown_keys = set(value.keys()) - ALLOWED_REMOTE_CONFIG_KEYS
-        if unknown_keys:
-            raise serializers.ValidationError(
-                f"Parámetros de configuración no permitidos: {', '.join(sorted(unknown_keys))}."
-            )
+    def validate(self, attrs):
+        versions = [self.initial_data[name] for name in ("base_version", "expected_version", "version")
+                    if name in self.initial_data]
+        if any(type(v) is not int or v < 0 or v > 9223372036854775806 for v in versions):
+            raise serializers.ValidationError("Versión base inválida.")
+        if versions and any(v != versions[0] for v in versions):
+            raise serializers.ValidationError("Las versiones base no coinciden.")
+        if versions:
+            attrs["base_version"] = versions[0]
+        return attrs
 
-        for key, item in value.items():
-            if key == "audio_chunk_duration":
-                if isinstance(item, bool) or not isinstance(item, int) or item < 10 or item > 3600:
-                    raise serializers.ValidationError(
-                        "El parámetro audio_chunk_duration debe ser un entero positivo entre 10 y 3600 segundos."
-                    )
-            elif key in {"audio_chunk_overlap", "overlap_samples"}:
-                if isinstance(item, bool) or not isinstance(item, int) or item < 0:
-                    raise serializers.ValidationError(f"El parámetro {key} no puede ser negativo.")
-            elif key in {"sample_rate", "chunk_samples", "heartbeat_interval", "sync_interval", "obs_port", "qa"}:
-                if isinstance(item, bool) or not isinstance(item, int) or item <= 0:
-                    raise serializers.ValidationError(f"El parámetro {key} debe ser un entero positivo.")
-            elif key == "audio_chunk_mode":
-                if item not in {"fixed", "session"}:
-                    raise serializers.ValidationError("El parámetro audio_chunk_mode debe ser 'fixed' o 'session'.")
-            elif key == "analysis_unit":
-                if item not in {"fragment", "block", "session"}:
-                    raise serializers.ValidationError("El parámetro analysis_unit no es válido.")
+    def _applied(self, instance):
+        if "applied" not in self.context:
+            self.context["applied"] = instance.agent.configurations.filter(
+                state=ConfigurationState.APPLIED,effective_config__has_key="heartbeat_interval").order_by("-version").first()
+        return self.context["applied"]
 
-        return value
+    def get_effective_version(self, instance):
+        applied = self._applied(instance)
+        return applied.version if applied else None
+
+    def get_effective_local_revision(self, instance):
+        applied = self._applied(instance)
+        return applied.local_revision if applied else 0
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        applied = self._applied(instance)
+        data["effective_config"] = configuration(applied.effective_config, effective=True) if applied else {}
+        data["desired_config"] = {key:value for key,value in data["desired_config"].items() if key in CONFIG_KEYS}
+        current = instance.agent.configurations.order_by("-version").first()
+        data["version"] = current.version if current else 0
+        return data

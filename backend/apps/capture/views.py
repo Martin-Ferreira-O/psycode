@@ -97,14 +97,16 @@ class AgentConfigurationView(APIView):
 
     def get(self, request, agent_id):
         agent = get_object_or_404(AgentRegistration, pk=agent_id)
-        config = agent.configurations.order_by("-version").first()
+        config = agent.configurations.filter(source="remote").order_by("-version").first()
+        config = config or agent.configurations.order_by("-version").first()
         if not config:
             return success_response(
                 {
                     "version": 0,
+                    "desired_version": 0, "effective_version": None, "effective_local_revision": 0,
                     "desired_config": {},
                     "effective_config": {},
-                    "state": ConfigurationState.APPLIED,
+                    "state": ConfigurationState.PENDING,
                 },
                 "El equipo no tiene configuraciones remotas aún.",
             )
@@ -121,17 +123,11 @@ class AgentConfigurationView(APIView):
         serializer.is_valid(raise_exception=True)
 
         base_version = serializer.validated_data.get("base_version")
-        if base_version is None:
-            base_version = serializer.validated_data.get("expected_version")
-        if base_version is None and "version" in request.data:
-            try:
-                base_version = int(request.data["version"])
-            except (TypeError, ValueError):
-                raise exceptions.ValidationError({"version": ["Versión base inválida."]})
 
         requested_by = getattr(request.user, "pk", None) or getattr(request.user, "id", None)
 
         with transaction.atomic():
+            agent = AgentRegistration.objects.select_for_update().get(pk=agent.pk)
             last_config = agent.configurations.select_for_update().order_by("-version").first()
             current_version = last_config.version if last_config else 0
 
@@ -141,7 +137,6 @@ class AgentConfigurationView(APIView):
             elif (
                 base_version is None
                 and last_config is not None
-                and last_config.state in {ConfigurationState.PENDING, ConfigurationState.RECEIVED}
             ):
                 conflict = True
 
@@ -176,12 +171,15 @@ class AgentConfigurationView(APIView):
                 )
 
             new_version = current_version + 1
+            applied = agent.configurations.filter(state=ConfigurationState.APPLIED).order_by("-version").first()
+            local = agent.configurations.filter(source="local").order_by("-version").first()
 
             new_config = AgentConfiguration.objects.create(
                 agent=agent,
                 requested_by=requested_by,
                 desired_config=serializer.validated_data["desired_config"],
-                effective_config=last_config.effective_config if last_config else {},
+                effective_config=applied.effective_config if applied else {},
+                local_revision=local.local_revision if local else 0,
                 version=new_version,
                 state=ConfigurationState.PENDING,
             )
