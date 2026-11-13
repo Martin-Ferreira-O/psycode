@@ -3,6 +3,7 @@ from backend.apps.capture.pairing import PCEnrollmentView, PCReEnrollmentView, P
 from .views import (
     OperationalConfigView,
     AgentRegistrationListCreateView,
+    AgentRegistrationRenameView,
     AgentRegistrationRevokeView,
     AgentRegistrationRenewView,
     AgentConnectivityHistoryView,
@@ -30,6 +31,7 @@ urlpatterns = [
     path("almacenamiento/liberar", StorageCleanupView.as_view(), name="storage_cleanup"),
     path("configuracion-operativa", OperationalConfigView.as_view(), name="configuracion_operativa"),
     path("pcs", AgentRegistrationListCreateView.as_view(), name="pcs"),
+    path("pcs/<uuid:agent_id>/nombre", AgentRegistrationRenameView.as_view(), name="pcs_rename"),
     path("pcs/<uuid:agent_id>/revocar",AgentRegistrationRevokeView.as_view(),name="pcs_revoke",),
     path("pcs/<uuid:agent_id>/renovar",AgentRegistrationRenewView.as_view(),name="pcs_renew",),
     path("pcs/<uuid:agent_id>/smile/prueba", SmileCollectorCheckView.as_view(), name="pcs_smile_check"),

@@ -3,6 +3,10 @@ from backend.apps.accounts.serializers import StrictSerializer, StrictStringFiel
 from .models import AudioChunkMode, NotificationMode
 
 
+class AgentRegistrationRenameSerializer(StrictSerializer):
+    name = StrictStringField(max_length=100)
+
+
 class StrictBooleanField(serializers.BooleanField):
     def to_internal_value(self, data):
         if not isinstance(data, bool):

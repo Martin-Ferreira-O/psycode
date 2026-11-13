@@ -4,12 +4,17 @@ import { apiPost, leerRespuesta } from '../api.js';
 import { PageHeader } from '../layout.jsx';
 import { Button, Skeleton } from '../ui.jsx';
 import { BoxOptions, EquipoCard, Installer, SalaCard } from '../pcs/cards.jsx';
-import { AccionPCDialog, CrearPCDialog, CredencialPCDialog, HistorialPCDialog } from '../pcs/dialogs.jsx';
+import { AccionPCDialog, CrearPCDialog, CredencialPCDialog, HistorialPCDialog, RenombrarPCDialog } from '../pcs/dialogs.jsx';
 import { PCS_URL, boxNombre, compararEquipos, credencialValida, fecha } from '../pcs/model.js';
 import { useRegistry } from '../pcs/useRegistry.js';
 
-function mensajeMutacion(error, alta) {
+function mensajeMutacion(error, { alta, renombrar }) {
     if (error.estado === 403) return 'Tu usuario no tiene permiso de administrador.';
+    if (renombrar) {
+        if (error.estado === 400) return 'Escribe un nombre válido de hasta 100 caracteres.';
+        if (error.estado === 404) return 'El PC ya no está registrado. Cierra el diálogo y actualiza el listado.';
+        return 'No se pudo confirmar el cambio de nombre. Intenta guardarlo de nuevo.';
+    }
     if (alta) {
         return error.estado === 409
             ? 'No se puede instalar en ese box. Actualiza la pantalla y solicita una revisión técnica si el problema continúa.'
@@ -24,6 +29,7 @@ export default function Pcs({ config }) {
     const [dialog, setDialog] = useState(null);
     const [busy, setBusy] = useState(false);
     const [mutationError, setMutationError] = useState('');
+    const [nombreGuardado, setNombreGuardado] = useState(false);
     const [busqueda, setBusqueda] = useState('');
     const [box, setBox] = useState('');
     const [smileStatus, setSmileStatus] = useState(null);
@@ -32,6 +38,7 @@ export default function Pcs({ config }) {
     const smileRequests = useRef(new Map());
     const listaRef = useRef(null);
     const createRef = useRef(null);
+    const searchRef = useRef(null);
     const originRef = useRef(null);
     const focusedCard = useRef(null);
 
@@ -42,7 +49,7 @@ export default function Pcs({ config }) {
         }
     }, []);
 
-    const { equipos, salas, salasConsultadas, errorSalas, ultimaConsulta, estado, cargando, cargar, actualizarPrueba } =
+    const { equipos, salas, salasConsultadas, errorSalas, ultimaConsulta, estado, cargando, cargar, actualizarPrueba, actualizarNombre } =
         useRegistry({ paused: Boolean(dialog) || busy, beforeCardsChange: captureFocus });
 
     useLayoutEffect(() => {
@@ -85,6 +92,7 @@ export default function Pcs({ config }) {
     function abrir(nextDialog, origen) {
         originRef.current = origen;
         setMutationError('');
+        setNombreGuardado(false);
         setDialog(nextDialog);
     }
 
@@ -94,7 +102,7 @@ export default function Pcs({ config }) {
         setDialog(null);
     }
 
-    async function mutar(path, body, { alta = false, muestraCredencial = false } = {}) {
+    async function mutar(path, body, { alta = false, muestraCredencial = false, renombrar = false } = {}) {
         if (pendingMutation.current) return;
         const controller = new AbortController();
         pendingMutation.current = controller;
@@ -106,10 +114,17 @@ export default function Pcs({ config }) {
             const data = await leerRespuesta(await apiPost(path, body, { signal: controller.signal }));
             if (pendingMutation.current !== controller) return;
             if (muestraCredencial && !credencialValida(data)) throw new Error('Código de instalación inválido');
+            if (renombrar) {
+                const pc = dialog.pc;
+                if (data.agent_id !== pc.agent_id || typeof data.name !== 'string' || !data.name) throw new Error('Nombre del PC inválido');
+                if (!coincide(pc.box, `${data.name} ${pc.agent_id} ${boxNombre(pc.box)}`)) originRef.current = searchRef.current;
+                actualizarNombre(pc.agent_id, data.name);
+                setNombreGuardado(true);
+            }
             setDialog(muestraCredencial ? { kind: 'credencial', data } : null);
             cargar({ reemplazar: true });
         } catch (error) {
-            if (pendingMutation.current === controller) setMutationError(mensajeMutacion(error, alta));
+            if (pendingMutation.current === controller) setMutationError(mensajeMutacion(error, { alta, renombrar }));
         } finally {
             window.clearTimeout(timer);
             if (pendingMutation.current === controller) {
@@ -216,7 +231,7 @@ export default function Pcs({ config }) {
                 <div className="pcs-filtros">
                     <label className="pcs-campo pcs-busqueda">
                         Buscar sala o equipo
-                        <input id="buscarPC" type="search" placeholder="Sala, nombre o identificador" maxLength={100}
+                        <input id="buscarPC" ref={searchRef} type="search" placeholder="Sala, nombre o identificador" maxLength={100}
                             value={busqueda} onChange={event => setBusqueda(event.target.value)} />
                     </label>
                     <label className="pcs-campo">
@@ -238,6 +253,7 @@ export default function Pcs({ config }) {
                     {statusText[status]}
                 </div>
                 {estado === 'error' && <Button id="reintentarPCs" className="pcs-reintento" disabled={cargando} onClick={() => cargar()}>Reintentar</Button>}
+                {nombreGuardado && <div className="pcs-estado" role="status" data-estado="exito">Nombre del PC guardado.</div>}
                 {smileStatus && (
                     <div id="estadoSmilePCs" className="pcs-estado" role="status" data-estado={smileStatus.error ? 'error' : 'exito'}>
                         {smileStatus.text}
@@ -254,7 +270,7 @@ export default function Pcs({ config }) {
                     ))}
                     {equiposVisibles.map(pc => (
                         <EquipoCard key={pc.agent_id} pc={pc} testing={testing.includes(pc.agent_id)} onTest={probarSmile}
-                            onAction={(target, action, origen) => abrir({ kind: 'accion', pc: target, action }, origen)}
+                            onAction={(target, action, origen) => abrir({ kind: action === 'renombrar' ? 'renombrar' : 'accion', pc: target, action }, origen)}
                             onHistory={(target, origen) => abrir({ kind: 'historial', pc: target }, origen)} />
                     ))}
                     {salasVisibles.map(sala => (
@@ -271,6 +287,10 @@ export default function Pcs({ config }) {
             {dialog?.kind === 'accion' && (
                 <AccionPCDialog pc={dialog.pc} action={dialog.action} busy={busy} error={mutationError}
                     onClose={cerrar} onConfirm={confirmar} returnFocusRef={originRef} />
+            )}
+            {dialog?.kind === 'renombrar' && (
+                <RenombrarPCDialog pc={dialog.pc} busy={busy} error={mutationError} onClose={cerrar} returnFocusRef={originRef}
+                    onSubmit={body => mutar(`${PCS_URL}/${encodeURIComponent(dialog.pc.agent_id)}/nombre`, body, { renombrar: true })} />
             )}
             <CredencialPCDialog config={config} credential={dialog?.kind === 'credencial' ? dialog.data : null}
                 onClose={cerrar} onExpire={vencerCredencial} returnFocusRef={originRef} />

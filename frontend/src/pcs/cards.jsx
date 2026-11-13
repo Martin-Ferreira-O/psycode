@@ -90,6 +90,14 @@ function BotonRenovar({ pc, instalacion, onAction }) {
     );
 }
 
+function BotonCambiarNombre({ pc, onAction }) {
+    return (
+        <Button aria-label={`Cambiar nombre de ${pc.name}`} onClick={event => onAction(pc, 'renombrar', event.currentTarget)}>
+            Cambiar nombre
+        </Button>
+    );
+}
+
 function InstalacionInicial({ pc, onAction }) {
     return (
         <>
@@ -100,6 +108,7 @@ function InstalacionInicial({ pc, onAction }) {
                     : 'El técnico debe vincular el PC con el código temporal.'}
             </p>
             <footer className="pc-tarjeta-pie pc-pendiente-acciones">
+                <BotonCambiarNombre pc={pc} onAction={onAction} />
                 <BotonRenovar pc={pc} instalacion onAction={onAction} />
                 <Button variant="danger" aria-label={`Cancelar instalación de ${pc.name}`}
                     onClick={event => onAction(pc, 'cancelar-instalacion', event.currentTarget)}>
@@ -220,6 +229,7 @@ export function EquipoCard({ pc, onAction, onHistory, onTest, testing }) {
                         <Button variant="secondary" aria-label={`Ver historial de ${pc.name}`} onClick={event => onHistory(pc, event.currentTarget)}>
                             Ver historial
                         </Button>
+                        <BotonCambiarNombre pc={pc} onAction={onAction} />
                         <details className="pc-mantenimiento">
                             <summary>Instalación y acceso</summary>
                             <div className="pcs-acciones">
