@@ -185,6 +185,22 @@
 }
 
 .ui-table-scroll .ui-table td { border-bottom: 1px solid var(--borde); }
+.ui-table:is(.monitor-table-alerts, .tabla-usuarios) td { white-space: nowrap; }
+
+.ui-table:is(.monitor-table-alerts, .tabla-usuarios) td > .ui-badge {
+    width: var(--table-badge-width, 7em);
+    justify-content: center;
+}
+
+#tablaContenedor td:nth-child(4) {
+    --table-badge-width: 6em;
+}
+
+#tablaEvaluacionesContenedor td:nth-child(2),
+.tabla-usuarios td:nth-child(4) {
+    --table-badge-width: 9em;
+}
+
 .ui-table-scroll .ui-table tr:last-child td { border-bottom: 0; }
 .ui-table-scroll .ui-table tbody tr { background: var(--row-bg, var(--blanco)); }
 .ui-table-scroll .ui-table tbody tr:nth-child(even) { --row-bg: #f8fafc; }
