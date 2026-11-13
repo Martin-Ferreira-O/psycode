@@ -42,7 +42,7 @@ class PCPanelTests(APITestCase):
         routes = [('/api/v1/pcs/panel', 'get'), ('/api/v1/pcs', 'get'), ('/api/v1/pcs/salas', 'get'), ('/api/v1/pcs/alta', 'post'), ('/api/v1/pcs', 'post'),
                   (INSTALLER_URL, 'get'), (INSTALLER_URL + '/sha256', 'get')]
         routes += [(f'/api/v1/pcs/{self.pc.pk}/{action}', method) for action, method in
-                   [('revocar', 'post'), ('renovar', 'post'), ('vinculacion', 'post'), ('cancelar-instalacion', 'post'), ('historial', 'get')]]
+                   [('nombre', 'post'), ('revocar', 'post'), ('renovar', 'post'), ('vinculacion', 'post'), ('cancelar-instalacion', 'post'), ('historial', 'get')]]
         for actor, expected in [(None, 401), (self.supervisor, 403)]:
             client = APIClient()
             if actor:
@@ -69,6 +69,37 @@ class PCPanelTests(APITestCase):
         self.assertContains(self.client.get(INSTALLER_URL), 'no está disponible', status_code=404)
         self.assertEqual(self.client.get('/gestion-pcs').url, '/api/v1/pcs/panel')
 
+    def test_admin_can_rename_pc_without_changing_registration(self):
+        self.client.force_authenticate(self.admin)
+        self.pc.smile_room = self.room
+        self.pc.box = self.room.box
+        self.pc.save(update_fields=['smile_room', 'box'])
+        registration = AgentRegistration.objects.filter(pk=self.pc.pk)
+        before = registration.values().get()
+
+        response = self.client.post(f'/api/v1/pcs/{self.pc.pk}/nombre', {'name': '  PC Recepción  '}, format='json')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['data'], {'agent_id': str(self.pc.pk), 'name': 'PC Recepción'})
+        after = registration.values().get()
+        self.assertEqual(after.pop('name'), 'PC Recepción')
+        self.assertGreaterEqual(after.pop('updated_at'), before.pop('updated_at'))
+        before.pop('name')
+        self.assertEqual(after, before)
+        listed = self.client.get('/api/v1/pcs').data['data']
+        self.assertEqual(next(pc['name'] for pc in listed if pc['agent_id'] == str(self.pc.pk)), 'PC Recepción')
+
+    def test_rename_validates_name_and_requires_existing_pc(self):
+        self.client.force_authenticate(self.admin)
+        url = f'/api/v1/pcs/{self.pc.pk}/nombre'
+        for body in [{}, {'name': '   '}, {'name': 'x' * 101}, {'name': 123}, {'name': 'Otro', 'box': 'box-4'}]:
+            with self.subTest(body=body):
+                self.assertEqual(self.client.post(url, body, format='json').status_code, 400)
+        original = self.pc.name
+        self.pc.refresh_from_db()
+        self.assertEqual(self.pc.name, original)
+        self.assertEqual(self.client.post(f'/api/v1/pcs/{uuid4()}/nombre', {'name': 'Otro'}, format='json').status_code, 404)
+
     def test_browser_can_download_before_and_after_enrollment_and_still_pair(self):
         self.publish_installer()
         client = APIClient(enforce_csrf_checks=True)
@@ -92,6 +123,7 @@ class PCPanelTests(APITestCase):
         self.assertFalse(PCPairingCode.objects.exists())
         self.assertEqual(AgentRegistration.objects.count(), 1)
         self.assertEqual(client.post('/api/v1/pcs/alta', {'name': 'PC inseguro'}, format='json').status_code, 403)
+        self.assertEqual(client.post(f'/api/v1/pcs/{self.pc.pk}/nombre', {'name': 'PC inseguro'}, format='json').status_code, 403)
         good = client.post('/api/v1/pcs/alta', {'name': 'PC permitido', 'room_id': str(self.room.pk)}, format='json', HTTP_X_CSRFTOKEN=client.cookies['csrftoken'].value)
         self.assertEqual(good.status_code, 201)
         self.assertNotIn('api_key', good.data['data'])

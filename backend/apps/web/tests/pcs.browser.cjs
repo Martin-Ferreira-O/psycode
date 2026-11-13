@@ -51,6 +51,36 @@ const ok = data => ({ status: 200, contentType: 'application/json', body: JSON.s
         const [installedBounds, freeBounds] = await Promise.all([installedBox.boundingBox(), freeBox.boundingBox()]);
         assert.equal(installedBounds.y, freeBounds.y);
         assert.ok(freeBounds.height < installedBounds.height, 'La tarjeta vacía conserva su altura natural');
+
+        const search = page.getByRole('searchbox', { name: 'Buscar sala o equipo' });
+        await search.fill('PC Box 3');
+        await page.setViewportSize({ width: 375, height: 812 });
+        const rename = installedBox.getByRole('button', { name: 'Cambiar nombre de PC Box 3' });
+        const renameDialog = page.getByRole('dialog', { name: 'Cambiar nombre del PC' });
+        const nameInput = renameDialog.getByRole('textbox', { name: 'Nombre del PC' });
+        await rename.focus();
+        await page.keyboard.press('Enter');
+        assert.equal(await nameInput.inputValue(), 'PC Box 3');
+        assert.equal(await nameInput.evaluate(el => el === document.activeElement), true);
+        await nameInput.fill('   ');
+        await renameDialog.getByRole('button', { name: 'Guardar nombre' }).click();
+        await renameDialog.getByRole('alert').getByText('Escribe un nombre para el PC.').waitFor();
+        await page.keyboard.press('Escape');
+        assert.equal(await rename.evaluate(el => el === document.activeElement), true);
+        await rename.click();
+        assert.equal(await nameInput.inputValue(), 'PC Box 3');
+        const installedId = await installedBox.getAttribute('data-agent-id');
+        await nameInput.fill('  PC Recepción  ');
+        await nameInput.press('Enter');
+        await page.getByRole('status').getByText('Nombre del PC guardado.').waitFor();
+        assert.equal(await search.evaluate(el => el === document.activeElement), true);
+        await search.fill('PC Recepción');
+        await installedBox.getByRole('heading', { name: 'PC Recepción' }).waitFor();
+        assert.equal(await installedBox.getAttribute('data-agent-id'), installedId);
+        await page.reload();
+        await installedBox.getByRole('heading', { name: 'PC Recepción' }).waitFor();
+        await page.setViewportSize({ width: 1440, height: 1100 });
+
         await createInBox.click();
         await page.locator('#guardarPC').click();
         await page.locator('#dialogoCredencialPC[open]').waitFor();
@@ -58,8 +88,12 @@ const ok = data => ({ status: 200, contentType: 'application/json', body: JSON.s
         await freeBox.getByText('Pendiente de instalación').waitFor();
         assert.equal(await freeBox.locator('.pc-datos, .pc-flujo-bloque, summary').count(), 0);
         assert.equal(await freeBox.getByRole('button', { name: /Ver historial/ }).count(), 0);
+        await freeBox.getByRole('button', { name: 'Cambiar nombre de Box 4', exact: true }).click();
+        await nameInput.fill('PC pendiente');
+        await nameInput.press('Enter');
+        await freeBox.getByRole('heading', { name: 'PC pendiente' }).waitFor();
         if (output) await page.screenshot({ path: `${output}/pcs-tarjetas-mixtas.png` });
-        await freeBox.getByRole('button', { name: 'Cancelar instalación de Box 4' }).click();
+        await freeBox.getByRole('button', { name: 'Cancelar instalación de PC pendiente' }).click();
         await page.locator('#confirmarAccionPC').click();
         await createInBox.waitFor();
         // El sidebar usa exactamente los estilos compartidos con Configuración operativa.

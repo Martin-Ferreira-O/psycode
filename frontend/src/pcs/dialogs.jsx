@@ -71,6 +71,47 @@ export function CrearPCDialog({ initialBox, boxes, salasConsultadas, busy, error
     );
 }
 
+export function RenombrarPCDialog({ pc, busy, error, onClose, onSubmit, returnFocusRef }) {
+    const [name, setName] = useState(pc.name);
+    const [validacion, setValidacion] = useState('');
+    const nombreRef = useRef(null);
+
+    function submit(event) {
+        event.preventDefault();
+        if (busy) return;
+        const nombre = name.trim();
+        if (!nombre) {
+            setValidacion('Escribe un nombre para el PC.');
+            nombreRef.current.focus();
+            return;
+        }
+        setValidacion('');
+        onSubmit({ name: nombre });
+    }
+
+    return (
+        <Dialog open onClose={onClose} className="pcs-dialogo" title="Cambiar nombre del PC"
+            busy={busy} aria-describedby="boxRenombrarPC" initialFocusRef={nombreRef} returnFocusRef={returnFocusRef}>
+            <h2>Cambiar nombre del PC</h2>
+            <p id="boxRenombrarPC" className="pcs-ayuda">{boxNombre(pc.box)}</p>
+            <form onSubmit={submit}>
+                <label className="pcs-campo">
+                    Nombre del PC
+                    <input ref={nombreRef} name="name" required maxLength={100} autoComplete="off"
+                        value={name} disabled={busy} aria-invalid={Boolean(validacion) || undefined}
+                        aria-describedby={validacion || error ? 'errorRenombrarPC' : undefined}
+                        onChange={event => { setName(event.target.value); setValidacion(''); }} />
+                </label>
+                {(validacion || error) && <p id="errorRenombrarPC" className="pcs-error" role="alert">{validacion || error}</p>}
+                <div className="pcs-dialogo-acciones">
+                    <Button disabled={busy} onClick={onClose}>Cancelar</Button>
+                    <Button type="submit" variant="primary" busy={busy} busyLabel="Guardando…">Guardar nombre</Button>
+                </div>
+            </form>
+        </Dialog>
+    );
+}
+
 function detalleAccion(pc, accion) {
     if (accion === 'cancelar-instalacion') {
         return {

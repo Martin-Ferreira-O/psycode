@@ -138,5 +138,9 @@ export function useRegistry({ paused, beforeCardsChange }) {
         setEquipos(current => current.map(pc => pc.agent_id === agentId ? { ...pc, smile_check: check } : pc));
     }
 
-    return { equipos, salas, salasConsultadas, errorSalas, ultimaConsulta, estado, cargando, cargar, actualizarPrueba };
+    function actualizarNombre(agentId, name) {
+        setEquipos(current => current.map(pc => pc.agent_id === agentId ? { ...pc, name } : pc));
+    }
+
+    return { equipos, salas, salasConsultadas, errorSalas, ultimaConsulta, estado, cargando, cargar, actualizarPrueba, actualizarNombre };
 }

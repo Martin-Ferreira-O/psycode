@@ -5,7 +5,7 @@ from collections import defaultdict
 from datetime import date
 import re
 
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import NotFound, ValidationError
 from backend.common.boxes import is_box, registrable_boxes
 from backend.apps.capture.legacy_registry import sync_legacy_registry, historical_ids
 from backend.apps.capture.pairing import discard_abandoned_enrollments
@@ -37,6 +37,7 @@ from backend.common.responses import success_response
 from backend.apps.agenda.collector_check import identity_for, request_check, snapshot, sources_for
 from backend.apps.capture.agent_events import BoundedJSONParser
 
+from .serializers import AgentRegistrationRenameSerializer
 from .services import OperationalService
 
 
@@ -222,6 +223,18 @@ class SmileCollectorCheckView(APIView):
         if not isinstance(data, dict) or set(data) != {"source"} or not isinstance(data["source"], str):
             raise ValidationError("Indica la fuente del colector.")
         return success_response(request_check(agent_id, data["source"]), "Prueba Smile solicitada", status=202)
+
+
+class AgentRegistrationRenameView(APIView):
+    permission_classes = [IsAuthenticated, IsActiveAdmin]
+
+    def post(self, request, agent_id):
+        serializer = AgentRegistrationRenameSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        name = serializer.validated_data["name"]
+        if not AgentRegistration.objects.filter(pk=agent_id).update(name=name, updated_at=timezone.now()):
+            raise NotFound()
+        return success_response({"agent_id": str(agent_id), "name": name}, "Nombre del PC actualizado")
 
 
 class AgentRegistrationRevokeView(APIView):
