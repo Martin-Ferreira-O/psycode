@@ -110,15 +110,17 @@ Las variables y sus valores predeterminados también están en la [sección del 
 | `PSYCODE_EXTERNAL_PROCESSING_ENABLED` | `0`; solo `1` permite envíos externos, antes de leer el audio. |
 | `SPEECHMATICS_API_KEY` | Sin valor; necesaria para Speechmatics real. |
 | `SPEECHMATICS_REGION` | `eu1`; admite `eu1`, `us1`, `au1`. |
-| `SPEECHMATICS_MODEL` | `enhanced`; también `standard`. |
 | `SPEECHMATICS_POLL_INTERVAL` | 2 segundos; rango 0,1–30. |
 | `PSYCODE_PROVIDER_TIMEOUT` | 300 segundos por etapa; rango 1–540. Borrado: hasta 30 segundos adicionales. |
 | `JEV_PROVIDER` | `auto`, `typesafe` u `openrouter`. Auto prefiere Typesafe si existen ambas claves. |
 | `TYPESAFE_API_KEY` | Sin valor; necesaria si se elige Typesafe. |
-| `JEV_MODEL` | `jev-1.13.0`, modelo explícito de Typesafe. |
 | `OPENROUTER_API_KEY` | Sin valor; necesaria si se elige OpenRouter. |
-| `OPENROUTER_JEV_MODEL` | `typesafe/jev-1.13`, alias versionado o versión fechada exacta. |
 | `PSYCODE_REDACT_TERMS` | `[]`, lista JSON de nombres/direcciones conocidos localmente. |
+
+En **Configuración operativa** se eligen Jev (1.14 por defecto o 1.13) y
+Speechmatics Batch (Enhanced por defecto, Standard, Melia 1 u Oak 1 Medical).
+El trabajador consulta la selección al iniciar cada operación de proveedor.
+Los trabajos de Speechmatics ya enviados conservan su modelo.
 
 Solo se requiere la clave de la cuenta elegida para JEV. Los destinos están fijados en el adaptador: Typesafe System One o Decisions API de OpenRouter. No se cambia automáticamente de proveedor ante un fallo.
 

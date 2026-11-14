@@ -2,6 +2,7 @@
 import io
 import json
 from datetime import datetime, timezone
+from backend.apps.operational.models import OperationalConfiguration
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 from rest_framework.exceptions import AuthenticationFailed
@@ -21,8 +22,14 @@ from .services import AgendaService
 ROOMS = [dict(box='box-3', name='BOX DE ATENCIÓN 3', smile_box_id='77'),
          dict(box='box-18', name='BOX DE ATENCIÓN 18', smile_box_id='91')]
 
-@override_settings(CAPTURE_AGENDA_SOURCES=SOURCES, CAPTURE_AGENTS=AGENTS)
+@override_settings( CAPTURE_AGENTS=AGENTS)
 class CatalogueTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        config = OperationalConfiguration.load()
+        config.smile_legacy_sources = SOURCES
+        config.save(update_fields=["smile_legacy_sources"])
+
     def setUp(self):
         self.identity = AgentIdentity('agent-3','box-3')
 

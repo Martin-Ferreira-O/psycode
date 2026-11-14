@@ -247,24 +247,6 @@ CAPTURE_FINALIZATION_TIMEOUT_SECONDS = positive_int("CAPTURE_FINALIZATION_TIMEOU
 # Plazo de recepción, independiente de la ventana autorizada para capturar.
 CAPTURE_RECEPTION_GRACE_SECONDS = positive_int("CAPTURE_RECEPTION_GRACE_SECONDS", 7 * 24 * 60 * 60)
 
-# Colectores designados por el servidor; sin elección entre PCs.
-try:
-    CAPTURE_AGENDA_SOURCES = json.loads(os.getenv("CAPTURE_AGENDA_SOURCES", "{}"))
-    agenda_boxes = set()
-    if not isinstance(CAPTURE_AGENDA_SOURCES, dict):
-        raise ValueError()
-    for source, scope in CAPTURE_AGENDA_SOURCES.items():
-        if (not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", source) or not isinstance(scope, dict)
-                or set(scope) != {"collector_id", "boxes"} or scope["collector_id"] not in CAPTURE_AGENTS
-                or not isinstance(scope["boxes"], list) or not scope["boxes"]
-                or len(set(scope["boxes"])) != len(scope["boxes"])
-                or any(not is_box(box) for box in scope["boxes"])
-                or agenda_boxes.intersection(scope["boxes"])):
-            raise ValueError()
-        agenda_boxes.update(scope["boxes"])
-except (TypeError, ValueError):
-    raise ImproperlyConfigured("CAPTURE_AGENDA_SOURCES inválido o con fuentes superpuestas.") from None
-
 # Audio, checkpoints SQL y journals deben residir en volúmenes cifrados.
 ANALYSIS_STATE_ROOT = local_path("ANALYSIS_STATE_ROOT", ".local/analysis")
 SENSITIVE_STORAGE_ENCRYPTION_REQUIRED = env_bool("SENSITIVE_STORAGE_ENCRYPTION_REQUIRED", not DEBUG)

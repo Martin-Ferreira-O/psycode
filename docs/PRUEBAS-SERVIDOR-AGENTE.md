@@ -193,7 +193,6 @@ MONGODB_URI=
 EMAIL_BACKEND=file
 NOTIFICATIONS_ENABLED=false
 PSYCODE_EXTERNAL_PROCESSING_ENABLED=0
-CAPTURE_AGENDA_SOURCES={}
 ```
 
 Genera una identidad solo para esta prueba, desde consultoria-bn:
@@ -231,7 +230,6 @@ STREAM_URL=rtsp://127.0.0.1:8554/sala3
 AGENT_STATE_ROOT=<ruta absoluta nueva y privada para esta prueba>
 CHUNK_DURATION=10
 CHUNK_OVERLAP=1
-SMILE_SOURCE=
 ```
 
 Sustituye los valores entre `<...>` y usa la URL RTSP que realmente publique

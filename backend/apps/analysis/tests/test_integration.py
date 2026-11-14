@@ -28,7 +28,7 @@ from backend.apps.analysis.services import AnalysisService
 from backend.config.composition import analysis_worker
 
 
-def answer(level=None, context="afirmacion_propia", model="jev-1.13.0"):
+def answer(level=None, context="afirmacion_propia", model="jev-1.14.0"):
     answers = {"context": {"type": "choice", "choice": context, "confidence": 1.,
                            "probabilities": {k: float(k == context) for k in CONTEXT_CHOICES}}}
     answers.update({f"signal_{i}": {"type": "noul", "noul": .9 if i == level else .1}
@@ -226,7 +226,7 @@ class IntegrationTests(SimpleTestCase):
         self.assertEqual([r.method for r in self.requests], ["POST", "GET", "GET", "DELETE"])
         self.assertEqual(self.requests[2].url.params["format"], "json-v2")
         self.assertEqual(self.requests[-1].url.params["force"], "true")
-        self.assertEqual(result.decisions[0].model, "jev-1.13.0")
+        self.assertEqual(result.decisions[0].model, "jev-1.14.0")
         self.assertEqual(result.to_dict()["state"], "senal")
         journal = next((self.root / "jobs").glob("*.json")).read_text()
         self.assertNotIn(self.text, journal)
@@ -445,7 +445,7 @@ class ContractTests(SimpleTestCase):
                 payload = answer()
                 mutation(payload)
                 with self.assertRaises(ProviderError):
-                    validate_response(payload, "jev-1.13.0")
+                    validate_response(payload, "jev-1.14.0")
 
     def test_openrouter_dated_alias_and_optional_metrics(self):
         payload = answer(model="typesafe/jev-1.13-20260917")

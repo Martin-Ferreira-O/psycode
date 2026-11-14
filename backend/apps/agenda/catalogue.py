@@ -10,11 +10,19 @@ from django.utils import timezone
 
 from backend.apps.capture.models import AgentRegistration
 from backend.apps.capture.storage import FragmentError
+from backend.apps.operational.models import OperationalConfiguration, SmileFormat
 from .models import AgendaCollection, SmileRoom, SmileCatalogState
 
 
 def configured_source(identity, source):
-    config = settings.CAPTURE_AGENDA_SOURCES.get(source)
+    profile = OperationalConfiguration.objects.select_related("smile_collector").filter(pk=1).first()
+    if profile and profile.smile_collector_id and source == profile.smile_source:
+        agent = profile.smile_collector
+        if (not agent.is_active or str(agent.pk) != identity.registry_id or agent.box != identity.box):
+            raise FragmentError('AGENDA_SCOPE_FORBIDDEN', 403)
+        return {"collector_id": str(agent.pk), "legacy_id": agent.legacy_agent_id,
+                "boxes": profile.smile_boxes, "format": profile.smile_format, "profile_revision": profile.smile_revision}
+    config = profile.smile_legacy_sources.get(source) if profile else None
     if not config:
         raise FragmentError('AGENDA_SCOPE_FORBIDDEN', 403)
     adopted = (getattr(identity, 'managed', False) and AgentRegistration.objects.filter(
@@ -35,14 +43,17 @@ def source_scope(identity, source):
         return {**config, 'room_mapping': {}}
     rooms = list(SmileRoom.objects.filter(source=source, available=True))
     assigned = set(AgentRegistration.objects.filter(smile_room__source=source).values_list('box', flat=True))
-    authorized = set(config['boxes']) | assigned
+    authorized = set(config['boxes'])
+    if config.get("format") != SmileFormat.EXCEL:
+        authorized.update(assigned)
     mapping = {room.box: room.smile_box_id for room in rooms if room.box in authorized}
     return {**config, 'boxes': sorted(mapping, key=lambda box: int(box[4:])), 'room_mapping': mapping}
 
 
 def descriptor(collection):
     return {'collection_id': str(collection.collection_id), 'generation': collection.pk, 'source': collection.source,
-            'boxes': collection.scope['boxes'], 'formats': ['smile.excel.v1', 'smile.json.v1'],
+            'boxes': collection.scope['boxes'], 'formats': ([collection.scope['format']] if 'format' in collection.scope
+                                                           else ['smile.excel.v1', 'smile.json.v1']),
             'catalogue_supported': True, 'room_mapping': collection.scope.get('room_mapping', {})}
 
 
@@ -73,7 +84,6 @@ def publish(identity, data):
     source = data['source']
     if not isinstance(source, str):
         raise FragmentError('SMILE_CATALOG_INVALID', 400)
-    configured_source(identity, source)
     rooms = validate_rooms(data['rooms'])
     try:
         from uuid import UUID
@@ -82,10 +92,13 @@ def publish(identity, data):
         raise FragmentError('SMILE_CATALOG_INVALID', 400) from None
     from backend.apps.capture.pairing import registration_lock
     registration_lock()
+    config = configured_source(identity, source)
     collection = AgendaCollection.objects.select_for_update().filter(
         collection_id=collection_id, source=source, agent_id__in=collector_ids(identity, source)).first()
     if collection is None:
         raise FragmentError('AGENDA_COLLECTION_NOT_FOUND', 404)
+    if collection.scope.get("profile_revision") != config.get("profile_revision"):
+        raise FragmentError("AGENDA_CONFIGURATION_CHANGED", 409)
     digest = hashlib.sha256(json.dumps(rooms, sort_keys=True).encode()).hexdigest()
     state, _ = SmileCatalogState.objects.get_or_create(source=source)
     state = SmileCatalogState.objects.select_for_update().get(pk=source)
@@ -113,11 +126,11 @@ def publish(identity, data):
     state.generation, state.digest, state.synced_at = collection.pk, digest, now
     state.save()
     scope = source_scope(identity, source)
-    collection.scope = {'boxes': scope['boxes'], 'room_mapping': scope['room_mapping']}
+    collection.scope.update(boxes=scope['boxes'], room_mapping=scope['room_mapping'])
     collection.save(update_fields=['scope'])
     return descriptor(collection)
 
 
 def collector_ids(identity, source):
     config = configured_source(identity, source)
-    return {identity.agent_id, config['collector_id']}
+    return {identity.agent_id, config['collector_id'], config.get('legacy_id')} - {None}

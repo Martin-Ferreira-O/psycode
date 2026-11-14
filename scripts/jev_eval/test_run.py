@@ -7,7 +7,9 @@ import httpx
 from backend.apps.analysis.providers.jev_contract import block_questions
 from backend.apps.analysis.providers.settings import Settings
 
-from .run import MODEL, evaluate, metric, synthetic_cases
+from .run import evaluate, metric, synthetic_cases
+
+MODEL = "jev-1.14.0"
 from .variants import FOLLOWUP, previous_context, revise, response_context
 
 

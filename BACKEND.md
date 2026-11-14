@@ -118,7 +118,7 @@ alerts_service (composition)
 
 `settings.py` exige `DJANGO_DEBUG` explícito. Sin `DJANGO_SECRET_KEY` y con debug, genera una clave en `.local/django-secret-key`. Fuera de debug la clave es obligatoria y el origen del frontend tiene que ser HTTPS. CORS queda limitado a ese origen y a `/api/v1/`.
 
-`CAPTURE_AGENTS` es el registro viejo de agentes: un JSON de `id -> {box, token_sha256}`. Puede ir vacío. Los PCs creados desde la pantalla se leen de `AgentRegistration` y tienen prioridad. `CAPTURE_AGENDA_SOURCES` dice qué agente recolecta qué boxes. Los boxes válidos son `box-3` … `box-7`.
+`CAPTURE_AGENTS` es el registro viejo de agentes: un JSON de `id -> {box, token_sha256}`. Puede ir vacío. Los PCs creados desde la pantalla se leen de `AgentRegistration` y tienen prioridad. **Configuración operativa** guarda el colector Smile y el alcance del reporte en SQL.
 
 ### `common`
 
@@ -238,7 +238,7 @@ La matriz de lenguaje está en `matrix.json`. Una señal de riesgo 1–3 llama a
 
 1. Un administrador registra el PC. SQLite guarda el hash. El agente recibe el secreto una vez.
 2. El agente abre `/ws/v1/agents`. Captura comprueba el hash contra `accounts` solo en el sentido de los límites de `AuthRateLimit`. La credencial está en `AgentRegistration`.
-3. El mismo agente, si es el colector de `CAPTURE_AGENDA_SOURCES`, sube la agenda. `operational` todavía no entra.
+3. El agente designado en Configuración operativa sube la agenda.
 4. `coordinate_capture` pregunta a `CaptureAuthorizationService`. Ese servicio lee la revisión de agenda y, si no hay cita, la fila de horario.
 5. Captura abre la sesión y el WebSocket entrega la orden de inicio.
 6. El agente sube fragmentos. Disco y `FragmentJob` quedan ligados a la sesión y al box.

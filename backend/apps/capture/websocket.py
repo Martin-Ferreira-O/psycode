@@ -11,6 +11,7 @@ from django.db import OperationalError, close_old_connections, connections, tran
 from django.utils import timezone
 from rest_framework.exceptions import AuthenticationFailed
 from backend.apps.agenda.collector_check import CAPABILITY as SMILE_CHECK_CAPABILITY, sources_for
+from backend.apps.operational.smile_configuration import CAPABILITY as SMILE_CONFIG_CAPABILITY
 from backend.common.audit import AuditWriter
 from backend.common.errors import ServiceError
 from . import leases, chunk_config
@@ -109,7 +110,7 @@ class RemoteControl:
             leases.release(self.name, self.owner)
 
     @transaction.atomic
-    def register_hello(self, agent_version, smile_check_supported=False):
+    def register_hello(self, agent_version, smile_check_supported=False, smile_config_supported=False):
         self._lock_identity()
         self._lock_lease()
         now = timezone.now()
@@ -120,6 +121,8 @@ class RemoteControl:
         diagnostics = {"agent_version": agent_version}
         if smile_check_supported:
             diagnostics["smile_check_supported"] = True
+        if smile_config_supported:
+            diagnostics["smile_config_supported"] = True
         status.seen_at = now
         status.diagnostics = diagnostics
         status.save(update_fields=["seen_at", "diagnostics"])
@@ -445,8 +448,9 @@ class RemoteControl:
                     defaults={"seen_at": timezone.now(), "diagnostics": {}},
                 )
                 diagnostics = {"agent_version": status.diagnostics.get("agent_version")}
-                if status.diagnostics.get("smile_check_supported") is True:
-                    diagnostics["smile_check_supported"] = True
+                for key in ("smile_check_supported", "smile_config_supported"):
+                    if status.diagnostics.get(key) is True:
+                        diagnostics[key] = True
                 diagnostics.update(p)
                 status.seen_at = timezone.now()
                 status.diagnostics = diagnostics
@@ -596,14 +600,17 @@ async def agent_websocket(scope, receive, send):
         acquisition = asyncio.create_task(db(control.open))
         if not await asyncio.shield(acquisition):
             raise ValueError("CONNECTION_REPLACED")
-        smile_check = SMILE_CHECK_CAPABILITY in p["capabilities"] and bool(await db(sources_for, identity))
+        smile_config = SMILE_CONFIG_CAPABILITY in p["capabilities"]
+        smile_check = SMILE_CHECK_CAPABILITY in p["capabilities"] and (
+            smile_config or bool(await db(sources_for, identity))
+        )
         config_supported = identity.managed and CONFIG_CAPABILITY in p["capabilities"]
         control.config_supported = config_supported
         control.chunk_config_v2_supported = {chunk_config.CAPABILITY_V2, "audio.v2"} <= set(p["capabilities"])
         control.chunk_config_supported = (
             control.chunk_config_v2_supported or {chunk_config.CAPABILITY, "audio.v2"} <= set(p["capabilities"])
         )
-        await db(control.register_hello, p["agent_version"], smile_check)
+        await db(control.register_hello, p["agent_version"], smile_check, smile_config)
         capabilities = [
             "audio.v1",
             "audio.v2",
@@ -618,6 +625,8 @@ async def agent_websocket(scope, receive, send):
             capabilities.append(chunk_config.CAPABILITY_V2)
         if smile_check:
             capabilities.append(SMILE_CHECK_CAPABILITY)
+        if smile_config:
+            capabilities.append(SMILE_CONFIG_CAPABILITY)
         if config_supported:
             capabilities.append(CONFIG_CAPABILITY)
         await emit(

@@ -21,11 +21,16 @@ def source_for(identity, source):
     return source_scope(identity, source)
 
 
-def issue(identity, source):
+@transaction.atomic
+def issue(identity, source, *, revision=None):
     from .catalogue import descriptor
+    from backend.apps.capture.pairing import registration_lock
+    registration_lock()
     scope = source_for(identity, source)
+    if scope.get("profile_revision") != revision:
+        raise FragmentError("AGENDA_CONFIGURATION_CHANGED", 409)
     row = AgendaCollection.objects.create(source=source, agent_id=identity.agent_id,
-        scope={"boxes": scope["boxes"], "room_mapping": scope.get("room_mapping", {})})
+        scope={key: scope[key] for key in ("boxes", "room_mapping", "profile_revision", "format") if key in scope})
     return descriptor(row)
 
 
@@ -51,6 +56,7 @@ def receive(identity, metadata, upload):
         if obtained > timezone.now() + timedelta(seconds=60):
             raise ValueError()
         if (m["format_version"] not in {"smile.excel.v1", "smile.json.v1"} or m["outcome"] not in {"valid", "partial", "failed"}
+                or ("format" in scope and m["format_version"] != scope["format"])
                 or not isinstance(m["boxes"], list) or not m["boxes"]
                 or len(set(m["boxes"])) != len(m["boxes"]) or set(m["boxes"]) - set(scope["boxes"])
                 or not isinstance(m["checksum"], str) or not re.fullmatch(r"[0-9a-f]{64}", m["checksum"])):
@@ -80,6 +86,10 @@ def receive(identity, metadata, upload):
         except (AgendaError, BadZipFile, ValueError):
             raise FragmentError("AGENDA_REPORT_INVALID", 422) from None
     with transaction.atomic(durable=True):
+        from backend.apps.capture.pairing import registration_lock
+        from .catalogue import configured_source
+        registration_lock()
+        config = configured_source(identity, m["source"])
         row = AgendaCollection.objects.select_for_update().filter(
             collection_id=m["collection_id"], source=m["source"], agent_id__in=collector_ids(identity, m["source"])).first()
         if row is None:
@@ -90,6 +100,8 @@ def receive(identity, metadata, upload):
             if row.metadata != m:
                 raise FragmentError("AGENDA_REPORT_CONFLICT", 409)
             return {"collection_id": str(row.collection_id), "generation": row.pk, "outcome": row.outcome}, False
+        if row.scope.get("profile_revision") != config.get("profile_revision"):
+            raise FragmentError("AGENDA_CONFIGURATION_CHANGED", 409)
         if m["outcome"] == "valid":
             for box in sorted(m["boxes"]):
                 previous = AgendaBoxRevision.objects.select_for_update().filter(box=box).first()

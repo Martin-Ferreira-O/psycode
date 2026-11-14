@@ -1,0 +1,21 @@
+from django.db.models import TextChoices
+
+
+class JevVersion(TextChoices):
+    V114 = "1.14", "Jev 1.14"
+    V113 = "1.13", "Jev 1.13"
+
+    @property
+    def typesafe_id(self):
+        return f"jev-{self.value}.0"
+
+    @property
+    def openrouter_id(self):
+        return f"typesafe/jev-{self.value}"
+
+
+class SpeechmaticsModel(TextChoices):
+    ENHANCED = "enhanced", "Enhanced"
+    STANDARD = "standard", "Standard"
+    MELIA = "melia-1", "Melia 1"
+    OAK = "oak-1", "Oak 1 Medical"

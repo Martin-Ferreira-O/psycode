@@ -11,15 +11,31 @@ from backend.apps.capture.uploads import FragmentMultiPartParser
 from backend.common.responses import success_response
 from . import persistence
 
+
+class SmileConfigurationView(APIView):
+    authentication_classes = [BoxAgentAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from backend.apps.operational.smile_configuration import agent_profile
+        response = success_response(agent_profile(request.user), "Configuración Smile")
+        response["Cache-Control"] = "no-store"
+        return response
+
+
 class CollectionView(APIView):
     authentication_classes = [BoxAgentAuthentication]
     permission_classes = [IsAuthenticated]
     parser_classes = [JSONParser]
 
     def post(self, request):
-        if not isinstance(request.data, dict) or set(request.data) != {"source"} or not isinstance(request.data["source"], str):
+        data = request.data
+        if (not isinstance(data, dict) or set(data) not in ({"source"}, {"source", "revision"})
+                or not isinstance(data["source"], str)
+                or ("revision" in data and (type(data["revision"]) is not int or data["revision"] < 0))):
             raise FragmentError("VALIDATION_ERROR", 400)
-        return success_response(persistence.issue(request.user, request.data["source"]), "Recolección asignada", status=201)
+        return success_response(persistence.issue(request.user, data["source"], revision=data.get("revision")),
+                                "Recolección asignada", status=201)
 
 @method_decorator(transaction.non_atomic_requests, name="dispatch")
 class ReportView(APIView):

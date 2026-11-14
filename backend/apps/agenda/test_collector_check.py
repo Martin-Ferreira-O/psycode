@@ -1,6 +1,7 @@
 from datetime import timedelta
 from uuid import uuid4
 
+from backend.apps.operational.models import OperationalConfiguration
 from django.contrib.auth import get_user_model
 from django.test import override_settings
 from django.utils import timezone
@@ -17,8 +18,14 @@ from .models import AgendaCollection, SmileCollectorCheck
 from .test_persistence import SOURCES
 
 
-@override_settings(CAPTURE_AGENDA_SOURCES=SOURCES, CAPTURE_AGENTS=AGENTS)
+@override_settings( CAPTURE_AGENTS=AGENTS)
 class SmileCollectorCheckTests(APITestCase):
+    @classmethod
+    def setUpTestData(cls):
+        config = OperationalConfiguration.load()
+        config.smile_legacy_sources = SOURCES
+        config.save(update_fields=["smile_legacy_sources"])
+
     def setUp(self):
         self.machine = APIClient()
         self.machine.credentials(HTTP_AUTHORIZATION="Agent " + TOKEN)

@@ -1,6 +1,8 @@
 from django.core.validators import MinValueValidator
 from django.db import models
 
+from backend.common.processing_models import JevVersion, SpeechmaticsModel
+
 
 class NotificationMode(models.TextChoices):
     DISTRIBUTION_LIST = "lista_distribucion", "Lista de distribución"
@@ -10,6 +12,19 @@ class NotificationMode(models.TextChoices):
 class AudioChunkMode(models.TextChoices):
     FIXED = "fixed", "Duración fija"
     SESSION = "session", "Sesión completa"
+
+
+class SmileFormat(models.TextChoices):
+    JSON = "smile.json.v1", "JSON"
+    EXCEL = "smile.excel.v1", "Excel (XLSX)"
+
+
+SMILE_DEFAULT_URL = "https://192.168.10.184/providencia/usmile/index.php/"
+SMILE_TIMEZONE = "America/Santiago"
+SMILE_FIELDS = (
+    "smile_collector_id", "smile_source", "smile_url", "smile_interval", "smile_timeout",
+    "smile_request_timeout", "smile_format", "smile_boxes",
+)
 
 
 class OperationalConfiguration(models.Model):
@@ -26,6 +41,20 @@ class OperationalConfiguration(models.Model):
     backup_email = models.EmailField(max_length=254, blank=True)
     audio_chunk_duration = models.IntegerField(default=60, validators=[MinValueValidator(10)])
     audio_chunk_mode = models.CharField(max_length=7, choices=AudioChunkMode.choices, default=AudioChunkMode.FIXED)
+    jev_model = models.CharField(max_length=4, choices=JevVersion.choices, default=JevVersion.V114)
+    speechmatics_model = models.CharField(
+        max_length=8, choices=SpeechmaticsModel.choices, default=SpeechmaticsModel.ENHANCED,
+    )
+    smile_collector = models.ForeignKey("capture.AgentRegistration", on_delete=models.SET_NULL, null=True, blank=True)
+    smile_source = models.CharField(max_length=64, default="smile")
+    smile_url = models.URLField(max_length=2048, blank=True, default=SMILE_DEFAULT_URL)
+    smile_interval = models.PositiveIntegerField(default=300)
+    smile_timeout = models.PositiveIntegerField(default=300)
+    smile_request_timeout = models.PositiveIntegerField(default=30)
+    smile_format = models.CharField(max_length=14, choices=SmileFormat.choices, default=SmileFormat.JSON)
+    smile_boxes = models.JSONField(default=list)
+    smile_revision = models.PositiveBigIntegerField(default=0, editable=False)
+    smile_legacy_sources = models.JSONField(default=dict, editable=False)
     timezone = models.CharField(max_length=50, default="America/Santiago")
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -43,6 +72,17 @@ class OperationalConfiguration(models.Model):
             models.CheckConstraint(
                 condition=models.Q(notification_mode__in=NotificationMode.values),
                 name="operational_valid_notification_mode",
+            ),
+            models.CheckConstraint(condition=models.Q(jev_model__in=JevVersion.values), name="operational_valid_jev_model"),
+            models.CheckConstraint(
+                condition=models.Q(speechmatics_model__in=SpeechmaticsModel.values),
+                name="operational_valid_speechmatics_model",
+            ),
+            models.CheckConstraint(
+                condition=(models.Q(smile_format__in=SmileFormat.values, smile_interval__range=(1, 86400),
+                                    smile_timeout__range=(1, 3600), smile_request_timeout__range=(1, 300))
+                           & models.Q(smile_timeout__gte=models.F("smile_request_timeout"))),
+                name="operational_valid_smile_limits",
             ),
         ]
 

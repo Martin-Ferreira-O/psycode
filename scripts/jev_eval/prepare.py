@@ -16,6 +16,7 @@ import wave
 
 from dotenv import dotenv_values
 
+from backend.common.processing_models import SpeechmaticsModel
 from backend.apps.analysis.clients import SpeechmaticsTranscriptor
 from backend.apps.analysis.domain import Fragment
 from backend.apps.analysis.providers.settings import Settings
@@ -65,13 +66,14 @@ def main():
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--audio-dir", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--speechmatics-model", choices=SpeechmaticsModel.values, default=SpeechmaticsModel.ENHANCED)
     args = parser.parse_args()
     manifest = json.loads(args.manifest.read_text())
     env = {**dotenv_values(".env"), **os.environ}
     settings = replace(Settings(), external_enabled=True, timeout=150, poll_interval=1,
                        speechmatics_key=env.get("SPEECHMATICS_API_KEY") or "",
                        region=env.get("SPEECHMATICS_REGION") or "eu1",
-                       model=env.get("SPEECHMATICS_MODEL") or "enhanced",
+                       model=args.speechmatics_model,
                        redact_terms=tuple(json.loads(env.get("PSYCODE_REDACT_TERMS") or "[]")))
     settings.validate("speechmatics")
     args.output.touch(mode=0o600, exist_ok=False)
