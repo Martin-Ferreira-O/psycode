@@ -439,6 +439,7 @@ al preparar cada alerta habilitada y aplica el respaldo opcional de SCRUM-80.
 | `backup_email` | String, máximo 254 caracteres. Obligatorio y con formato de correo válido cuando el respaldo resultante está habilitado. |
 | `enabled_days` | Lista de enteros 0–6 (lunes–domingo); se guarda ordenada y sin duplicados. |
 | `open_time`, `close_time` | Strings de hora local `HH:MM`; apertura anterior al cierre. Si solo se envía uno de los extremos, se valida junto con el otro guardado. |
+| `jev_threshold` | Número JSON entre 0 y 1, inclusive. Valor inicial `0.55`. Es el corte experimental para puntajes Noul. |
 | `timezone` | String de zona horaria guardada. Solo lectura, como en la API anterior. |
 | `updated_at` | Fecha/hora de última modificación en UTC, solo lectura. |
 
@@ -457,6 +458,10 @@ deshabilitado, ambos correos vacíos, lunes a viernes, horario `08:00`–`18:00`
 zona `America/Santiago`. La validación de destinos activos se aplica al actualizar
 los ajustes generales. Los cambios exclusivos de Smile o modelos se pueden
 guardar con los correos iniciales vacíos.
+
+El trabajador lee `jev_threshold` al iniciar cada fragmento y conserva ese
+valor si el fragmento se reintenta. Se mantienen las verificaciones de
+contexto y evidencia.
 
 Incluye `jev_model` (`1.14` o `1.13`) y `speechmatics_model`
 (`enhanced`, `standard`, `melia-1` u `oak-1`). El perfil de Smile incluye

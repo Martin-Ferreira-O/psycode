@@ -38,6 +38,7 @@ class OperationalService:
             "backup_enabled": config.backup_enabled,
             "backup_email": config.backup_email,
             "jev_model": config.jev_model,
+            "jev_threshold": config.jev_threshold,
             "speechmatics_model": config.speechmatics_model,
             **{field: getattr(config, field) for field in SMILE_FIELDS},
             "smile_timezone": SMILE_TIMEZONE,
@@ -99,7 +100,8 @@ class OperationalService:
             if close_time is not None:
                 config.close_time = close_time
             for field in ("notification_mode", "primary_email", "backup_enabled", "backup_email",
-                          "audio_chunk_duration", "audio_chunk_mode", "jev_model", "speechmatics_model", *SMILE_FIELDS):
+                          "audio_chunk_duration", "audio_chunk_mode", "jev_model", "jev_threshold",
+                          "speechmatics_model", *SMILE_FIELDS):
                 if field in data:
                     setattr(config, field, data[field])
             if "smile_collector_id" in data:

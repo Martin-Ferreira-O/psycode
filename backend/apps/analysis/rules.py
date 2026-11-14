@@ -2,6 +2,8 @@
 import re
 import unicodedata
 
+from backend.common.processing_models import JEV_DEFAULT_THRESHOLD
+
 HYPOTHESES = [
     "La persona expresa malestar psicológico sin expresar deseos de morir.",
     "La persona expresa el deseo de estar muerta o no despertar.",
@@ -12,7 +14,7 @@ HYPOTHESES = [
     "La persona relata acciones de preparación para suicidarse.",
     "La persona relata un intento de suicidio, interrumpido, abortado o realizado.",
 ]
-THRESHOLDS = {"candidate": .55}
+THRESHOLDS = {"candidate": JEV_DEFAULT_THRESHOLD}
 
 
 def normalize(text):
@@ -76,9 +78,9 @@ def evidence_dimensions(text, context=""):
             7: domain and bool(re.search(r"\bintente\b|\bintentado\b|empece pero|me detuve|me interrump|lo intente", t))}
 
 
-def jev_candidates(text, values, matrix, context=""):
+def jev_candidates(text, values, matrix, context="", *, threshold=JEV_DEFAULT_THRESHOLD):
     """Experimental review cutoff; a Noul value is never a clinical probability."""
-    return _candidates(text, values, [v >= THRESHOLDS["candidate"] for v in values],
+    return _candidates(text, values, [v >= threshold for v in values],
                        matrix, context, "JEV Noul sin calibración clínica")
 
 
