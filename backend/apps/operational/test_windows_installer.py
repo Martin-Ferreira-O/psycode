@@ -57,7 +57,6 @@ class AgentUpdateTests(APITestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(b"".join(response.streaming_content), self.payload)
         self.assertIn("no-store", response["Cache-Control"])
-        response.close()
         self.assertEqual(self.client.get(METADATA + "/1.2.1", secure=True).status_code, 404)
         self.assertEqual(self.client.get(WEB_DOWNLOAD, secure=True).status_code, 401)
 
@@ -76,7 +75,7 @@ class AgentUpdateTests(APITestCase):
         self.assertEqual(login.status_code, 200)
         response = browser.get(WEB_DOWNLOAD, secure=True)
         self.assertEqual(response.status_code, 200)
-        response.close()
+        self.assertEqual(b"".join(response.streaming_content), self.payload)
         for url in (METADATA, DOWNLOAD):
             self.assertEqual(self.client.get(url).status_code, 403)
             self.assertEqual(APIClient().get(url, secure=True).status_code, 401)
