@@ -127,7 +127,7 @@ function TelemetriaPC({ pc, conectado }) {
     return (
         <>
             <dl className="pc-datos">
-                <Dato titulo="Versión del agente">{pc.version || 'Sin datos'}</Dato>
+                <Dato titulo="Versión informada del agente">{pc.version || 'Sin datos'}</Dato>
                 <Dato titulo="Última comunicación · Chile">{fecha(pc.last_seen_at)}</Dato>
                 <Dato titulo={conectado ? 'Captura informada por el PC' : 'Última captura informada'}>{captura}</Dato>
                 <Dato titulo="Último audio recibido de este PC">{fecha(pc.last_audio?.accepted_at)}</Dato>
@@ -141,6 +141,7 @@ function TelemetriaPC({ pc, conectado }) {
                 </dl>
             </section>
             <dl className="pc-datos pc-capacidad">
+                <Dato titulo="Último diagnóstico del PC · Chile">{fecha(pc.status_reported_at)}</Dato>
                 <Dato titulo="Pendientes del PC">
                     {informado(pc, 'pending') && numero(pc.pending) ? pc.pending : 'Sin datos'}
                 </Dato>
@@ -159,6 +160,7 @@ const ayudaOperativa = {
 
 function AvisosPC({ pc, conectado, instalacion }) {
     const capacidadCritica = pc.storage_warning?.level === 'critical';
+    const historico = !conectado || (pc.status_reported_at && Date.parse(pc.status_reported_at) < Date.parse(pc.last_seen_at));
 
     return (
         <>
@@ -171,9 +173,11 @@ function AvisosPC({ pc, conectado, instalacion }) {
             {pc.room_available === false && <p className="pcs-aviso pc-aviso">La sala está deshabilitada. Solicita una revisión técnica antes de utilizarla.</p>}
             {conectado && pc.obs === 'unavailable' && <p className="pcs-aviso pc-aviso">La aplicación de captura no responde. Comprueba que OBS esté abierto en la cuenta de Windows configurada. Si continúa, solicita asistencia técnica.</p>}
             {pc.storage_warning?.active && <p className={`pcs-aviso pc-aviso ${capacidadCritica ? 'critical' : ''}`}>
+                {historico && 'Último diagnóstico del PC. '}
                 {capacidadCritica ? 'Atención: capacidad crítica. Revisa el disco y los envíos pendientes.' : 'Aviso: capacidad baja. Revisa el espacio y la autonomía disponible.'}
             </p>}
             {pc.operational_code && !pc.storage_warning?.active && <p className="pcs-aviso pc-aviso">
+                {historico && 'Último diagnóstico del PC. '}
                 {Object.hasOwn(ayudaOperativa, pc.operational_code) ? ayudaOperativa[pc.operational_code] : 'El equipo informó un problema. Consulta el historial y solicita asistencia técnica si continúa.'}
             </p>}
         </>

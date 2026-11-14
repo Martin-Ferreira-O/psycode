@@ -42,6 +42,17 @@ MAX_COMMAND_BATCH = 16
 SEND_TIMEOUT = 5
 
 
+class ConfigurationConflict(ValueError):
+    def __init__(self, applied, local):
+        super().__init__("CONFIG_VERSION_CONFLICT")
+        self.effective = {
+            "version": applied.version if applied else 0,
+            "local_revision": local.local_revision if local else 0,
+            "effective_config": configuration(applied.effective_config, effective=True) if applied else {},
+            "source": applied.source if applied else None,
+        }
+
+
 def lease_ttl():
     return max(30, settings.CAPTURE_INACTIVITY_TIMEOUT_SECONDS + SEND_TIMEOUT)
 
@@ -118,7 +129,12 @@ class RemoteControl:
             box=self.identity.box,
             defaults={"seen_at": now, "diagnostics": {}},
         )
-        diagnostics = {"agent_version": agent_version}
+        previous = AgentRegistration.objects.filter(pk=self.identity.registry_id).values_list(
+            "diagnostics", flat=True
+        ).first() if self.identity.managed else {}
+        diagnostics = {**(previous or {}), "agent_version": agent_version}
+        for key in ("smile_check_supported", "smile_config_supported"):
+            diagnostics.pop(key, None)
         if smile_check_supported:
             diagnostics["smile_check_supported"] = True
         if smile_config_supported:
@@ -268,12 +284,20 @@ class RemoteControl:
         local = configs.filter(source="local").order_by("-version").first()
         applied = configs.filter(state=ConfigurationState.APPLIED).order_by("-version").first()
         revision = data["local_revision"]
+        base_version = data["base_version"]
+        if base_version > (latest.version if latest else 0):
+            raise ConfigurationConflict(applied, local)
         if local and revision < local.local_revision:
-            raise ValueError("CONFIG_VERSION_CONFLICT")
+            raise ConfigurationConflict(applied, local)
         if local and revision == local.local_revision:
-            if applied and (data["base_version"] < applied.version or effective != configuration(applied.effective_config, effective=True)):
-                raise ValueError("CONFIG_VERSION_CONFLICT")
+            if applied and (
+                effective != configuration(applied.effective_config, effective=True)
+                or (base_version < applied.version and effective != configuration(local.effective_config, effective=True))
+            ):
+                raise ConfigurationConflict(applied, local)
             return {"version": applied.version if applied else 0, "local_revision": revision}
+        if applied and base_version < applied.version:
+            raise ConfigurationConflict(applied, local)
         # The first report records the initial baseline at revision zero. It
         # must not obsolete a web request already waiting for that baseline.
         initial = local is None and revision == 0 and applied is None
@@ -453,6 +477,7 @@ class RemoteControl:
                         diagnostics[key] = True
                 diagnostics.update(p)
                 status.seen_at = timezone.now()
+                diagnostics["status_reported_at"] = status.seen_at.isoformat()
                 status.diagnostics = diagnostics
                 status.save(update_fields=["seen_at", "diagnostics"])
                 if self.identity.managed:
@@ -659,6 +684,9 @@ async def agent_websocket(scope, receive, send):
                     kind, data = await db(control.dispatch, message)
                 except CaptureError as exc:
                     await emit("error", {"code": exc.code, "recoverable": False}, message["message_id"])
+                except ConfigurationConflict as exc:
+                    await emit("error", {"code": str(exc), "recoverable": False,
+                        "configuration": exc.effective}, message["message_id"])
                 except ValueError as exc:
                     if str(exc) == "CONNECTION_REPLACED":
                         raise

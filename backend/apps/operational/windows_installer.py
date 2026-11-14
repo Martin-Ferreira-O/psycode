@@ -3,16 +3,19 @@ import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from uuid import UUID, uuid4
 
 from django.conf import settings
 from django.core.handlers.asgi import ASGIRequest
 from django.http import FileResponse, HttpResponse
+from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from backend.apps.capture.authentication import BoxAgentAuthentication
+from backend.apps.capture.authentication import AgentIdentity, BoxAgentAuthentication
+from backend.common.audit import AuditWriter
 
 from .views import IsActiveAdmin
 
@@ -103,6 +106,32 @@ class WindowsInstallerView(APIView):
 class AgentWindowsUpdateView(APIView):
     authentication_classes = [BoxAgentAuthentication]
     permission_classes = [IsAuthenticated]
+
+    def finalize_response(self, request, response, *args, **kwargs):
+        response = super().finalize_response(request, response, *args, **kwargs)
+        try:
+            correlation = UUID(request.headers.get("X-Psycode-Update-Request", ""))
+            if correlation.version != 4 or str(correlation) != request.headers["X-Psycode-Update-Request"]:
+                raise ValueError
+        except ValueError:
+            correlation = uuid4()
+        response["X-Psycode-Update-Request"] = str(correlation)
+        version = kwargs.get("version")
+        event = {
+            "event_id": str(uuid4()),
+            "action": "capture.agent_update",
+            "timestamp": timezone.now().isoformat(),
+            "outcome": "success" if response.status_code == 200 else "failure",
+            "correlation_id": str(correlation),
+            "operation": "download" if version is not None else "check",
+            "http_status": response.status_code,
+        }
+        if isinstance(request.user, AgentIdentity):
+            event["agent_id"] = str(request.user.registry_id)
+        if version is not None and re.fullmatch(r"[0-9]{1,5}(\.[0-9]{1,5}){2}", version):
+            event["version"] = version
+        AuditWriter.emit(event)
+        return response
 
     def get(self, request, version=None):
         if not request.is_secure():

@@ -288,6 +288,52 @@ class RemoteConfigurationAcceptanceTests(APITestCase):
         control.dispatch(envelope("config_local", {"base_version":2,"local_revision":1,"effective_config":effective}))
         self.assertEqual(AgentConfiguration.objects.count(), count)
 
+    def test_lost_local_receipt_replays_on_reconnect_without_overwriting_later_web_change(self):
+        identity = authenticate_agent_header(f"Agent {self.token}".encode())
+        control = RemoteControl(identity, uuid4())
+        control.open()
+        control.config_supported = True
+        control.dispatch(envelope("config_local", {"base_version": 0, "local_revision": 0,
+            "effective_config": {"heartbeat_interval": 30}}))
+        update = {"base_version": 0, "local_revision": 1, "effective_config": {"heartbeat_interval": 20}}
+        first = control.dispatch(envelope("config_local", update))
+        self.assertEqual(first, ("config_receipt", {"version": 1, "local_revision": 1}))
+        control.close()
+        control = RemoteControl(identity, uuid4())
+        control.open()
+        control.config_supported = True
+        self.assertEqual(control.dispatch(envelope("config_local", update)), first)
+        self.assertEqual(self.agent.configurations.count(), 2)
+        with self.assertRaisesRegex(ValueError, "CONFIG_VERSION_CONFLICT"):
+            control.dispatch(envelope("config_local", {**update, "effective_config": {"heartbeat_interval": 15}}))
+        remote = self.agent.configurations.create(version=2, local_revision=1,
+            state=ConfigurationState.APPLIED, effective_config={"heartbeat_interval": 15})
+        for revision in (1, 2):
+            with self.assertRaisesRegex(ValueError, "CONFIG_VERSION_CONFLICT") as rejected:
+                control.dispatch(envelope("config_local", {**update, "local_revision": revision}))
+            self.assertEqual(rejected.exception.effective, {"version": remote.version, "local_revision": 1,
+                "effective_config": {"heartbeat_interval": 15}, "source": "remote"})
+        self.assertEqual(self.agent.configurations.count(), 3)
+
+    def test_hello_preserves_timestamp_of_last_status_until_new_telemetry(self):
+        identity = authenticate_agent_header(f"Agent {self.token}".encode())
+        control = RemoteControl(identity, uuid4())
+        control.open()
+        control.register_hello("2.1.2")
+        control.dispatch(envelope("status", {"operational_code": "RECOVERY_REQUIRED", "pending": 1}))
+        self.agent.refresh_from_db()
+        reported = self.agent.diagnostics["status_reported_at"]
+
+        control.register_hello("2.1.3")
+        self.agent.refresh_from_db()
+        self.assertEqual(self.agent.diagnostics["status_reported_at"], reported)
+        self.assertEqual(self.agent.diagnostics["operational_code"], "RECOVERY_REQUIRED")
+        self.assertEqual(self.agent.diagnostics["agent_version"], "2.1.3")
+        control.dispatch(envelope("status", {"pending": 0}))
+        self.agent.refresh_from_db()
+        self.assertNotEqual(self.agent.diagnostics["status_reported_at"], reported)
+        self.assertNotIn("operational_code", self.agent.diagnostics)
+
     def test_new_start_waits_for_configuration_and_frozen_session_never_changes(self):
         from datetime import timedelta
         from dataclasses import replace

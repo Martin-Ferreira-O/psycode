@@ -151,6 +151,7 @@ class AgentRegistrationListCreateView(APIView):
                 "version": diagnostics.get("agent_version"),
                 "connection": "online" if connected else "offline",
                 "last_seen_at": agent.last_seen_at,
+                "status_reported_at": diagnostics.get("status_reported_at"),
                 # Conservar tipos/defaults de la API anterior. Los campos reportados
                 # permiten distinguir un cero real de un dato aún desconocido.
                 "capturing": diagnostics.get("capturing", False),
