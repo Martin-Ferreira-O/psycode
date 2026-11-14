@@ -1,4 +1,15 @@
-# VPS temporal de Psycode
+# Despliegue de Psycode en Ubuntu
+
+Para instalar en una VPS dedicada, copie `deployment/vps` completa al
+servidor y ejecute `sudo bash install.sh --help`. El instalador solicita las
+credenciales y crea el primer administrador. Prepare los volúmenes dm-crypt,
+las rutas de clave y los puertos públicos 80 y 443. Para conectar Actions,
+ejecute `configure-github.sh` desde el equipo de administración. Con
+`--agent-repo` configura también la publicación de Windows. Para una VPS
+distinta, incorpore `agent-publisher-host.patch` en el repositorio del agente
+para que su workflow use `AGENT_INSTALLER_HOST`.
+
+## VPS de referencia
 
 Destino: `144.22.56.52`, Ubuntu 22.04, usuario SSH de mantenimiento `ubuntu`.
 Aplicación: `https://144.22.56.52/`. Se despliega exclusivamente `main`.
@@ -41,9 +52,8 @@ no prometen cero interrupción: reinician HTTP y las conexiones WebSocket.
 Los archivos operativos en `/usr/local/sbin`, `/etc/systemd/system` y
 `/etc/nginx` son de root. Cambiar sus ejemplos en Git no los reinstala: requieren
 una actualización explícita de mantenimiento como `ubuntu` mediante `sudo`.
-Antes del primer despliegue de la interfaz React, instalar Node.js 22.12 o
-superior con `npm` disponible en el `PATH` del script y actualizar
-`/usr/local/sbin/psycode-deploy-main` desde `deployment/vps/deploy-main.sh`.
+El instalador prepara Node.js 22 para compilar React. En una VPS administrada
+manualmente, se necesita Node.js 22.12 o superior con `npm` en el `PATH`.
 
 ## Datos y configuración
 
@@ -64,12 +74,10 @@ crea la tabla de contadores con las migraciones. Consultar [seguridad del
 acceso](../../docs/SEGURIDAD-AUTENTICACION.md), incluido el comando opcional de
 mantenimiento diario `cleanup_auth_rate_limits`.
 
-La configuración inicial deja deshabilitados los proveedores externos y las
-notificaciones; el correo se escribe en archivos privados. No se copian claves
-del entorno local. Para conectarse con agentes reales, configurar `CAPTURE_AGENTS`
-y `CAPTURE_AGENDA_SOURCES`; ver `docs/OPERACION-SEPARADA.md`.
-La cuenta administradora inicial y su contraseña aleatoria se entregan en un
-archivo privado, fuera del repositorio. No se crea la cuenta demo `autonoma`.
+El asistente permite habilitar Gmail y el análisis externo. Configure
+destinatarios en Configuración operativa. Para vincular equipos y habilitar
+captura, consulte `docs/OPERACION-SEPARADA.md`. La cuenta inicial y su contraseña
+aleatoria quedan en `/etc/psycode/initial-admin.json` con permisos `0600`.
 
 ## HTTPS y red
 
@@ -77,7 +85,7 @@ Oracle Cloud debe permitir TCP 80 y 443 desde Internet en la Security List o
 NSG de la instancia; también se abren en el firewall de Ubuntu. Conservar SSH 22.
 MongoDB y ASGI no se exponen al exterior.
 
-Certbot 5.3 o superior permite certificados de IP de Let's Encrypt con el perfil
+Certbot 5.4 o superior permite certificados de IP de Let's Encrypt con webroot y el perfil
 `shortlived`. `psycode-certificate.timer` comprueba cada hora si hay que emitir o
 renovar y recarga Nginx después de la emisión. El certificado de IP dura seis
 días y necesita renovación automática. Durante el bloqueo de puertos el servicio
@@ -123,7 +131,7 @@ La actualización incorpora migraciones SQL; el check de despliegue falla si no 
 acreditan volúmenes cifrados y archivos de clave protegidos. No deshabilitar ese
 control para desbloquear un despliegue.
 
-Instalar la unidad, tras revisar las rutas y con los volúmenes ya montados:
+Para instalar manualmente la unidad en una VPS existente, revise las rutas y monte los volúmenes:
 
 ```sh
 sudo install -m 644 deployment/vps/psycode-storage.service /etc/systemd/system/psycode-storage.service
@@ -164,8 +172,8 @@ El directorio es de `root:psycode` con permisos `0750` y está fuera de los
 estáticos y del checkout. Se conserva entre despliegues web. Cada versión
 se guarda en su propio directorio y los servicios leen el enlace `current`.
 
-Desde el checkout de mantenimiento en Ubuntu, instala el publicador y valida
-la regla de sudo. La cuenta dedicada queda con contraseña bloqueada. Su
+El instalador configura el receptor y su cuenta dedicada. Para hacerlo de
+forma manual, instale el publicador y valide la regla de sudo. La cuenta dedicada queda con contraseña bloqueada. Su
 directorio y el archivo de claves son propiedad de root.
 
 ```sh
@@ -189,13 +197,10 @@ restrict,command="/usr/bin/sudo -n /usr/bin/timeout 900 /usr/local/sbin/psycode-
 Configura `AGENT_INSTALLER_SSH_KEY` en los secretos del repositorio del
 agente con la clave privada exclusiva. Configura
 `AGENT_INSTALLER_KNOWN_HOSTS` con la entrada ED25519 del VPS verificada
-por el operador. El workflow tiene acceso de solo lectura a Releases con
-su `GITHUB_TOKEN`. Configura la huella de 40 caracteres del certificado
-institucional de firma de código en la variable
-`PSYCODE_WINDOWS_SIGNER_THUMBPRINT`. La firma y la comprobación de la
-versión interna se hacen en Windows antes del envío. El VPS valida nombre,
-versión y SHA-256 recibido con la clave exclusiva. El acceso de mantenimiento
-usa su propia clave.
+por el operador. El workflow usa su `GITHUB_TOKEN` con permiso de lectura.
+Comprueba la versión interna y el SHA-256 contra la Release y su manifiesto.
+El VPS valida nombre, versión y SHA-256 recibido con la clave exclusiva.
+El acceso de mantenimiento usa su propia clave.
 
 Una sesión SSH con la clave del workflow solo puede entregar un paquete por
 stdin. El formato contiene la versión, el tamaño decimal y la línea del
@@ -211,8 +216,8 @@ python3 deployment/vps/test_agent_installer.py
 
 ### Verificar el control al desplegar
 
-Prepara `/srv/psycode/shared/control-probe.json` con permisos 0600 para el
-usuario del despliegue. Debe contener las claves `url` (WSS a través del proxy),
+El instalador genera `/srv/psycode/shared/control-probe.json` con permisos 0600
+para el usuario del despliegue. En una instalación manual debe contener las claves `url` (WSS a través del proxy),
 `box` y `token` de una instalación reservada para ensayo. Esa identidad debe
 estar fuera de los boxes con autorizaciones de captura y no debe compartirse
 con un PC operativo. El script comprueba `hello/ready/sync` con TLS verificado

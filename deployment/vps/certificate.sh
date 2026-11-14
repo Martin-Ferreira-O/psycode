@@ -1,13 +1,44 @@
 #!/usr/bin/env bash
 set -euo pipefail
-if [[ ! -f /etc/letsencrypt/live/psycode-ip/fullchain.pem ]]; then
-  /opt/certbot/bin/certbot certonly --non-interactive --agree-tos \
-    --register-unsafely-without-email --webroot -w /var/www/letsencrypt \
-    --ip-address 144.22.56.52 --preferred-profile shortlived --cert-name psycode-ip
-  install -m 644 /etc/psycode/nginx-https.conf /etc/nginx/sites-available/psycode
-  nginx -t
-  systemctl reload nginx
-else
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+# La VPS original puede seguir renovando su linaje al actualizar este archivo.
+PSYCODE_HOST=144.22.56.52
+PSYCODE_CERT_KIND=ip
+PSYCODE_CERT_EMAIL=
+PSYCODE_ACME_TOS=1
+if [[ -f /etc/psycode/deploy.conf ]]; then
+  # shellcheck disable=SC1091
+  . /etc/psycode/deploy.conf
+fi
+[[ "$PSYCODE_ACME_TOS" == 1 ]] || exit 2
+lineage=psycode-ip
+live=/etc/letsencrypt/live/$lineage
+site=/etc/nginx/sites-available/psycode
+template=/etc/psycode/nginx-https.conf
+if [[ -s "$live/fullchain.pem" && -s "$live/privkey.pem" ]]; then
   /opt/certbot/bin/certbot renew --non-interactive --quiet --no-random-sleep-on-renew \
-    --cert-name psycode-ip --deploy-hook 'systemctl reload nginx'
+    --cert-name "$lineage" --deploy-hook 'systemctl reload nginx'
+else
+  identity=(--domain "$PSYCODE_HOST")
+  if [[ "$PSYCODE_CERT_KIND" == ip ]]; then
+    identity=(--ip-address "$PSYCODE_HOST" --preferred-profile shortlived)
+  fi
+  contact=(--register-unsafely-without-email)
+  if [[ -n "$PSYCODE_CERT_EMAIL" ]]; then
+    contact=(--email "$PSYCODE_CERT_EMAIL")
+  fi
+  /opt/certbot/bin/certbot certonly --non-interactive --agree-tos \
+    "${contact[@]}" --webroot -w /var/www/letsencrypt "${identity[@]}" --cert-name "$lineage"
+fi
+
+# Si el certificado ya existe pero la activación se interrumpió, completar Nginx.
+if [[ -s "$template" ]] && ! cmp -s "$template" "$site"; then
+  backup=$(mktemp)
+  trap 'rm -f -- "$backup"' EXIT
+  cp "$site" "$backup"
+  install -m 644 "$template" "$site"
+  if ! nginx -t || ! systemctl reload nginx; then
+    install -m 644 "$backup" "$site"
+    exit 1
+  fi
 fi
