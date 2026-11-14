@@ -13,19 +13,6 @@
     scroll-margin-block-start: 1rem;
 }
 
-.tabla-usuarios td:nth-child(-n + 3) {
-    overflow-wrap: anywhere;
-}
-
-.tabla-usuarios td:nth-child(1),
-.tabla-usuarios td:nth-child(2) {
-    min-width: 12ch;
-}
-
-.tabla-usuarios td:nth-child(3) {
-    min-width: 18ch;
-}
-
 .acciones-usuario {
     display: flex;
     align-items: center;

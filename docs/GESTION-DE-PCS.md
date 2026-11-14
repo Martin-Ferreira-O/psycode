@@ -4,6 +4,67 @@ Pantalla: `/api/v1/pcs/panel`; `/gestion-pcs` redirige a ella. La pantalla y las
 APIs administrativas exigen administrador activo. Con cookies, las mutaciones
 requieren CSRF. El supervisor no puede consultar ni administrar estos equipos.
 
+## Configuración remota por PC (SCRUM-97)
+
+Gestión de PCs no ofrece un formulario ni una acción para configurar manualmente
+el heartbeat, sus versiones técnicas o la recuperación de configuraciones.
+El heartbeat y la recuperación funcionan automáticamente con los mecanismos
+internos existentes. Los endpoints técnicos de SCRUM-97 permanecen disponibles
+con sus permisos administrativos; no se invocan desde esta pantalla.
+La duración y los modos «Duración fija»/«Sesión completa»
+permanecen globales en **Configuración operativa** (`/configuracion-operativa`);
+no se editan por PC. Se toma una instantánea al autorizar una sesión nueva y
+se entrega la duración resuelta en su orden de inicio, sin cambiar sesiones
+existentes. El solapamiento v2 permanece en cero. No se aceptan parámetros OBS,
+comandos, URLs, credenciales, fragmentación por PC ni retención.
+
+Los informes históricos por PC que incluían fragmentación se toleran al leer,
+pero esos campos se descartan del perfil de control efectivo y de su journal.
+No sobrescriben la configuración global. La versión y los ACK por PC describen
+el control; no deben interpretarse como ACK global de audio de todos los equipos.
+El audio usa el contrato de órdenes y su confirmación por sesión ya existente.
+Los agentes sin negociación conservan su comportamiento local anterior; no se
+presentan como receptores de la configuración global. El asistente Windows 2.1.1
+no implementa selectores de modo; el agente compatible usa el perfil de la orden.
+
+Internamente se conservan valores deseados y efectivos, versiones,
+revisión local y estado pendiente, recibido, aplicado o fallido. Un HTTP 201
+solo guarda una solicitud: aplicado exige un ACK válido del PC cuyos valores
+coincidan con los solicitados. Una solicitud pendiente no oculta la última
+configuración confirmada. La recuperación ante fallos conserva la última
+configuración válida sin restaurar credenciales antiguas.
+
+La API `GET/PUT /api/v1/internal/pcs/<agent_id>/config` conserva `version` como
+revisión global para concurrencia, y añade `desired_version`, `effective_version`
+y `effective_local_revision`. PUT envía `base_version`; una revisión ausente en
+un registro existente u obsoleta devuelve 409. Los alias anteriores
+`expected_version` y `version` se conservan, pero deben ser enteros coherentes.
+Los valores inválidos reciben 400, sin errores de tipo 500. El versionado y los
+conflictos continúan siendo parte del contrato técnico, sin edición manual en UI.
+
+El agente y el servidor negocian `agent.config.v1`. La conexión conserva la
+autenticación por registro y box, la validación TLS y las comprobaciones de
+lease y credencial vigente. `config_sync` incluye `base_local_revision`;
+`config_received` confirma recepción; `config_ack` confirma aplicación o fallo;
+`config_receipt` confirma persistencia. `config_local` informa revisión local,
+versión base y valores efectivos, sin secretos. El contrato canónico y su hash
+están en `contracts/`, reflejados en el repositorio del agente.
+
+Los cambios locales, incluso sin conexión, incrementan su revisión y conservan
+la intención web en conflicto como fallida. Los ACK perdidos se reenvían sin
+reaplicar el cambio. El servidor y el journal local conservan versiones tras
+reiniciar. Las órdenes de inicio nuevas esperan una configuración pendiente;
+las detenciones y los plazos autorizados no esperan. La duración ya negociada
+de una sesión permanece congelada y limitada por su ventana autorizada.
+
+Antes de integrar se necesita la migración `capture.0022`, que añade origen y
+revisión local a las configuraciones existentes sin borrar datos. Un agente
+2.1.1 sin esta extensión conserva su operación normal; sus solicitudes remotas
+seguirán pendientes hasta que se distribuya una versión compatible. Este cambio
+no construye ni instala ese ejecutable. Validar micrófono, reinicio de Windows,
+red institucional y nueva distribución en un entorno de laboratorio antes de
+aprobar su operación física.
+
 ## Para el administrador
 
 - Una tarjeta identifica el computador y su box. Muestra conexión, última

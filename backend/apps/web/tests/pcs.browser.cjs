@@ -8,11 +8,24 @@ const output = process.env.FRONTEND_SCREENSHOT_DIR;
 const installerHash = process.env.PC_BROWSER_INSTALLER_SHA256;
 const ok = data => ({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, data }) });
 (async () => {
-    const browser = await chromium.launch({ headless: true, ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}) });
-    const context = await browser.newContext({ ignoreHTTPSErrors: true, viewport: { width: 1440, height: 1100 } });
+    const scrum97 = process.env.SCRUM97_ONLY === '1';
+    if (scrum97) assert.equal(new URL(base).hostname, '127.0.0.1');
+    const launch = { headless: true, ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}),
+        ...(scrum97 ? {proxy:{server:'http://127.0.0.1:9',bypass:'127.0.0.1,localhost'},
+            args:['--disable-background-networking','--disable-crash-reporter',`--crash-dumps-dir=${output}`]} : {}) };
+    const browser = scrum97 ? null : await chromium.launch(launch);
+    const context = scrum97 ? await chromium.launchPersistentContext(path.join(output,'browser-profile'),
+        {...launch,ignoreHTTPSErrors:true,viewport:{width:1440,height:1100}})
+        : await browser.newContext({ ignoreHTTPSErrors: true, viewport: { width: 1440, height: 1100 } });
+    if (scrum97) await context.route('**/*', route => new URL(route.request().url()).origin === new URL(base).origin
+        ? route.continue() : route.abort('blockedbyclient'));
     const page = await context.newPage();
     const errors = [];
     page.on('pageerror', e => errors.push(e.message));
+    const configurationRequests=[];
+    if(scrum97) page.on('request',request=>{
+        if(/\/api\/v1\/internal\/pcs\/[^/]+\/config(?:\?|$)/.test(request.url())) configurationRequests.push(request.method());
+    });
     const checkInstaller = async container => {
         if (!installerHash) {
             await container.getByText('El instalador de Windows x64 no está disponible.', { exact: false }).waitFor();
@@ -41,6 +54,53 @@ const ok = data => ({ status: 200, contentType: 'application/json', body: JSON.s
     try {
         await login(page, 'pcs-browser');
         await page.goto(`${base}/api/v1/pcs/panel`);
+        if (scrum97) {
+            const card=page.locator('.pc-tarjeta[data-box="box-3"]');
+            await card.getByRole('heading',{name:'PC Box 3',exact:true}).waitFor();
+            const agentId=await card.getAttribute('data-agent-id');
+            const assertNoManualConfiguration=async()=>{
+                assert.equal(await page.getByRole('button',{name:'Configurar agente',exact:true}).count(),0);
+                assert.equal(await page.getByRole('dialog',{name:/Configuración de/}).count(),0);
+                assert.equal(await page.getByLabel('Intervalo de comunicación (segundos)').count(),0);
+                assert.equal(await page.getByRole('button',{name:'Recuperar última válida',exact:true}).count(),0);
+                for(const label of ['Versión deseada','Versión efectiva','Revisión local efectiva'])
+                    assert.equal(await page.getByText(label,{exact:true}).count(),0);
+            };
+            await assertNoManualConfiguration();
+            const rename=card.getByRole('button',{name:'Cambiar nombre de PC Box 3'});
+            await rename.click();
+            const renameDialog=page.getByRole('dialog',{name:'Cambiar nombre del PC',exact:true});
+            await renameDialog.getByRole('textbox',{name:'Nombre del PC'}).waitFor();
+            await page.keyboard.press('Escape');
+            await renameDialog.waitFor({state:'hidden'});
+            assert.equal(await rename.evaluate(el=>el===document.activeElement),true);
+            assert.equal(await card.getByRole('button',{name:'Ver historial de PC Box 3'}).isVisible(),true);
+            await page.setViewportSize({width:375,height:812});
+            await page.reload();
+            await card.getByRole('heading',{name:'PC Box 3',exact:true}).waitFor();
+            await assertNoManualConfiguration();
+            assert.deepEqual(configurationRequests,[],'Gestión de PCs no consulta ni modifica configuración técnica');
+            const observed=JSON.parse(fs.readFileSync(path.join(output,'observed.json')));
+            assert.equal(observed.ready,true);
+            assert.equal(observed.heartbeat,15);
+            assert.equal(observed.duration,60);
+            assert.equal(observed.ack_pending,false);
+            await page.goto(`${base}/configuracion-operativa`);
+            const globalDuration=page.getByLabel('Duración del fragmento (segundos)',{exact:true});
+            await globalDuration.waitFor();
+            await page.locator('input[type=radio][value=session]').check();
+            assert.equal(await globalDuration.isDisabled(),true);
+            await page.locator('input[type=radio][value=fixed]').check();
+            assert.equal(await globalDuration.isEnabled(),true);
+            await context.clearCookies();
+            await login(page,'pcs-supervisor');
+            assert.equal((await page.goto(`${base}/api/v1/pcs/panel`)).status(),403);
+            assert.equal(await page.evaluate(async url=>(await fetch(url)).status,
+                `/api/v1/internal/pcs/${agentId}/config`),403);
+            assert.deepEqual(errors,[]);
+            console.log('SCRUM97_UI_NO_MANUAL_CONFIG_OK: no button/modal/heartbeat/version/recovery controls, no config API requests on PC page, desktop/mobile/reload, rename/focus/history preserved, automatic WSS heartbeat15, global fixed/session controls, supervisor403; no screenshots.');
+            return;
+        }
         await checkInstaller(page.locator('.pcs-descarga-inicial'));
         await page.getByRole('heading', { name: 'PC Box 3', exact: true }).waitFor();
         assert.equal((await page.locator('body').innerText()).includes('catálogo'), false);
@@ -351,5 +411,5 @@ finally: c.close()
         await page.locator('#estadoPCs[data-estado="vacio"]').waitFor();
         assert.deepEqual(errors, []);
         console.log('PCs: registro, salas, instalación HTTPS + WSS, revocación, permisos, Smile, filtros, foco, teclado y tamaños móviles y de escritorio OK.');
-    } finally { await browser.close(); }
+    } finally { if(browser) await browser.close(); else await context.close(); }
 })().catch(e => { console.error(e); process.exitCode = 1; });

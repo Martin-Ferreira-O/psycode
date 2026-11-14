@@ -22,6 +22,42 @@ from .websocket import RemoteControl
 
 
 class ChunkSnapshotTests(CaptureFixtures, TestCase):
+    def test_global_profile_reaches_each_pc_and_changes_only_for_new_sessions(self):
+        from dataclasses import replace
+        config = OperationalConfiguration.load()
+        config.audio_chunk_duration = 120
+        config.audio_chunk_mode = "fixed"
+        config.save()
+        for box, window in (("box-3", 600), ("box-4", 900)):
+            with self.subTest(box=box):
+                authorization = replace(self.authorization, box=box, termino=NOW + timedelta(seconds=window))
+                first = self.service.apply_authorization(authorization, now=NOW)
+                start, = self.service.commands(box, now=NOW, chunk_config_supported=True,
+                                              chunk_config_v2_supported=True)
+                self.assertEqual((start.audio_chunk_duration, start.audio_chunk_overlap), (120, 0))
+                self.service.acknowledge(box, start.command_id, now=NOW)
+                config.audio_chunk_mode = "session"
+                config.save()
+                # Updating the global setting never rewrites a running session.
+                current = CaptureSession.objects.get(pk=first.session_id)
+                self.assertEqual(current.capture_chunk_config["audio_chunk_mode"], "fixed")
+                self.assertEqual(duration(current), 120)
+                denied = replace(authorization, authorized=False, inicio=None, termino=None)
+                self.service.apply_authorization(denied, now=NOW + timedelta(seconds=1))
+                stop, = self.service.commands(box, now=NOW + timedelta(seconds=2), configuration_pending=True)
+                self.assertEqual(stop.kind, "detencion")  # STOP is never blocked by configuration.
+                self.service.acknowledge(box, stop.command_id, last_sequence=-1,
+                                         now=NOW + timedelta(seconds=2))
+                later = NOW + timedelta(seconds=3)
+                self.service.apply_authorization(replace(authorization, inicio=later,
+                    termino=later + timedelta(seconds=window)), now=later)
+                next_start, = self.service.commands(box, now=later, chunk_config_supported=True,
+                                                    chunk_config_v2_supported=True)
+                self.assertEqual((next_start.audio_chunk_duration, next_start.audio_chunk_overlap), (window, 0))
+                self.assertNotEqual(start.session_id, next_start.session_id)
+                config.audio_chunk_mode = "fixed"
+                config.save()
+
     def test_snapshot_survives_config_change_repeated_authorization_and_restart(self):
         self.create()
         config = OperationalConfiguration.load()

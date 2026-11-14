@@ -2,7 +2,11 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from rest_framework import serializers
 from backend.common.boxes import BOX_PATTERN
-from .models import AgentConfiguration
+from .models import AgentConfiguration, ConfigurationState
+from .protocol import configuration, CONFIG_KEYS
+
+
+ALLOWED_REMOTE_CONFIG_KEYS = CONFIG_KEYS
 
 
 class FragmentSerializer(serializers.Serializer):
@@ -15,7 +19,6 @@ class FragmentSerializer(serializers.Serializer):
     captured_at = serializers.CharField(max_length=40, trim_whitespace=False)
 
     def to_internal_value(self, data):
-        # No reflejar nombres de campos, valores ni nombres de archivos recibidos.
         if set(data) != set(self.fields) or any(len(data.getlist(key)) != 1 for key in data):
             raise serializers.ValidationError({"non_field_errors": ["Campos inválidos."]})
         return super().to_internal_value(data)
@@ -44,36 +47,92 @@ class FragmentV2Serializer(FragmentSerializer):
     chunk_samples = serializers.IntegerField(min_value=1, max_value=9223372036854775806)
     overlap_samples = serializers.IntegerField(min_value=0, max_value=9223372036854775806 - 1)
 
-class AgentRegistrationCreateSerializer(serializers.Serializer):
-    """Datos permitidos al registrar un nuevo PC."""
 
+class AgentRegistrationCreateSerializer(serializers.Serializer):
     name = serializers.CharField(
         max_length=100,
         allow_blank=False,
         trim_whitespace=True,
     )
-
     box = serializers.RegexField(regex=rf"^{BOX_PATTERN}$", max_length=16)
 
     def validate_name(self, value):
         value = value.strip()
-
         if not value:
-            raise serializers.ValidationError(
-                "El nombre del PC es obligatorio."
-            )
-
+            raise serializers.ValidationError("El nombre del PC es obligatorio.")
         return value
+
 
 class AgentConfigurationSerializer(serializers.ModelSerializer):
     desired_config = serializers.JSONField(required=True)
+    base_version = serializers.IntegerField(write_only=True, required=False, min_value=0)
+    expected_version = serializers.IntegerField(write_only=True, required=False, min_value=0)
+    desired_version = serializers.IntegerField(source="version", read_only=True)
+    effective_version = serializers.SerializerMethodField()
+    effective_local_revision = serializers.SerializerMethodField()
 
     class Meta:
         model = AgentConfiguration
-        fields = ["config_id", "version", "desired_config", "effective_config", "state", "error_code", "created_at", "updated_at"]
-        read_only_fields = ["config_id", "version", "effective_config", "state", "error_code", "created_at", "updated_at"]
+        fields = [
+            "config_id",
+            "version",
+            "desired_config",
+            "effective_config",
+            "state",
+            "error_code",
+            "created_at",
+            "updated_at",
+            "base_version",
+            "expected_version",
+            "desired_version", "effective_version", "effective_local_revision", "source", "local_revision",
+        ]
+        read_only_fields = [
+            "config_id",
+            "version",
+            "effective_config",
+            "state",
+            "error_code",
+            "created_at",
+            "updated_at",
+            "source", "local_revision",
+        ]
 
     def validate_desired_config(self, value):
-        if not isinstance(value, dict):
-            raise serializers.ValidationError("La configuración deseada debe ser un diccionario JSON válido.")
-        return value
+        try:
+            return configuration(value)
+        except ValueError:
+            raise serializers.ValidationError("Parámetros de configuración inválidos.") from None
+
+    def validate(self, attrs):
+        versions = [self.initial_data[name] for name in ("base_version", "expected_version", "version")
+                    if name in self.initial_data]
+        if any(type(v) is not int or v < 0 or v > 9223372036854775806 for v in versions):
+            raise serializers.ValidationError("Versión base inválida.")
+        if versions and any(v != versions[0] for v in versions):
+            raise serializers.ValidationError("Las versiones base no coinciden.")
+        if versions:
+            attrs["base_version"] = versions[0]
+        return attrs
+
+    def _applied(self, instance):
+        if "applied" not in self.context:
+            self.context["applied"] = instance.agent.configurations.filter(
+                state=ConfigurationState.APPLIED,effective_config__has_key="heartbeat_interval").order_by("-version").first()
+        return self.context["applied"]
+
+    def get_effective_version(self, instance):
+        applied = self._applied(instance)
+        return applied.version if applied else None
+
+    def get_effective_local_revision(self, instance):
+        applied = self._applied(instance)
+        return applied.local_revision if applied else 0
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        applied = self._applied(instance)
+        data["effective_config"] = configuration(applied.effective_config, effective=True) if applied else {}
+        data["desired_config"] = {key:value for key,value in data["desired_config"].items() if key in CONFIG_KEYS}
+        current = instance.agent.configurations.order_by("-version").first()
+        data["version"] = current.version if current else 0
+        return data

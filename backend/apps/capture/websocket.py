@@ -1,29 +1,38 @@
-"""Adaptador ASGI: el dominio conserva órdenes, sesiones y ACK en SQL."""
-import asyncio
+﻿import asyncio
 import json
 import time
 from dataclasses import asdict
 from datetime import datetime
+from functools import partial
 from uuid import UUID, uuid4
 from asgiref.sync import sync_to_async
 from django.conf import settings
 from django.db import OperationalError, close_old_connections, connections, transaction
 from django.utils import timezone
 from rest_framework.exceptions import AuthenticationFailed
-from .authentication import (authenticate_agent_header,ensure_agent_identity_current,)
-from .domain import CaptureError, TECHNICAL_ERRORS
-from .models import AgentCommand, AgentRegistration, AgentStatus, CaptureSession, OPEN_STATES, RuntimeLease, AgentConfiguration, ConfigurationState
-from .services import CaptureSessionService, _snapshot
-from .protocol import MAX_BYTES, decode, envelope, identifier, instant
+from backend.apps.agenda.collector_check import CAPABILITY as SMILE_CHECK_CAPABILITY, sources_for
+from backend.common.audit import AuditWriter
+from backend.common.errors import ServiceError
 from . import leases, chunk_config
+from .authentication import authenticate_agent_header, ensure_agent_identity_current
+from .domain import CaptureError, TECHNICAL_ERRORS
+from .models import (
+    AgentCommand,
+    AgentRegistration,
+    AgentStatus,
+    CaptureSession,
+    OPEN_STATES,
+    RuntimeLease,
+    AgentConfiguration,
+    ConfigurationState,
+)
+from .protocol import MAX_BYTES, decode, envelope, identifier, instant, configuration, CONFIG_ERRORS, CONFIG_KEYS
 from .server_connectivity import (
     reconcile_connection,
     register_server_disconnect,
     register_server_reconnect,
 )
-from functools import partial
-from backend.common.errors import ServiceError
-from backend.apps.agenda.collector_check import CAPABILITY as SMILE_CHECK_CAPABILITY, sources_for
+from .services import CaptureSessionService, _snapshot
 
 
 CONFIG_CAPABILITY = "agent.config.v1"
@@ -34,7 +43,6 @@ SEND_TIMEOUT = 5
 
 def lease_ttl():
     return max(30, settings.CAPTURE_INACTIVITY_TIMEOUT_SECONDS + SEND_TIMEOUT)
-
 
 
 def serial(value):
@@ -52,7 +60,6 @@ def database_call(fn, *args):
     try:
         return fn(*args)
     finally:
-        # Esta llamada puede ejecutarse en cualquier hilo del pool.
         connections.close_all()
 
 
@@ -68,6 +75,7 @@ class RemoteControl:
         self.yield_replaced = False
         self.chunk_config_supported = False
         self.chunk_config_v2_supported = False
+        self.config_supported = False
 
     def _lock_identity(self):
         if self.identity.managed:
@@ -117,31 +125,198 @@ class RemoteControl:
         status.save(update_fields=["seen_at", "diagnostics"])
         if self.identity.managed:
             AgentRegistration.objects.filter(pk=self.identity.registry_id).update(
-                last_seen_at=now, diagnostics=diagnostics,
+                last_seen_at=now,
+                diagnostics=diagnostics,
             )
 
-    def acknowledge_config(self, config_id, success, effective_config=None, error_code=""):
-        config = AgentConfiguration.objects.filter(config_id=config_id, agent_id=self.identity.registry_id).first()
+    def mark_config_received(self, config_id):
+        config = AgentConfiguration.objects.select_for_update().filter(
+            config_id=config_id, agent_id=self.identity.registry_id
+        ).first()
         if not config:
             raise ValueError("CONFIG_NOT_FOUND")
-        if config.state != ConfigurationState.PENDING:
-            return config
-        config.state = ConfigurationState.APPLIED if success else ConfigurationState.FAILED
-        if effective_config is not None:
-            config.effective_config = effective_config
-        config.error_code = error_code
-        config.save(update_fields=["state", "effective_config", "error_code", "updated_at"])
+        if config.state == ConfigurationState.PENDING:
+            config.state = ConfigurationState.RECEIVED
+            config.save(update_fields=["state", "updated_at"])
+            AuditWriter.emit(
+                {
+                    "event_id": str(uuid4()),
+                    "timestamp": timezone.now().isoformat(),
+                    "action": "capture.agent_config.received",
+                    "outcome": "success",
+                    "agent_id": str(self.identity.registry_id),
+                    "box": self.identity.box,
+                    "config_id": str(config.pk),
+                    "version": config.version,
+                    "state": config.state,
+                }
+            )
         return config
+
+    def acknowledge_config(self, config_id, success=None, effective_config=None, error_code="", received_only=False):
+        config = AgentConfiguration.objects.select_for_update().filter(
+            config_id=config_id, agent_id=self.identity.registry_id
+        ).first()
+        if not config:
+            raise ValueError("CONFIG_NOT_FOUND")
+
+        if config.state not in [ConfigurationState.PENDING, ConfigurationState.RECEIVED]:
+            return config
+
+        latest_applied = AgentConfiguration.objects.filter(
+            agent_id=self.identity.registry_id,
+            state=ConfigurationState.APPLIED,
+        ).order_by("-version").first()
+
+        if latest_applied and config.version <= latest_applied.version:
+            config.state = ConfigurationState.FAILED
+            config.error_code = "OBSOLETE_VERSION_REJECTED"
+            if not config.effective_config and latest_applied.effective_config:
+                config.effective_config = configuration(latest_applied.effective_config, effective=True)
+            config.save(update_fields=["state", "effective_config", "error_code", "updated_at"])
+            AuditWriter.emit(
+                {
+                    "event_id": str(uuid4()),
+                    "timestamp": timezone.now().isoformat(),
+                    "action": "capture.agent_config.obsolete_rejected",
+                    "outcome": "failure",
+                    "agent_id": str(self.identity.registry_id),
+                    "box": self.identity.box,
+                    "config_id": str(config.pk),
+                    "version": config.version,
+                    "state": config.state,
+                    "error_code": config.error_code,
+                }
+            )
+            return config
+
+        if config.state == ConfigurationState.PENDING:
+            config.state = ConfigurationState.RECEIVED
+            config.save(update_fields=["state", "updated_at"])
+
+        if received_only or success is None:
+            return config
+
+        error_code = error_code if isinstance(error_code, str) and (not error_code or error_code in CONFIG_ERRORS) else "CONFIG_APPLY_FAILED"
+        if effective_config is not None:
+            try:
+                effective_config = configuration(effective_config, effective=True)
+            except ValueError:
+                effective_config, success, error_code = None, False, "INVALID_EFFECTIVE_CONFIG"
+
+        if success:
+            if not isinstance(effective_config, dict) or (config.desired_config and not effective_config):
+                success = False
+                error_code = error_code or "MISSING_EFFECTIVE_CONFIG"
+            elif any(effective_config.get(key) != value for key, value in config.desired_config.items()):
+                success, error_code = False, "INVALID_EFFECTIVE_CONFIG"
+
+        if success:
+            config.state = ConfigurationState.APPLIED
+            config.effective_config = effective_config
+            config.error_code = ""
+            config.save(update_fields=["state", "effective_config", "error_code", "updated_at"])
+
+            older_pending = AgentConfiguration.objects.filter(
+                agent_id=self.identity.registry_id,
+                version__lt=config.version,
+                state__in=[ConfigurationState.PENDING, ConfigurationState.RECEIVED],
+            )
+            for older in older_pending:
+                older.state = ConfigurationState.FAILED
+                older.error_code = "SUPERSEDED_BY_NEWER_VERSION"
+                if not older.effective_config:
+                    older.effective_config = config.effective_config
+                older.save(update_fields=["state", "effective_config", "error_code", "updated_at"])
+        else:
+            config.state = ConfigurationState.FAILED
+            config.error_code = error_code or "CONFIG_APPLY_FAILED"
+            if latest_applied:
+                config.effective_config = configuration(latest_applied.effective_config, effective=True)
+            config.save(update_fields=["state", "effective_config", "error_code", "updated_at"])
+
+        AuditWriter.emit(
+            {
+                "event_id": str(uuid4()),
+                "timestamp": timezone.now().isoformat(),
+                "action": "capture.agent_config.acknowledged",
+                "outcome": "success" if success else "failure",
+                "agent_id": str(self.identity.registry_id),
+                "box": self.identity.box,
+                "config_id": str(config.pk),
+                "version": config.version,
+                "state": config.state,
+                "error_code": config.error_code or None,
+            }
+        )
+        return config
+
+    def local_configuration(self, data):
+        if not self.config_supported or not self.identity.managed or set(data) != {"base_version", "local_revision", "effective_config"}:
+            raise ValueError("INVALID_MESSAGE")
+        if any(type(data[k]) is not int or not 0 <= data[k] <= 9223372036854775806
+               for k in ("base_version", "local_revision")):
+            raise ValueError("INVALID_MESSAGE")
+        effective = configuration(data["effective_config"], effective=True)
+        if effective.keys() != CONFIG_KEYS:
+            raise ValueError("INVALID_CONFIGURATION")
+        configs = AgentConfiguration.objects.filter(agent_id=self.identity.registry_id)
+        latest = configs.order_by("-version").first()
+        local = configs.filter(source="local").order_by("-version").first()
+        applied = configs.filter(state=ConfigurationState.APPLIED).order_by("-version").first()
+        revision = data["local_revision"]
+        if local and revision < local.local_revision:
+            raise ValueError("CONFIG_VERSION_CONFLICT")
+        if local and revision == local.local_revision:
+            if applied and (data["base_version"] < applied.version or effective != configuration(applied.effective_config, effective=True)):
+                raise ValueError("CONFIG_VERSION_CONFLICT")
+            return {"version": applied.version if applied else 0, "local_revision": revision}
+        # The first report records the initial baseline at revision zero. It
+        # must not obsolete a web request already waiting for that baseline.
+        initial = local is None and revision == 0 and applied is None
+        for pending in configs.filter(state__in=[ConfigurationState.PENDING, ConfigurationState.RECEIVED]):
+            if pending.local_revision != revision:
+                pending.state, pending.error_code = ConfigurationState.FAILED, "CONFIG_VERSION_CONFLICT"
+                pending.save(update_fields=["state", "error_code", "updated_at"])
+                AuditWriter.emit({"event_id": str(uuid4()), "timestamp": timezone.now().isoformat(),
+                    "action": "capture.agent_config.conflict", "outcome": "failure",
+                    "actor_id": self.identity.registry_id, "agent_id": self.identity.registry_id,
+                    "box": self.identity.box, "config_id": str(pending.pk), "version": pending.version,
+                    "local_revision": revision, "error_code": pending.error_code})
+        version = 0 if initial else (latest.version + 1 if latest else 0)
+        row = configs.create(agent_id=self.identity.registry_id, version=version, source="local", local_revision=revision,
+            desired_config=effective, effective_config=effective, state=ConfigurationState.APPLIED)
+        AuditWriter.emit({"event_id": str(uuid4()), "timestamp": timezone.now().isoformat(),
+            "action": "capture.agent_config.local", "outcome": "success", "actor_id": self.identity.registry_id,
+            "agent_id": self.identity.registry_id, "box": self.identity.box,
+            "config_id": str(row.pk), "version": version, "local_revision": revision, "state": row.state})
+        return {"version": row.version, "local_revision": revision}
 
     def poll_configs(self):
         with transaction.atomic():
             self._lock_identity()
             self._lock_lease()
+            latest_applied = AgentConfiguration.objects.filter(
+                agent_id=self.identity.registry_id,
+                state=ConfigurationState.APPLIED,
+            ).order_by("-version").first()
             configs = AgentConfiguration.objects.filter(
                 agent_id=self.identity.registry_id,
-                state=ConfigurationState.PENDING
-            ).order_by('version')[:MAX_COMMAND_BATCH]
-            return [{"config_id": str(c.config_id), "version": c.version, "desired_config": c.desired_config} for c in configs]
+                state__in=[ConfigurationState.PENDING, ConfigurationState.RECEIVED],
+            )
+            if latest_applied:
+                configs = configs.filter(version__gt=latest_applied.version)
+            latest_pending = configs.order_by("-version").first()
+            if not latest_pending:
+                return []
+            return [
+                {
+                    "config_id": str(latest_pending.config_id),
+                    "version": latest_pending.version,
+                    "desired_config": latest_pending.desired_config,
+                    "base_local_revision": latest_pending.local_revision,
+                }
+            ]
 
     def dispatch(self, message):
         with transaction.atomic():
@@ -150,31 +325,61 @@ class RemoteControl:
             box, p, kind = self.identity.box, message["payload"], message["type"]
             if "box" in p and p["box"] != box:
                 raise ValueError("BOX_FORBIDDEN")
-            
-            if kind == "config_ack":
-                required = {"config_id", "success"}
-                if not required <= p.keys() or p.keys() - required - {"effective_config", "error_code"}:
+
+            if kind == "config_local":
+                return "config_receipt", self.local_configuration(p)
+
+            if kind == "config_received":
+                if "config_id" not in p or p.keys() - {"config_id", "box"}:
                     raise ValueError("INVALID_MESSAGE")
                 cid = identifier(p["config_id"])
-                if type(p["success"]) is not bool:
+                result = self.mark_config_received(cid)
+                return "config_receipt", {"config_id": str(cid), "state": result.state}
+
+            if kind == "config_ack":
+                if "config_id" not in p:
                     raise ValueError("INVALID_MESSAGE")
-                
+                allowed = {"config_id", "success", "state", "effective_config", "error_code", "box", "local_revision"}
+                if p.keys() - allowed:
+                    raise ValueError("INVALID_MESSAGE")
+                cid = identifier(p["config_id"])
+
+                if "state" in p and (not isinstance(p["state"], str) or p["state"] not in {ConfigurationState.RECEIVED, "received"}):
+                    raise ValueError("INVALID_MESSAGE")
+                if "state" in p and "success" not in p:
+                    result = self.acknowledge_config(cid, received_only=True)
+                    return "config_receipt", {"config_id": str(cid), "state": result.state}
+
+                if "success" not in p or type(p["success"]) is not bool:
+                    raise ValueError("INVALID_MESSAGE")
+                if "local_revision" in p:
+                    if type(p["local_revision"]) is not int or p["local_revision"] < 0:
+                        raise ValueError("INVALID_MESSAGE")
+                    config = AgentConfiguration.objects.filter(pk=cid, agent_id=self.identity.registry_id).first()
+                    local = AgentConfiguration.objects.filter(agent_id=self.identity.registry_id, source="local").order_by("-version").first()
+                    if config and (p["local_revision"] != config.local_revision
+                            or (local and local.local_revision != config.local_revision)):
+                        p = {**p, "success": False, "error_code": "CONFIG_VERSION_CONFLICT"}
+
                 result = self.acknowledge_config(
                     cid,
                     success=p["success"],
                     effective_config=p.get("effective_config"),
-                    error_code=p.get("error_code", "")
+                    error_code=p.get("error_code", ""),
                 )
                 return "config_receipt", {"config_id": str(cid), "state": result.state}
 
             if kind == "sync":
                 commands = self.commands()
-                sessions = CaptureSession.objects.filter(box=box, state__in=OPEN_STATES,
-                    actual_end__isnull=True).order_by("authorized_at", "pk")[:MAX_COMMAND_BATCH]
+                sessions = CaptureSession.objects.filter(
+                    box=box, state__in=OPEN_STATES, actual_end__isnull=True
+                ).order_by("authorized_at", "pk")[:MAX_COMMAND_BATCH]
                 leases.acquire(self.name, self.owner, ttl=lease_ttl())
                 register_server_reconnect(self.identity)
-                return "state", {"sessions": [payload(_snapshot(s)) for s in sessions],
-                                 "commands": commands}
+                return "state", {
+                    "sessions": [payload(_snapshot(s)) for s in sessions],
+                    "commands": commands,
+                }
             if kind == "command_ack":
                 required = {"command_id", "session_id", "success", "occurred_at"}
                 if not required <= p.keys() or p.keys() - required - {"last_sequence", "error_code"}:
@@ -184,9 +389,14 @@ class RemoteControl:
                     raise ValueError("INVALID_MESSAGE")
                 if not AgentCommand.objects.filter(pk=cid, session_id=sid, session__box=box).exists():
                     raise ValueError("COMMAND_NOT_FOUND")
-                result = self.service.acknowledge(box, cid, success=p["success"],
-                    occurred_at=instant(p["occurred_at"]), last_sequence=p.get("last_sequence"),
-                    error_code=p.get("error_code", ""))
+                result = self.service.acknowledge(
+                    box,
+                    cid,
+                    success=p["success"],
+                    occurred_at=instant(p["occurred_at"]),
+                    last_sequence=p.get("last_sequence"),
+                    error_code=p.get("error_code", ""),
+                )
                 return "command_receipt", {"command_id": str(cid), "session": payload(result)}
             if kind in {"heartbeat", "interrupted"}:
                 if p.keys() - {"session_id", "error_code"}:
@@ -200,7 +410,15 @@ class RemoteControl:
                     raise ValueError("INVALID_TECHNICAL_ERROR")
                 return "interruption_receipt", {"session": payload(self.service.interrupted(box, sid, error_code=code))}
             if kind == "status":
-                allowed = {"obs", "capturing", "pending", "free_bytes","remaining_seconds", "smile_last_sync", "operational_code"}
+                allowed = {
+                    "obs",
+                    "capturing",
+                    "pending",
+                    "free_bytes",
+                    "remaining_seconds",
+                    "smile_last_sync",
+                    "operational_code",
+                }
                 if p.keys() - allowed or len(json.dumps(p)) > 2048:
                     raise ValueError("INVALID_MESSAGE")
                 for key in ("pending", "free_bytes", "remaining_seconds"):
@@ -210,21 +428,33 @@ class RemoteControl:
                     raise ValueError("INVALID_MESSAGE")
                 if "capturing" in p and type(p["capturing"]) is not bool:
                     raise ValueError("INVALID_MESSAGE")
-                if p.get("operational_code", "") not in {"", "RECOVERY_REQUIRED", "DISK_LOW","STORAGE_WARNING","STORAGE_CRITICAL", "UPLOAD_INTERVENTION", "SMILE_UNAVAILABLE"}:
+                if p.get("operational_code", "") not in {
+                    "",
+                    "RECOVERY_REQUIRED",
+                    "DISK_LOW",
+                    "STORAGE_WARNING",
+                    "STORAGE_CRITICAL",
+                    "UPLOAD_INTERVENTION",
+                    "SMILE_UNAVAILABLE",
+                }:
                     raise ValueError("INVALID_MESSAGE")
                 if p.get("smile_last_sync") is not None:
                     instant(p["smile_last_sync"])
-                status, _ = AgentStatus.objects.get_or_create(box=box,defaults={"seen_at": timezone.now(),"diagnostics": {},})
+                status, _ = AgentStatus.objects.get_or_create(
+                    box=box,
+                    defaults={"seen_at": timezone.now(), "diagnostics": {}},
+                )
                 diagnostics = {"agent_version": status.diagnostics.get("agent_version")}
                 if status.diagnostics.get("smile_check_supported") is True:
                     diagnostics["smile_check_supported"] = True
                 diagnostics.update(p)
                 status.seen_at = timezone.now()
                 status.diagnostics = diagnostics
-                status.save(update_fields=["seen_at","diagnostics",])
+                status.save(update_fields=["seen_at", "diagnostics"])
                 if self.identity.managed:
                     AgentRegistration.objects.filter(pk=self.identity.registry_id).update(
-                        last_seen_at=status.seen_at, diagnostics=diagnostics,
+                        last_seen_at=status.seen_at,
+                        diagnostics=diagnostics,
                     )
                 leases.acquire(self.name, self.owner, ttl=lease_ttl())
                 register_server_reconnect(self.identity)
@@ -233,28 +463,42 @@ class RemoteControl:
 
     def command_payload(self, command):
         data = payload(command)
-        if (not self.chunk_config_supported or command.kind != "inicio"
-                or command.audio_chunk_duration is None):
+        if not self.chunk_config_supported or command.kind != "inicio" or command.audio_chunk_duration is None:
             data.pop("audio_chunk_duration", None)
         if command.kind != "inicio" or command.audio_chunk_overlap is None:
             data.pop("audio_chunk_overlap", None)
         return data
 
     def commands(self):
-        return [self.command_payload(c) for c in self.service.commands(
-            self.identity.box, chunk_config_supported=self.chunk_config_supported,
-            chunk_config_v2_supported=self.chunk_config_v2_supported,
-            limit=MAX_COMMAND_BATCH, redelivery_seconds=15)]
+        pending = None
+        if self.config_supported:
+            rows = AgentConfiguration.objects.filter(agent_id=self.identity.registry_id)
+            pending = rows.filter(state__in=[ConfigurationState.PENDING, ConfigurationState.RECEIVED]).exists()
+        return [
+            self.command_payload(c)
+            for c in self.service.commands(
+                self.identity.box,
+                chunk_config_supported=self.chunk_config_supported,
+                chunk_config_v2_supported=self.chunk_config_v2_supported,
+                limit=MAX_COMMAND_BATCH,
+                redelivery_seconds=15,
+                configuration_pending=bool(pending),
+            )
+        ]
 
     def poll(self):
-        # Un box inactivo no toma el lock de escritura de SQLite cada segundo.
         ensure_agent_identity_current(self.identity)
         if not leases.owned(self.name, self.owner):
             raise ValueError("CONNECTION_REPLACED")
-        if not CaptureSession.objects.filter(box=self.identity.box, state__in=OPEN_STATES,
-                                             actual_end__isnull=True).exists():
-            pending_stop = AgentCommand.objects.filter(session__box=self.identity.box,
-                session__actual_end__isnull=True, kind="detencion", cancelled_at=None).exclude(succeeded=True)
+        if not CaptureSession.objects.filter(
+            box=self.identity.box, state__in=OPEN_STATES, actual_end__isnull=True
+        ).exists():
+            pending_stop = AgentCommand.objects.filter(
+                session__box=self.identity.box,
+                session__actual_end__isnull=True,
+                kind="detencion",
+                cancelled_at=None,
+            ).exclude(succeeded=True)
             if not pending_stop.exists():
                 return []
         with transaction.atomic():
@@ -268,16 +512,19 @@ class RemoteControl:
             raise ValueError("CONNECTION_REPLACED")
         candidates = AgentCommand.objects.filter(pk=command["command_id"], cancelled_at=None).exclude(succeeded=True)
         if command["kind"] == "inicio":
-            candidates = candidates.filter(acknowledged_at=None,
-                session__scheduled_end__gt=timezone.now(), session__authorization_ended_at=None)
+            candidates = candidates.filter(
+                acknowledged_at=None,
+                session__scheduled_end__gt=timezone.now(),
+                session__authorization_ended_at=None,
+            )
         return candidates.exists()
-
 
 
 async def agent_websocket(scope, receive, send):
     event = await receive()
     if event["type"] != "websocket.connect":
         return
+
     async def send_bounded(event):
         await asyncio.wait_for(send(event), timeout=SEND_TIMEOUT)
 
@@ -288,8 +535,13 @@ async def agent_websocket(scope, receive, send):
         response_headers = [(b"x-psycode-control-error", code.encode("ascii"))]
         if retry_after is not None:
             response_headers.append((b"retry-after", str(retry_after).encode("ascii")))
-        await send_bounded({"type": "websocket.http.response.start", "status": status,
-                            "headers": response_headers})
+        await send_bounded(
+            {
+                "type": "websocket.http.response.start",
+                "status": status,
+                "headers": response_headers,
+            }
+        )
         await send_bounded({"type": "websocket.http.response.body", "body": b""})
 
     if scope["path"] != "/ws/v1/agents":
@@ -330,10 +582,15 @@ async def agent_websocket(scope, receive, send):
         event = await asyncio.wait_for(receive(), timeout=10)
         hello = decode(event.get("text"))
         p = hello["payload"]
-        if (hello["type"] != "hello" or set(p) != {"agent_version", "capabilities"}
-                or not isinstance(p["agent_version"], str) or len(p["agent_version"]) > 64
-                or not isinstance(p["capabilities"], list) or len(p["capabilities"]) > 16
-                or any(not isinstance(x, str) or len(x) > 64 for x in p["capabilities"])):
+        if (
+            hello["type"] != "hello"
+            or set(p) != {"agent_version", "capabilities"}
+            or not isinstance(p["agent_version"], str)
+            or len(p["agent_version"]) > 64
+            or not isinstance(p["capabilities"], list)
+            or len(p["capabilities"]) > 16
+            or any(not isinstance(x, str) or len(x) > 64 for x in p["capabilities"])
+        ):
             raise ValueError("INVALID_MESSAGE")
         control.yield_replaced = YIELD_REPLACED_CAPABILITY in p["capabilities"]
         acquisition = asyncio.create_task(db(control.open))
@@ -341,12 +598,20 @@ async def agent_websocket(scope, receive, send):
             raise ValueError("CONNECTION_REPLACED")
         smile_check = SMILE_CHECK_CAPABILITY in p["capabilities"] and bool(await db(sources_for, identity))
         config_supported = identity.managed and CONFIG_CAPABILITY in p["capabilities"]
+        control.config_supported = config_supported
         control.chunk_config_v2_supported = {chunk_config.CAPABILITY_V2, "audio.v2"} <= set(p["capabilities"])
-        control.chunk_config_supported = (control.chunk_config_v2_supported
-            or {chunk_config.CAPABILITY, "audio.v2"} <= set(p["capabilities"]))
+        control.chunk_config_supported = (
+            control.chunk_config_v2_supported or {chunk_config.CAPABILITY, "audio.v2"} <= set(p["capabilities"])
+        )
         await db(control.register_hello, p["agent_version"], smile_check)
-        capabilities = ["audio.v1", "audio.v2", "agenda.excel.v1", "agenda.smile-json.v1",
-                        "agent.events.v1", "sessions.capture-ended.v1"]
+        capabilities = [
+            "audio.v1",
+            "audio.v2",
+            "agenda.excel.v1",
+            "agenda.smile-json.v1",
+            "agent.events.v1",
+            "sessions.capture-ended.v1",
+        ]
         if control.chunk_config_supported:
             capabilities.append(chunk_config.CAPABILITY)
         if control.chunk_config_v2_supported:
@@ -355,9 +620,16 @@ async def agent_websocket(scope, receive, send):
             capabilities.append(SMILE_CHECK_CAPABILITY)
         if config_supported:
             capabilities.append(CONFIG_CAPABILITY)
-        await emit("ready", {"box": identity.box, "server_time": timezone.now().isoformat(),
-            "capabilities": capabilities,
-            "heartbeat_interval": settings.CAPTURE_HEARTBEAT_SECONDS}, hello["message_id"])
+        await emit(
+            "ready",
+            {
+                "box": identity.box,
+                "server_time": timezone.now().isoformat(),
+                "capabilities": capabilities,
+                "heartbeat_interval": settings.CAPTURE_HEARTBEAT_SECONDS,
+            },
+            hello["message_id"],
+        )
         next_poll = 0
         last_message = time.monotonic()
         pending = asyncio.create_task(receive())
@@ -381,8 +653,18 @@ async def agent_websocket(scope, receive, send):
                 except ValueError as exc:
                     if str(exc) == "CONNECTION_REPLACED":
                         raise
-                    code = str(exc) if str(exc) in {"COMMAND_NOT_FOUND", "BOX_FORBIDDEN",
-                                                  "CONFIG_NOT_FOUND", "INVALID_TECHNICAL_ERROR"} else "INVALID_MESSAGE"
+                    code = (
+                        str(exc)
+                        if str(exc)
+                        in {
+                            "COMMAND_NOT_FOUND",
+                            "BOX_FORBIDDEN",
+                            "CONFIG_NOT_FOUND",
+                            "INVALID_TECHNICAL_ERROR",
+                            "CONFIG_VERSION_CONFLICT",
+                        }
+                        else "INVALID_MESSAGE"
+                    )
                     await emit("error", {"code": code, "recoverable": False}, message["message_id"])
                 except OperationalError:
                     await emit("error", {"code": "DATABASE_UNAVAILABLE", "recoverable": True}, message["message_id"])
@@ -426,5 +708,4 @@ async def agent_websocket(scope, receive, send):
             try:
                 await db(control.close, disconnect_cause)
             except OperationalError:
-                # El vencimiento del lease reconcilia el cierre si SQL sigue caído.
                 pass
