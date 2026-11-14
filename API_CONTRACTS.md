@@ -454,10 +454,19 @@ borra automáticamente su correo.
 Devuelve todos los campos anteriores en el envelope común. Si no existe fila,
 crea la configuración inicial con modalidad `lista_distribucion`, respaldo
 deshabilitado, ambos correos vacíos, lunes a viernes, horario `08:00`–`18:00` y
-zona `America/Santiago`. Los correos iniciales vacíos no impiden consultar; el
-primer PUT debe satisfacer las condiciones de los destinos activos.
+zona `America/Santiago`. La validación de destinos activos se aplica al actualizar
+los ajustes generales. Los cambios exclusivos de Smile o modelos se pueden
+guardar con los correos iniciales vacíos.
 
-Ejemplo de respuesta 200 para una configuración guardada:
+Incluye `jev_model` (`1.14` o `1.13`) y `speechmatics_model`
+(`enhanced`, `standard`, `melia-1` u `oak-1`). El perfil de Smile incluye
+`smile_collector_id` (UUID registrado o `null` para desactivar), `smile_source`,
+`smile_url`, `smile_interval`, `smile_timeout`, `smile_request_timeout`,
+`smile_format`, `smile_timezone` y `smile_boxes`. Smile usa la zona fija
+`America/Santiago` y la URL predeterminada `https://192.168.10.184/providencia/usmile/index.php/`.
+El objeto `options` expone los valores admitidos y los PCs activos con su estado de conexión.
+
+Extracto de una respuesta 200 para una configuración guardada:
 
 ~~~json
 {
@@ -484,6 +493,8 @@ Recibe un objeto JSON con los campos editables. Mantiene el comportamiento
 existente de actualización parcial: los campos omitidos conservan su valor
 guardado, incluidos `notification_mode` y `backup_enabled`. No admite campos
 desconocidos ni los campos de solo lectura. No se agrega PATCH.
+Por compatibilidad, el servidor acepta `smile_timezone` con su valor fijo
+`America/Santiago` en solicitudes de clientes anteriores.
 
 Se combinan los valores recibidos y guardados antes de validar. Toda la operación
 es atómica: si hay errores, no cambian correos, preferencias, días, horario ni
@@ -541,6 +552,17 @@ El texto de los mensajes puede variar con el idioma; frontend debe usar HTTP,
 `error.code` y las claves de `error.details.fields`. Para horarios invertidos o
 inválidos se conserva el error existente `400 VALIDATION_ERROR` sin campos.
 Aplican también los errores comunes de autenticación y persistencia.
+
+### GET /api/v1/internal/smile-configuration
+
+Requiere autenticación de agente y responde con `Cache-Control: no-store`.
+`data` contiene el perfil vigente solo para el colector designado y es `null`
+para los demás. El agente negocia `agenda.smile-config.v1` por WebSocket y
+consulta el perfil mediante la URL interna HTTPS. El perfil se documenta en el
+[esquema de Smile](contracts/smile-configuration-v1.schema.json). La solicitud
+`POST /api/v1/internal/agenda-collections` incluye `source` y `revision`
+del perfil. Un cambio de designación deniega al PC anterior con 403.
+Una revisión obsoleta devuelve 409 `AGENDA_CONFIGURATION_CHANGED`.
 
 ### Migración y compatibilidad para frontend
 

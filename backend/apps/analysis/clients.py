@@ -11,8 +11,8 @@ from .providers.speechmatics import BatchClient
 
 
 class SpeechmaticsTranscriptor:
-    def __init__(self, settings, journal_dir, client=None, sleep=time.sleep):
-        self.batch = BatchClient(settings, journal_dir, client, sleep)
+    def __init__(self, settings, journal_dir, client=None, sleep=time.sleep, *, settings_loader=None):
+        self.batch = BatchClient(settings, journal_dir, client, sleep, settings_loader=settings_loader)
 
     def transcribe(self, fragment, *, checkpoint=None, prepare=None):
         if checkpoint is None:
@@ -25,38 +25,40 @@ class SpeechmaticsTranscriptor:
 
 
 class JevAnalizador:
-    def __init__(self, settings, client=None, sleep=time.sleep):
+    def __init__(self, settings, client=None, sleep=time.sleep, *, settings_loader=None):
         self.settings, self.client, self.sleep = settings, client, sleep
+        self.settings_loader = settings_loader
 
     def evaluate(self, current, history, *, request_id=None):
-        self.settings.validate("jev")
+        settings = self.settings_loader() if self.settings_loader else self.settings
+        settings.validate("jev")
         unit = current.get("analysis_unit", "utterance")
         state = {"current": current, "history": history}
         if (unit == "fragment"
-                and len(json.dumps(state, ensure_ascii=False, separators=(",", ":"))) > self.settings.jev_block_max_chars):
+                and len(json.dumps(state, ensure_ascii=False, separators=(",", ":"))) > settings.jev_block_max_chars):
             raise JevContextLimit("JEV_CONTEXT_LIMIT")
         own = self.client is None
         client = self.client or httpx.Client(
-            headers={"Authorization": f"Bearer {self.settings.analysis_key}"},
+            headers={"Authorization": f"Bearer {settings.analysis_key}"},
             timeout=30, trust_env=False, follow_redirects=False)
         try:
             # Solo contenido redactado y etiquetas técnicas locales. Sin metadatos de sesión.
             headers = {"X-Request-Id": request_id} if request_id else {}
-            deadline = time.monotonic() + self.settings.timeout
+            deadline = time.monotonic() + settings.timeout
             evidence_turns = [turn["id"] for turn in current.get("turns", ()) if "id" in turn]
             unknown_speakers = [speaker for speaker, role in current.get("speaker_roles", {}).items()
                                 if role == "unknown"]
             requested = questions(unit, evidence_turns, unknown_speakers)
-            payload = {"model": self.settings.analysis_model, "state": state, "questions": requested}
+            payload = {"model": settings.analysis_model, "state": state, "questions": requested}
 
             def send():
-                return request(client, "POST", self.settings.analysis_endpoint,
+                return request(client, "POST", settings.analysis_endpoint,
                                safe=False, sleep=self.sleep, accepted_statuses=(400, 413, 422),
                                headers=headers, deadline=deadline, json=payload)
 
             response = send()
             context_rejected = not response.is_success and self._context_limit(response)
-            if unit == "fragment" and self.settings.analysis_provider == "typesafe" and context_rejected:
+            if unit == "fragment" and settings.analysis_provider == "typesafe" and context_rejected:
                 # El rechazo de contexto es definitivo. Reintentar el mismo bloque completo una vez.
                 headers["TypeSafe-Danger-Zone-Long-Context"] = "true"
                 response = send()
@@ -66,8 +68,8 @@ class JevAnalizador:
                 raise ProviderError(f"Proveedor respondió HTTP {response.status_code}")
             try:
                 data = json_body(response)
-                values, context, usage = validate_response(data, self.settings.analysis_model,
-                                                           self.settings.analysis_provider, requested)
+                values, context, usage = validate_response(data, settings.analysis_model,
+                                                           settings.analysis_provider, requested)
             except ProviderError:
                 raise SubmissionUncertain("Respuesta JEV no recuperable; requiere revisión") from None
             return JevDecision(data["model"], context["choice"], tuple(values),

@@ -141,15 +141,17 @@ Las variables de análisis están incluidas en [`.env.example`](.env.example). S
 | `PSYCODE_EXTERNAL_PROCESSING_ENABLED` | `0`. Solo `1` habilita envíos externos autorizados. |
 | `SPEECHMATICS_API_KEY` | Vacía. Clave de Speechmatics, requerida para uso real. |
 | `SPEECHMATICS_REGION` | `eu1`. Admite `eu1`, `us1`, `au1`; confirmar la región autorizada antes de usar datos reales. |
-| `SPEECHMATICS_MODEL` | `enhanced`. También admite `standard`. |
 | `SPEECHMATICS_POLL_INTERVAL` | `2` segundos entre consultas; rango 0,1–30. |
 | `PSYCODE_PROVIDER_TIMEOUT` | `300` segundos por etapa; rango 1–540. El borrado tiene hasta 30 segundos adicionales. |
 | `JEV_PROVIDER` | `auto`, `typesafe` u `openrouter`. En `auto`, prefiere Typesafe si existen ambas claves; no cambia de cuenta ante fallos. |
 | `TYPESAFE_API_KEY` | Vacía. Necesaria al elegir Typesafe. |
-| `JEV_MODEL` | `jev-1.13.0`. Versión explícita para Typesafe. |
 | `OPENROUTER_API_KEY` | Vacía. Necesaria al elegir OpenRouter. |
-| `OPENROUTER_JEV_MODEL` | `typesafe/jev-1.13`. Versión para la Decisions API de OpenRouter. |
 | `PSYCODE_REDACT_TERMS` | `[]`. Lista JSON de nombres/direcciones conocidos para redactar antes de JEV; no garantiza anonimización completa. |
+
+En **Configuración operativa** se eligen Jev (1.14 por defecto o 1.13) y
+Speechmatics Batch (Enhanced por defecto, Standard, Melia 1 u Oak 1 Medical).
+El trabajador consulta la selección al iniciar cada operación de proveedor.
+Los trabajos de Speechmatics ya enviados conservan su modelo.
 
 Para JEV basta la clave del proveedor seleccionado. **Las pruebas no requieren claves, MongoDB ni habilitar procesamiento externo**:
 

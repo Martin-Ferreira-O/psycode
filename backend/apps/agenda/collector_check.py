@@ -2,7 +2,6 @@
 from datetime import timedelta
 from uuid import uuid4
 
-from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 from rest_framework.permissions import IsAuthenticated
@@ -15,6 +14,7 @@ from backend.apps.capture.protocol import identifier
 from backend.apps.capture.storage import FragmentError
 from backend.common.errors import ServiceError
 from backend.common.responses import success_response
+from backend.apps.operational.models import OperationalConfiguration
 
 from .catalogue import configured_source
 from .models import SmileCollectorCheck
@@ -24,8 +24,11 @@ RESULTS = {"ok", "missing_profile", "source_mismatch", "external_command", "time
 
 
 def sources_for(identity):
+    config = OperationalConfiguration.objects.filter(pk=1).first()
+    if config is None:
+        return []
     sources = []
-    for source in settings.CAPTURE_AGENDA_SOURCES:
+    for source in set(config.smile_legacy_sources) | ({config.smile_source} if config.smile_collector_id else set()):
         try:
             configured_source(identity, source)
         except FragmentError:

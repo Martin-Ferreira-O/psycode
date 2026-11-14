@@ -12,6 +12,8 @@ from .protocol import envelope, MAX_BYTES
 from .websocket import RemoteControl, agent_websocket, db
 from .services import CaptureSessionService
 from backend.apps.operational.capture_authorization import BoxCaptureAuthorization
+from backend.apps.operational.smile_configuration import CAPABILITY as SMILE_CONFIG_CAPABILITY
+from backend.apps.agenda.collector_check import CAPABILITY as SMILE_CHECK_CAPABILITY
 
 
 class WebSocketAuditTests(TransactionTestCase):
@@ -71,8 +73,12 @@ class WebSocketAuditTests(TransactionTestCase):
                 "headers": [(b"authorization", f"Agent {self.token}".encode())]}, incoming.get, send), timeout=5)
             return messages
 
-        for caps in ([], ["audio.v2", "audio.chunk-config.v2"]):
-            length, message = next((n, m) for n, m in asyncio.run(run(caps)) if m["type"] == "state")
+        for caps in ([], ["audio.v2", "audio.chunk-config.v2", SMILE_CONFIG_CAPABILITY, SMILE_CHECK_CAPABILITY]):
+            messages = asyncio.run(run(caps))
+            ready = next(m["payload"] for _, m in messages if m["type"] == "ready")
+            for capability in (SMILE_CONFIG_CAPABILITY, SMILE_CHECK_CAPABILITY):
+                self.assertEqual(capability in ready["capabilities"], capability in caps)
+            length, message = next((n, m) for n, m in messages if m["type"] == "state")
             self.assertLess(length, MAX_BYTES)
             state = message["payload"]
             self.assertEqual([s["state"] for s in state["sessions"]], ["finalizando"])

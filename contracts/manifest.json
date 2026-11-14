@@ -18,9 +18,11 @@
     "smile-collector-check-valid.json": "bec1de9dae76b9c685f19288c02e07ccfe96e9759c98a00b2c20dd80dc28e32f",
     "audio-test-profile-v1.schema.json": "a31e93ab417ff97b16789b7cb29ed453c9b598740fcb89a1d8e8347eda32c82b",
     "audio-test-profile-v2.schema.json": "069bd2d6669da62a816fc3e05676cf710b5763b5a825fd9bd7cfd1f4aa21e587",
-    "audio-test-fragment-details-v1.schema.json": "0a7e9dd45d2a79fc54a6d44b526d6ed3e87316a88afc3d12d1b573329d623a8b"
+    "audio-test-fragment-details-v1.schema.json": "0a7e9dd45d2a79fc54a6d44b526d6ed3e87316a88afc3d12d1b573329d623a8b",
+    "smile-configuration-v1.schema.json": "84e1a1b0c8e45c98096628e2f9b7572a60f130a2f33f35054486b34122fd7bdf"
   },
   "extensions": [
-    "agent.config.v1"
+    "agent.config.v1",
+    "agenda.smile-config.v1"
   ]
 }

@@ -22,12 +22,10 @@ from backend.apps.analysis.providers.jev_contract import BLOCK_QUESTIONS_VERSION
 from backend.apps.analysis.providers.settings import Settings
 from backend.apps.analysis.rules import THRESHOLDS
 from backend.apps.analysis.services import AnalysisService
+from backend.common.processing_models import JevVersion
 
 from .cases import CASES, EXTENSION_CASES
 from .variants import FOLLOWUP, VARIANTS, previous_context, response_context, revise
-
-MODEL = "jev-1.14.0"
-
 
 def fixture_items(turns, *, overlap=False):
     return [
@@ -180,8 +178,8 @@ def metric(rows, level):
     return counts
 
 
-def summarize(rows, variants=VARIANTS):
-    successful = [row for row in rows if row["usage"] and row["model"] == MODEL and not set(row["errors"]).intersection(
+def summarize(rows, variants=VARIANTS, *, model):
+    successful = [row for row in rows if row["usage"] and row["model"] == model and not set(row["errors"]).intersection(
         {"JEV_CONTEXT_LIMIT", "JEV_SUBMISSION_UNCERTAIN", "JEV_FAILED"})]
     # Solo pares completos, para que los fallos de transporte no beneficien a una variante.
     groups = {}
@@ -228,6 +226,7 @@ def main():
     parser.add_argument("--variant", choices=(*VARIANTS, FOLLOWUP), action="append")
     parser.add_argument("--extension", action="store_true", help="Incluye una segunda batería sintética.")
     parser.add_argument("--repeat", type=int, default=1, choices=range(1, 6))
+    parser.add_argument("--jev-version", choices=JevVersion.values, default=JevVersion.V114)
     args = parser.parse_args()
     key = os.environ.get("TYPESAFE_API_KEY") or dotenv_values(".env").get("TYPESAFE_API_KEY")
     if not key:
@@ -239,7 +238,8 @@ def main():
         cases.extend(json.loads(args.diagnostic_cases.read_text()))
     if not cases:
         parser.error("No hay casos de evaluación.")
-    settings = Settings(jev_key=key, jev_provider="typesafe", jev_model=MODEL, external_enabled=True, timeout=40)
+    model = JevVersion(args.jev_version).typesafe_id
+    settings = Settings(jev_key=key, jev_provider="typesafe", jev_model=model, external_enabled=True, timeout=40)
     rows = []
     selected = tuple(dict.fromkeys(args.variant or VARIANTS))
     rng = random.Random(1414)
@@ -256,10 +256,10 @@ def main():
                 for variant in variants:
                     rows.append(evaluate(case, variant, client, settings, repetition))
                 print(f"{repetition}/{args.repeat} {case['id']} ({len(rows)} evaluaciones)", flush=True)
-        report = {"model": MODEL, "baseline": BLOCK_QUESTIONS_VERSION,
+        report = {"model": model, "baseline": BLOCK_QUESTIONS_VERSION,
                   "run_at_utc": datetime.now(timezone.utc).isoformat(),
                   "jev": "real", "alert_delivery": "simulated",
-                  "summary": summarize(rows, selected), "rows": rows}
+                  "summary": summarize(rows, selected, model=model), "rows": rows}
         json.dump(report, output, ensure_ascii=False, indent=2)
         output.write("\n")
 

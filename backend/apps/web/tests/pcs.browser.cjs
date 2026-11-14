@@ -86,6 +86,7 @@ const ok = data => ({ status: 200, contentType: 'application/json', body: JSON.s
             assert.equal(observed.duration,60);
             assert.equal(observed.ack_pending,false);
             await page.goto(`${base}/configuracion-operativa`);
+            await page.getByRole('link',{name:'Captura de audio',exact:true}).click();
             const globalDuration=page.getByLabel('Duración del fragmento (segundos)',{exact:true});
             await globalDuration.waitFor();
             await page.locator('input[type=radio][value=session]').check();

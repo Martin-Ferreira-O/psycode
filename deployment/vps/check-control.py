@@ -14,9 +14,12 @@ async def main():
     url = settings["url"]
     if not url.startswith("wss://"):
         raise ValueError("CONTROL_PROBE_REQUIRES_WSS")
+    # Conserva SNI, hostname y validación TLS de la URL pública. En una VPS
+    # detrás de NAT se conecta al mismo Nginx sin depender del retorno por IP.
+    endpoint = {"host": "127.0.0.1", "port": 443} if os.environ.get("PSYCODE_PROBE_LOCAL") == "1" else {}
     async with asyncio.timeout(10), connect(url, proxy=None,
             additional_headers={"Authorization": "Agent " + settings["token"]},
-            open_timeout=5, close_timeout=1, max_size=65536) as socket:
+            open_timeout=5, close_timeout=1, max_size=65536, **endpoint) as socket:
         async def request(kind, payload, expected):
             mid = str(uuid4())
             await socket.send(json.dumps(dict(protocol_version="1.0", message_id=mid, type=kind,

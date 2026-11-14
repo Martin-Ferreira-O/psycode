@@ -3,6 +3,7 @@ from datetime import timedelta
 import hashlib
 from uuid import uuid4
 
+from backend.apps.operational.models import OperationalConfiguration
 from django.test import override_settings
 from django.utils import timezone
 from rest_framework.exceptions import AuthenticationFailed
@@ -19,8 +20,14 @@ AGENTS = {'installed-pc': {'box': 'box-3', 'token_sha256': hashlib.sha256(OLD.en
 SOURCES = {'smile': {'collector_id': 'installed-pc', 'boxes': ['box-3', 'box-4', 'box-5', 'box-6', 'box-7']}}
 
 
-@override_settings(CAPTURE_AGENTS=AGENTS, CAPTURE_AGENDA_SOURCES=SOURCES, PC_PAIRING_IP_LIMIT=100)
+@override_settings(CAPTURE_AGENTS=AGENTS,  PC_PAIRING_IP_LIMIT=100)
 class PermanentPCTests(APITestCase):
+    @classmethod
+    def setUpTestData(cls):
+        config = OperationalConfiguration.load()
+        config.smile_legacy_sources = SOURCES
+        config.save(update_fields=["smile_legacy_sources"])
+
     def setUp(self):
         self.admin = User.objects.create_user(username='pcs-lifecycle', email='pcs-lifecycle@example.test', role='admin')
         self.client.force_authenticate(self.admin)
@@ -132,8 +139,9 @@ class PermanentPCTests(APITestCase):
         self.assertEqual(history['pagination']['total'], 2)
         self.assertEqual(AgentConnectivityEvent.objects.filter(agent_id='installed-pc').count(), 1)
 
-    @override_settings(CAPTURE_AGENTS={}, CAPTURE_AGENDA_SOURCES={})
+    @override_settings(CAPTURE_AGENTS={})
     def test_empty_installation_offers_initial_boxes_without_creating_or_authorizing_pcs(self):
+        OperationalConfiguration.objects.update(smile_legacy_sources={})
         from backend.common.boxes import known_boxes
         self.assertEqual(known_boxes(), [])
         rooms = self.client.get('/api/v1/pcs/salas').data['data']
@@ -144,8 +152,9 @@ class PermanentPCTests(APITestCase):
         self.assertEqual(created.status_code, 201)
         self.assertEqual(AgentRegistration.objects.get().box, 'box-5')
 
-    @override_settings(CAPTURE_AGENTS={}, CAPTURE_AGENDA_SOURCES={})
+    @override_settings(CAPTURE_AGENTS={})
     def test_two_existing_pcs_do_not_hide_other_initial_boxes(self):
+        OperationalConfiguration.objects.update(smile_legacy_sources={})
         for number in (3, 4):
             AgentRegistration.objects.create(name=f'PC {number}', box=f'box-{number}', token_sha256='a' * 64)
         rooms = self.client.get('/api/v1/pcs/salas').data['data']

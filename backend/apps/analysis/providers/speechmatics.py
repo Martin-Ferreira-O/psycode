@@ -7,8 +7,11 @@ from pathlib import Path
 import re
 import time
 import wave
+from dataclasses import replace
 
 import httpx
+
+from backend.common.processing_models import SpeechmaticsModel
 
 from .http import ProviderError, SubmissionUncertain, json_body, request
 from .settings import Settings
@@ -107,12 +110,14 @@ def read_pcm(path, chunk):
     return pcm
 
 class BatchClient:
-    def __init__(self, settings: Settings, journal_dir: Path, client=None, sleep=time.sleep):
+    def __init__(self, settings: Settings, journal_dir: Path, client=None, sleep=time.sleep, *, settings_loader=None):
         self.settings, self.client, self.sleep = settings, client, sleep
         self.journal_dir = journal_dir
+        self.settings_loader = settings_loader
 
     def transcribe(self, path: Path, chunk, *, checkpoint=None, prepare=None) -> dict:
-        self.settings.validate("speechmatics")
+        settings = self.settings_loader() if self.settings_loader else self.settings
+        settings.validate("speechmatics")
         if not 0 <= chunk.context_start <= chunk.start < chunk.end:
             raise ProviderError("Intervalo inválido")
         if checkpoint is None:
@@ -121,10 +126,10 @@ class BatchClient:
         record = checkpoint.data.get("speechmatics") if checkpoint is not None else None
         if record is None:
             record = json.loads(journal.read_text(encoding="utf-8")) if journal.exists() else {
-                "session": chunk.session_id, "sequence": chunk.id, "region": self.settings.region,
+                "session": chunk.session_id, "sequence": chunk.id, "region": settings.region,
                 "state": "new", "job_id": None,
             }
-        if record["region"] != self.settings.region:
+        if record["region"] != settings.region:
             raise ProviderError("El trabajo pertenece a otra región")
         if checkpoint is not None:
             def persist():
@@ -136,12 +141,12 @@ class BatchClient:
 
         if checkpoint is None and record["state"] in {"submitting", "uncertain", "deleted", "delete_pending"}:
             raise SubmissionUncertain("Fragmento ya enviado o incierto; no se reenviará automáticamente")
-        base = f"https://{self.settings.region}.asr.api.speechmatics.com/v2"
+        base = f"https://{settings.region}.asr.api.speechmatics.com/v2"
         started = time.monotonic()
-        deadline = started + self.settings.timeout
+        deadline = started + settings.timeout
         own_client = self.client is None
         client = self.client or httpx.Client(timeout=30, headers={
-            "Authorization": f"Bearer {self.settings.speechmatics_key}"}, trust_env=False)
+            "Authorization": f"Bearer {settings.speechmatics_key}"}, trust_env=False)
         job_id = record["job_id"]
         timings, cleanup = {}, "pending"
         reference = hashlib.sha256(f"{record['session']}:{chunk.id}".encode()).hexdigest()
@@ -180,16 +185,19 @@ class BatchClient:
                     wav.setsampwidth(2)
                     wav.setframerate(RATE)
                     wav.writeframes(pcm)
-                record["state"] = "submitting"
+                record.update(state="submitting", model=settings.model)
                 persist()
                 transcription_config = {
-                    "language": "es",
-                    "model": self.settings.model,
+                    "language": settings.transcription_language,
+                    "model": settings.model,
                     "diarization": "speaker",
                     "speaker_diarization_config": {"speaker_sensitivity": 0.5, "prefer_current_speaker": False},
-                    "additional_vocab": [{"content": term} for term in PSYCHOLOGY_VOCABULARY],
                 }
-                if self.settings.model == "enhanced":
+                if settings.transcription_language == "multi":
+                    transcription_config["language_hints"] = ["es"]
+                else:
+                    transcription_config["additional_vocab"] = [{"content": term} for term in PSYCHOLOGY_VOCABULARY]
+                if settings.model == SpeechmaticsModel.ENHANCED:
                     transcription_config["domain"] = "medical"
                 try:
                     response = request(client, "POST", base + "/jobs/", safe=False, sleep=self.sleep,
@@ -229,9 +237,9 @@ class BatchClient:
                         raise ProviderError("Speechmatics rechazó el fragmento")
                     if state not in {"running", "queued"}:
                         raise ProviderError("Estado de trabajo desconocido")
-                    if time.monotonic() + self.settings.poll_interval >= deadline:
+                    if time.monotonic() + settings.poll_interval >= deadline:
                         raise ProviderError("Speechmatics superó el plazo de procesamiento")
-                    self.sleep(self.settings.poll_interval)
+                    self.sleep(settings.poll_interval)
                 timings["provider_wait_seconds"] = time.monotonic() - polling
                 retrieval = time.monotonic()
                 data = json_body(request(client, "GET", f"{base}/jobs/{job_id}/transcript",
@@ -260,6 +268,8 @@ class BatchClient:
                 if own_client:
                     client.close()
         seconds = time.monotonic() - started
+        if "model" in record:
+            settings = replace(settings, model=record["model"])
         return {"id": chunk.id, "start": chunk.start / RATE, "end": chunk.end / RATE,
                 "context_start": chunk.context_start / RATE,
                 "text": "".join(w["text"] for w in words).strip(), "words": words,
@@ -267,5 +277,5 @@ class BatchClient:
                 "provider": "speechmatics", "provider_job_id": job_id,
                 "provider_cleanup": cleanup, "timings": timings,
                 "submitted_audio_seconds": submitted_bytes / (RATE * 2),
-                "configuration": self.settings.public()}
+                "configuration": settings.public()}
 

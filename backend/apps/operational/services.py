@@ -5,9 +5,12 @@ from zoneinfo import ZoneInfo
 from django.db import transaction
 from backend.common.errors import ServiceError
 from backend.apps.capture.services import CaptureSessionService
+from backend.apps.capture.legacy_registry import sync_legacy_registry
+from backend.common.boxes import registrable_boxes
 from .capture_authorization import BoxCaptureAuthorization, CaptureAuthorizationService
-from .models import AudioChunkConfigurationChange, OperationalConfiguration
+from .models import AudioChunkConfigurationChange, JevVersion, OperationalConfiguration, SMILE_FIELDS, SMILE_TIMEZONE, SmileFormat, SpeechmaticsModel
 from .serializers import OperationalConfigSerializer
+from .smile_configuration import collector_options
 
 SANTIAGO_TZ = ZoneInfo("America/Santiago")
 
@@ -19,6 +22,7 @@ class OperationalService:
         self._capture_sessions = CaptureSessionService(self._capture_auth)
 
     def get_config(self):
+        sync_legacy_registry()
         return self._serialize_config(OperationalConfiguration.load())
 
     @staticmethod
@@ -33,6 +37,20 @@ class OperationalService:
             "primary_email": config.primary_email,
             "backup_enabled": config.backup_enabled,
             "backup_email": config.backup_email,
+            "jev_model": config.jev_model,
+            "speechmatics_model": config.speechmatics_model,
+            **{field: getattr(config, field) for field in SMILE_FIELDS},
+            "smile_timezone": SMILE_TIMEZONE,
+            "smile_collector_id": str(config.smile_collector_id) if config.smile_collector_id else None,
+            "smile_legacy_active": bool(config.smile_legacy_sources),
+            "options": {
+                "jev_models": JevVersion.values,
+                "speechmatics_models": SpeechmaticsModel.values,
+                "smile_formats": dict(SmileFormat.choices),
+                "smile_timezones": [SMILE_TIMEZONE],
+                "smile_collectors": collector_options(),
+                "smile_boxes": registrable_boxes(),
+            },
             "timezone": config.timezone,
             "updated_at": config.updated_at.isoformat().replace("+00:00", "Z") if config.updated_at else None,
         }
@@ -43,6 +61,9 @@ class OperationalService:
             raise ServiceError("AUTH_FORBIDDEN", "No tienes permisos para modificar la configuración operativa.", 403)
 
         with transaction.atomic():
+            if isinstance(data, dict) and set(data).intersection(SMILE_FIELDS):
+                from backend.apps.capture.pairing import registration_lock
+                registration_lock()
             config = OperationalConfiguration.load()
             config = OperationalConfiguration.objects.select_for_update().get(pk=config.pk)
             serializer = OperationalConfigSerializer(instance=config, data=data)
@@ -54,6 +75,10 @@ class OperationalService:
             before_duration = config.audio_chunk_duration
             before_mode = config.audio_chunk_mode
             data = serializer.validated_data
+            if any(field in data and data[field] != getattr(config, field) for field in (
+                "smile_collector_id", "smile_source", "smile_url", "smile_format", "smile_boxes",
+            )):
+                config.smile_revision += 1
             enabled_days = data.get("enabled_days")
             open_time = data.get("open_time")
             close_time = data.get("close_time")
@@ -74,9 +99,11 @@ class OperationalService:
             if close_time is not None:
                 config.close_time = close_time
             for field in ("notification_mode", "primary_email", "backup_enabled", "backup_email",
-                          "audio_chunk_duration", "audio_chunk_mode"):
+                          "audio_chunk_duration", "audio_chunk_mode", "jev_model", "speechmatics_model", *SMILE_FIELDS):
                 if field in data:
                     setattr(config, field, data[field])
+            if "smile_collector_id" in data:
+                config.smile_legacy_sources = {}
             config.save()
             if (before_duration, before_mode) != (config.audio_chunk_duration, config.audio_chunk_mode):
                 AudioChunkConfigurationChange.objects.create(

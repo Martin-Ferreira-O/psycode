@@ -14,10 +14,14 @@ def known_boxes():
     from django.conf import settings
     from backend.apps.capture.models import AgentRegistration, CaptureSession
     from backend.apps.agenda.models import AgendaBoxRevision
+    from backend.apps.operational.models import OperationalConfiguration
     boxes = set()
     boxes.update(item['box'] for item in settings.CAPTURE_AGENTS.values())
-    for scope in settings.CAPTURE_AGENDA_SOURCES.values():
-        boxes.update(scope['boxes'])
+    config = OperationalConfiguration.objects.filter(pk=1).first()
+    if config:
+        boxes.update(config.smile_boxes)
+        for scope in config.smile_legacy_sources.values():
+            boxes.update(scope['boxes'])
     for model in (AgentRegistration, CaptureSession, AgendaBoxRevision):
         boxes.update(model.objects.values_list('box', flat=True).distinct())
     return sorted((box for box in boxes if is_box(box)), key=lambda box: int(box[4:]))

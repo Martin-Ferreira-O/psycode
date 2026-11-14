@@ -99,26 +99,29 @@ del HTML y no devuelve pacientes, psicólogos ni supervisores. No se inventaron 
 relaciones. El servidor conserva todos sus bytes/campos originales y deriva la
 ocupación con `AgendaService.load_smile_json`. El lector Excel anterior permanece.
 
-El colector llama la CLI existente en un proceso separado, con boxes designados y
-fecha local, salida JSON privada y sin imprimir citas. Instalar el extra `smile`
-y Chromium/Chrome en el colector; las credenciales/URL permanecen allí. Si la CLI
-termina con error, se marca revisión requerida y no se repiten credenciales a ciegas;
-tras corregir el problema se usa `psycode-agent retry-smile`. No se ejecutó login ni
-consulta institucional durante estas pruebas. La implementación ya está conectada
-con fixtures; queda pendiente su validación real en la red de Smile.
+En **Configuración operativa**, elige el PC colector, la fuente, la URL HTTPS
+terminada en `/index.php/`, la zona horaria, el intervalo, los tiempos máximos y
+el alcance del reporte. JSON permite varios boxes. Excel requiere un solo box.
+La fuente identifica el catálogo existente. Conserva ese identificador al
+mover la recolección entre PCs.
 
-`CAPTURE_AGENDA_SOURCES` designa un colector por fuente y su alcance:
+Instala el extra `smile` en el agente y provisiona `SMILE_USER`,
+`SMILE_PASSWORD` y, si corresponde, `SMILE_CA_FILE` en el archivo privado local.
+El agente consulta el perfil mediante HTTPS cada cinco segundos cuando está
+disponible. La publicación de catálogo y agenda sigue sujeta a la designación
+y a la revisión vigentes en SQL. Si el descargador falla, corrige la causa antes
+de usar `psycode-agent retry-smile`.
 
-```json
-{"smile":{"collector_id":"agent-box-3","boxes":["box-3","box-4","box-5","box-6","box-7"]}}
-```
-
-No se asume que cada sala obtiene un reporte global. Configurar el alcance real;
-los boxes de una fuente no pueden superponerse con otra. Un reemplazo se designa
-cambiando esa configuración central; no hay elección distribuida entre PCs.
+Para un despliegue anterior, mantén el antiguo `CAPTURE_AGENDA_SOURCES`
+disponible al aplicar la migración `operational.0004`. La migración importa
+su alcance y autorización a SQL. Actualiza el agente y completa desde la web
+el PC, URL y demás parámetros de la designación. Guarda una designación explícita
+o elige **Sin colector** para desactivar la autorización importada. Después de
+la migración puedes retirar `CAPTURE_AGENDA_SOURCES` y los parámetros
+operativos Smile del entorno de los agentes.
 
 El agente solicita una generación mediante `POST /api/v1/internal/agenda-collections`
-(JSON `source`). Recibe `collection_id`, generación SQL y boxes. Sube el reporte original JSON o Excel a
+(JSON `source` y `revision` del perfil). Recibe `collection_id`, generación SQL y boxes. Sube el reporte original JSON o Excel a
 `POST /api/v1/internal/agenda-reports` con multipart `archivo` y `metadata` JSON.
 El schema está en [contracts](../contracts/agenda-v1.schema.json).
 

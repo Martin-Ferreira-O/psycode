@@ -4,6 +4,7 @@ import json
 from datetime import datetime, timedelta, timezone
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
+from backend.apps.operational.models import OperationalConfiguration
 from django.test import TestCase, override_settings
 from django.core.files.uploadedfile import SimpleUploadedFile
 from openpyxl import Workbook
@@ -25,8 +26,14 @@ def workbook(box='box-3',empty=False):
         for col,value in enumerate(('27/10/2026','09:00','01:00','CONFIRMADA','SYNTHETIC','SYNTHETIC'),1):s.cell(8,col,value)
     out=io.BytesIO();w.save(out);return out.getvalue()
 
-@override_settings(CAPTURE_AGENDA_SOURCES=SOURCES,CAPTURE_AGENTS=AGENTS)
+@override_settings(CAPTURE_AGENTS=AGENTS)
 class DurableAgendaTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        config = OperationalConfiguration.load()
+        config.smile_legacy_sources = SOURCES
+        config.save(update_fields=["smile_legacy_sources"])
+
     def setUp(self):
         self.identity=AgentIdentity('agent-3','box-3')
         self.raw=workbook()

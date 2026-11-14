@@ -6,10 +6,11 @@ from backend.common.errors import not_found
 from .composition import accounts_service
 
 from backend.apps.capture.views import FragmentV2UploadView
-from backend.apps.agenda.views import CollectionView, ReportView, SmileCatalogView
+from backend.apps.agenda.views import CollectionView, ReportView, SmileCatalogView, SmileConfigurationView
 from backend.apps.agenda.collector_check import AgentSmileCheckView
 
 urlpatterns = [
+    path("api/v1/internal/smile-configuration", SmileConfigurationView.as_view()),
     path("api/v1/internal/smile-room-catalogues", SmileCatalogView.as_view()),
     path("api/v1/internal/smile-collector-check", AgentSmileCheckView.as_view()),
     path("api/v2/internal/fragments", FragmentV2UploadView.as_view()),

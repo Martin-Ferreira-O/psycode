@@ -4,6 +4,8 @@ import json
 import os
 import re
 
+from backend.common.processing_models import JevVersion, SpeechmaticsModel
+
 from .http import ProviderError
 
 
@@ -13,10 +15,10 @@ class Settings:
     jev_key: str = field(default="", repr=False)
     openrouter_key: str = field(default="", repr=False)
     jev_provider: str = "auto"
-    openrouter_jev_model: str = "typesafe/jev-1.13"
+    openrouter_jev_model: str = JevVersion.V114.openrouter_id
     region: str = "eu1"
-    model: str = "enhanced"
-    jev_model: str = "jev-1.13.0"
+    model: str = SpeechmaticsModel.ENHANCED
+    jev_model: str = JevVersion.V114.typesafe_id
     external_enabled: bool = False
     timeout: float = 300.
     poll_interval: float = 2.
@@ -34,10 +36,7 @@ class Settings:
             jev_key=os.environ.get("TYPESAFE_API_KEY", ""),
             openrouter_key=os.environ.get("OPENROUTER_API_KEY", ""),
             jev_provider=os.environ.get("JEV_PROVIDER", "auto").lower(),
-            openrouter_jev_model=os.environ.get("OPENROUTER_JEV_MODEL", "typesafe/jev-1.13"),
             region=os.environ.get("SPEECHMATICS_REGION", "eu1").lower(),
-            model=os.environ.get("SPEECHMATICS_MODEL", "enhanced"),
-            jev_model=os.environ.get("JEV_MODEL", "jev-1.13.0"),
             external_enabled=os.environ.get("PSYCODE_EXTERNAL_PROCESSING_ENABLED") == "1",
             timeout=float(os.environ.get("PSYCODE_PROVIDER_TIMEOUT", "300")),
             poll_interval=float(os.environ.get("SPEECHMATICS_POLL_INTERVAL", "2")),
@@ -48,7 +47,7 @@ class Settings:
     def validate(self, provider):
         if not self.external_enabled:
             raise ProviderError("Procesamiento externo deshabilitado; configura PSYCODE_EXTERNAL_PROCESSING_ENABLED=1")
-        if self.region not in {"eu1", "us1", "au1"} or self.model not in {"standard", "enhanced"}:
+        if self.region not in {"eu1", "us1", "au1"} or self.model not in SpeechmaticsModel.values:
             raise ProviderError("Región o modelo de Speechmatics inválido")
         if not 1 <= self.timeout <= 540 or not .1 <= self.poll_interval <= 30:
             raise ProviderError("Plazos de proveedor inválidos")
@@ -89,9 +88,13 @@ class Settings:
         return ("https://openrouter.ai/api/alpha/decisions" if self.analysis_provider == "openrouter"
                 else "https://api.typesafe.ai/v1/systemone")
 
+    @property
+    def transcription_language(self):
+        return "multi" if self.model in {SpeechmaticsModel.MELIA, SpeechmaticsModel.OAK} else "es"
+
     def public(self):
         return {"provider": "speechmatics", "region": self.region, "model": self.model,
-                "language": "es", "diarization": "speaker", "sample_rate": 16000,
+                "language": self.transcription_language, "diarization": "speaker", "sample_rate": 16000,
                 "jev_model": self.analysis_model, "jev_provider": self.analysis_provider,
                 "external_processing": True,
                 "timeout_seconds": self.timeout}
