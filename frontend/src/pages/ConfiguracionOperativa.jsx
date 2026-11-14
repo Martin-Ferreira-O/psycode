@@ -32,6 +32,7 @@ function seccionDesdeURL() {
 function formularioDesdeConfiguracion(configuracion) {
     return {
         ...configuracion,
+        jev_threshold: configuracion.jev_threshold?.toLocaleString("es-CL", { maximumSignificantDigits: 17 }),
         enabled_days: (configuracion.enabled_days ?? []).map(Number),
         open_time: configuracion.open_time ?? "",
         close_time: configuracion.close_time ?? "",

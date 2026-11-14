@@ -1,6 +1,6 @@
 import { Icon } from "../ui.jsx";
 
-export const CAMPOS_MODELOS = ["jev_model", "speechmatics_model"];
+export const CAMPOS_MODELOS = ["jev_model", "jev_threshold", "speechmatics_model"];
 export const CAMPOS_SMILE = [
     "smile_collector_id", "smile_source", "smile_url", "smile_interval", "smile_timeout",
     "smile_request_timeout", "smile_format", "smile_boxes",
@@ -31,6 +31,14 @@ export function prepararAjustes(formulario, vigente) {
     const payload = Object.fromEntries(campos.map((campo) => [campo, formulario[campo]]));
     if (campos.includes("jev_model") && !opciones.jev_models.includes(payload.jev_model)) {
         errores.jev_model = ["Selecciona una versión disponible de Jev."];
+    }
+    if (campos.includes("jev_threshold")) {
+        const entrada = String(payload.jev_threshold).trim().replace(",", ".");
+        const valor = Number(entrada);
+        if (!/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(entrada) || valor < 0 || valor > 1) {
+            errores.jev_threshold = ["Ingresa un número entre 0 y 1."];
+        }
+        payload.jev_threshold = valor;
     }
     if (campos.includes("speechmatics_model") && !opciones.speechmatics_models.includes(payload.speechmatics_model)) {
         errores.speechmatics_model = ["Selecciona un modelo disponible de Speechmatics."];
@@ -215,6 +223,13 @@ export function AjustesModelos({ formulario, vigente, actualizar, errores }) {
                         {options.speechmatics_models.map((modelo) => <option key={modelo} value={modelo}>{MODELOS[modelo]?.[0] ?? modelo}</option>)}
                     </select>}
                 </Campo>
+                {formulario.jev_threshold != null && (
+                    <Campo campo="jev_threshold" titulo="Umbral de JEV" errores={errores}
+                        ayuda="Puntaje mínimo de JEV para considerar una señal del modelo. Un umbral más bajo admite más señales, que se verifican según su contexto y evidencia. El valor inicial es 0,55 (rango de 0 a 1).">
+                        {(props) => <input {...props} type="text" inputMode="decimal" value={formulario.jev_threshold}
+                            onChange={(evento) => actualizar("jev_threshold", evento.target.value)} />}
+                    </Campo>
+                )}
             </div>
         </fieldset>
     );

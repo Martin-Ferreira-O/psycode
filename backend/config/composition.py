@@ -78,6 +78,9 @@ def analysis_worker(*, settings=None,directory=None, speechmatics_http=None, jev
         version = JevVersion(OperationalConfiguration.load().jev_model)
         return replace(config, jev_model=version.typesafe_id, openrouter_jev_model=version.openrouter_id)
 
+    def jev_threshold():
+        return OperationalConfiguration.load().jev_threshold
+
     return AnalysisService(
         SpeechmaticsTranscriptor(config, root / "jobs", speechmatics_http,
                                  settings_loader=speechmatics_config if settings is None else None),
@@ -85,6 +88,7 @@ def analysis_worker(*, settings=None,directory=None, speechmatics_http=None, jev
         ledger if ledger is not None else FileFragmentLedger(root / "fragments"),
         alerts_service(store), audit if audit is not None else AnalysisAudit(events),
         redact_terms=config.redact_terms,
+        threshold_loader=jev_threshold if settings is None else None,
         secrets=(config.speechmatics_key, config.jev_key, config.openrouter_key))
 
 def fragment_job_processor(

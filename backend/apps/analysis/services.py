@@ -9,6 +9,7 @@ from uuid import NAMESPACE_URL, uuid4, uuid5
 from backend.apps.alerts.domain import ORIGEN_PRUEBA_AUDIO
 from backend.apps.alerts.exceptions import AlertAlreadyExists
 from backend.common.errors import PersistenceUnavailable
+from backend.common.processing_models import JEV_DEFAULT_THRESHOLD
 from .domain import AnalysisContextLost, AnalysisResult, AnalysisState, Fragment, FragmentRejected, JevDecision, Signal
 from .errors import AnalysisRetry, JevContextLimit, ProviderError, SubmissionUncertain
 from .ports import AnalizadorDeSenales, FragmentLedger, TechnicalAudit, Transcriptor
@@ -34,13 +35,14 @@ class AnalysisService:
     """Instancia por trabajador, secuencial. Contexto acotado y aislado por UUID."""
     def __init__(self, transcriptor: Transcriptor, analyzer: AnalizadorDeSenales,
                  ledger: FragmentLedger, alerts, audit: TechnicalAudit, *,
-                 redact_terms=(), secrets=(), max_sessions=32):
+                 redact_terms=(), secrets=(), max_sessions=32, threshold_loader=None):
         self.transcriptor, self.analyzer, self.ledger = transcriptor, analyzer, ledger
         self.alerts, self.audit = alerts, audit
         self.redact_terms, self.secrets = redact_terms, secrets
         self.histories = {}
         self.evidence = {}
         self.max_sessions = max_sessions
+        self.threshold_loader = threshold_loader
         self._lock = Lock()
 
     def close_session(self, session_id):
@@ -84,6 +86,7 @@ class AnalysisService:
                 return result, {
                     "history": self.histories[session_id],
                     "evidence": self.evidence[session_id],
+                    "jev_threshold": checkpoint.data.get("jev_threshold", JEV_DEFAULT_THRESHOLD),
                     "speechmatics": checkpoint.data.get("speechmatics", {}),
                     "jev_requests": checkpoint.data.get("jev_requests", []),
                     **({"analysis_unit": "fragment", "block_result": {
@@ -169,7 +172,7 @@ class AnalysisService:
             "pregunta", "cita", "referencia_a_terceros", "antecedente_temporal",
         }))
 
-    def _block_signals(self, fragment, utterances, roles, model_roles, decision):
+    def _block_signals(self, fragment, utterances, roles, model_roles, decision, threshold):
         verified = []
         eligible = False
         for index, item in enumerate(utterances):
@@ -181,13 +184,13 @@ class AnalysisService:
             text = item["text"]
             literal = literal_candidates(text)
             dimensions = evidence_dimensions(text)
-            for candidate in jev_candidates(text, decision.values, MATRIX):
+            for candidate in jev_candidates(text, decision.values, MATRIX, threshold=threshold):
                 level = candidate["matrix_level"]
                 turn_ids = decision.evidence_turns.get(str(level))
                 localized = turn_ids is not None and f"t{index}" in turn_ids
                 literal_verified = level in literal and (
                     turn_ids is None or self._confirmed_role(item["speaker"], model_roles) == "patient")
-                if (decision.values[level] < .55
+                if (decision.values[level] < threshold
                         or (level < 3 and not (literal_verified or localized))
                         or (level >= 3 and not dimensions[level])):
                     continue
@@ -199,13 +202,13 @@ class AnalysisService:
         errors = []
         if not eligible or decision.context != "afirmacion_propia":
             errors.append("CONTEXT_NOT_EVALUABLE")
-        elif best is None and (any(v >= .55 for v in decision.values[1:])
+        elif best is None and (any(v >= threshold for v in decision.values[1:])
                               or any(self._confirmed_role(item["speaker"], roles) == "unknown"
                                      or item["attribution"] != "assigned" for item in utterances)):
             errors.append("TEXT_NOT_EVALUABLE")
         return (() if best is None else (best,)), errors
 
-    def _process_block(self, fragment, utterances, roles, transcription, errors, checkpoint):
+    def _process_block(self, fragment, utterances, roles, transcription, errors, checkpoint, threshold):
         model_roles = roles
         if fragment.audio_test:
             # Convención ficticia exclusiva del diagnóstico sintético autorizado.
@@ -244,7 +247,7 @@ class AnalysisService:
                     if checkpoint is not None:
                         checkpoint.data["jev_response"] = asdict(decision)
                         checkpoint.save()
-                signals, block_errors = self._block_signals(fragment, utterances, roles, model_roles, decision)
+                signals, block_errors = self._block_signals(fragment, utterances, roles, model_roles, decision, threshold)
                 errors.extend(block_errors)
             except JevContextLimit as exc:
                 if checkpoint is not None:
@@ -304,6 +307,7 @@ class AnalysisService:
             stored_unit = checkpoint.data.setdefault("analysis_unit", fragment.analysis_unit)
             if stored_unit != fragment.analysis_unit:
                 raise FragmentRejected("Checkpoint pertenece a otra unidad de análisis")
+        threshold = self._threshold(checkpoint)
         prepare = self._prepare_block if fragment.analysis_unit == "fragment" else self._prepare_utterances
         try:
             if checkpoint is None:
@@ -337,7 +341,7 @@ class AnalysisService:
             utterances = (self._prepare_block(fragment, words) if fragment.analysis_unit == "fragment"
                           else self._utterances(fragment, words))
         if fragment.analysis_unit == "fragment":
-            return self._process_block(fragment, utterances, roles, transcription, errors, checkpoint)
+            return self._process_block(fragment, utterances, roles, transcription, errors, checkpoint, threshold)
         start = 0
         if checkpoint is not None:
             start = checkpoint.data.get("next_utterance", 0)
@@ -381,14 +385,14 @@ class AnalysisService:
                     checkpoint.save()
                 decisions.append(decision)
                 candidates = jev_candidates(text, decision.values, MATRIX,
-                                            "\n".join(h["text"] for h in history))
+                                            "\n".join(h["text"] for h in history), threshold=threshold)
                 flags = context_flags(text)
                 evaluable = (decision.context == "afirmacion_propia" and role == "patient"
                              and utterance["attribution"] == "assigned"
                              and not set(flags).intersection({"pregunta", "cita", "referencia_a_terceros", "antecedente_temporal"}))
                 if not evaluable:
                     errors.append("CONTEXT_NOT_EVALUABLE")
-                elif not candidates and any(v >= .55 for v in decision.values[1:]):
+                elif not candidates and any(v >= threshold for v in decision.values[1:]):
                     # Las puertas léxicas pueden abstenerse ante una puntuación alta.
                     errors.append("TEXT_NOT_EVALUABLE")
                 else:
@@ -432,6 +436,16 @@ class AnalysisService:
                 checkpoint.data.pop(key, None)
             checkpoint.save()
         return result
+
+    def _threshold(self, checkpoint):
+        if checkpoint is not None and "jev_threshold" in checkpoint.data:
+            return checkpoint.data["jev_threshold"]
+        legacy_started = checkpoint is not None and "roles" in checkpoint.data
+        threshold = JEV_DEFAULT_THRESHOLD if legacy_started or self.threshold_loader is None else self.threshold_loader()
+        if checkpoint is not None:
+            checkpoint.data["jev_threshold"] = threshold
+            checkpoint.save()
+        return threshold
 
     def register_signals(self, fragment: Fragment, result: AnalysisResult, *, checkpoint=None) -> None:
         """Se puede reintentar esta entrega interna sin volver a llamar a proveedores."""

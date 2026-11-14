@@ -1,7 +1,7 @@
-from django.core.validators import MinValueValidator
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
-from backend.common.processing_models import JevVersion, SpeechmaticsModel
+from backend.common.processing_models import JEV_DEFAULT_THRESHOLD, JevVersion, SpeechmaticsModel
 
 
 class NotificationMode(models.TextChoices):
@@ -42,6 +42,9 @@ class OperationalConfiguration(models.Model):
     audio_chunk_duration = models.IntegerField(default=60, validators=[MinValueValidator(10)])
     audio_chunk_mode = models.CharField(max_length=7, choices=AudioChunkMode.choices, default=AudioChunkMode.FIXED)
     jev_model = models.CharField(max_length=4, choices=JevVersion.choices, default=JevVersion.V114)
+    jev_threshold = models.FloatField(
+        default=JEV_DEFAULT_THRESHOLD, validators=[MinValueValidator(0), MaxValueValidator(1)],
+    )
     speechmatics_model = models.CharField(
         max_length=8, choices=SpeechmaticsModel.choices, default=SpeechmaticsModel.ENHANCED,
     )
@@ -74,6 +77,9 @@ class OperationalConfiguration(models.Model):
                 name="operational_valid_notification_mode",
             ),
             models.CheckConstraint(condition=models.Q(jev_model__in=JevVersion.values), name="operational_valid_jev_model"),
+            models.CheckConstraint(
+                condition=models.Q(jev_threshold__range=(0, 1)), name="operational_valid_jev_threshold",
+            ),
             models.CheckConstraint(
                 condition=models.Q(speechmatics_model__in=SpeechmaticsModel.values),
                 name="operational_valid_speechmatics_model",

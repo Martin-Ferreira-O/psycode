@@ -3,7 +3,7 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from uuid import uuid4
 
 import httpx
@@ -13,7 +13,7 @@ from django.test import TransactionTestCase, override_settings
 from rest_framework.test import APIClient, APITestCase
 
 from backend.apps.accounts.models import Role, User
-from backend.apps.analysis.domain import Fragment
+from backend.apps.analysis.domain import AnalysisState, Fragment, JevDecision, Transcription, Word
 from backend.apps.analysis.tests.test_integration import answer
 from backend.apps.capture.pc_registry import create_agent, revoke_agent
 from backend.config.composition import analysis_worker
@@ -38,6 +38,42 @@ class ProcessingConfigurationTests(APITestCase):
 
     def put(self, **data):
         return self.client.put(self.url, data, format="json")
+
+    def test_threshold_update_changes_next_analysis_on_same_worker(self):
+        self.assertEqual(self.client.get(self.url).data["data"]["jev_threshold"], 0.55)
+        for value in (True, "0.55", None, -0.1, 1.1):
+            with self.subTest(value=value):
+                self.assertEqual(self.put(jev_threshold=value).status_code, 400)
+        self.assertEqual(self.client.get(self.url).data["data"]["jev_threshold"], 0.55)
+
+        with TemporaryDirectory() as root:
+            worker = analysis_worker(directory=root, alert_store=Mock(), audit=Mock(), ledger=Mock())
+            worker.transcriptor = Mock()
+            worker.transcriptor.transcribe.return_value = Transcription(
+                "Ojalá no despertar", (Word("Ojalá no despertar", 0, 1, "S1"),), "deleted",
+            )
+            worker.analyzer = Mock()
+            worker.analyzer.evaluate.return_value = JevDecision(
+                "jev-1.14.0", "afirmacion_propia", (0.1, 0.7, *[0.1] * 6), 1, 1,
+            )
+            worker.register_signals = Mock()
+
+            def analyze():
+                fragment = Fragment(str(uuid4()), 0, "box-3", datetime.now(timezone.utc),
+                                    Path(root) / "synthetic.pcm", analysis_unit="fragment")
+                return worker.process(fragment, roles={"S1": "patient"}).state
+
+            self.assertEqual(analyze(), AnalysisState.SIGNAL)
+            self.assertEqual(self.put(jev_threshold=0.8).status_code, 200)
+            self.assertEqual(analyze(), AnalysisState.NO_SIGNAL)
+            self.assertEqual(self.put(jev_threshold=0.7).status_code, 200)
+            self.assertEqual(analyze(), AnalysisState.SIGNAL)
+
+            checkpoint = Mock(data={})
+            self.assertEqual(worker._threshold(checkpoint), 0.7)
+            self.assertEqual(self.put(jev_threshold=0.9).status_code, 200)
+            self.assertEqual(worker._threshold(checkpoint), 0.7)
+            self.assertEqual(worker._threshold(Mock(data={"roles": {}})), 0.55)
 
     def assign(self, agent, **fields):
         response = self.put(**{

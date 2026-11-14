@@ -1,3 +1,4 @@
+import math
 import re
 from urllib.parse import urlsplit
 
@@ -36,6 +37,15 @@ class StrictChoiceField(serializers.ChoiceField):
         return super().to_internal_value(data)
 
 
+class ThresholdField(serializers.FloatField):
+    def to_internal_value(self, data):
+        if type(data) not in (int, float):
+            self.fail("invalid")
+        if isinstance(data, float) and not math.isfinite(data):
+            self.fail("invalid")
+        return data
+
+
 class OperationalConfigSerializer(StrictSerializer):
     audio_chunk_duration = StrictIntegerField(min_value=10, required=False)
     audio_chunk_mode = serializers.ChoiceField(choices=AudioChunkMode.choices, required=False)
@@ -48,6 +58,7 @@ class OperationalConfigSerializer(StrictSerializer):
     backup_enabled = StrictBooleanField(required=False)
     backup_email = StrictStringField(max_length=254, allow_blank=True, required=False)
     jev_model = StrictChoiceField(choices=JevVersion.values, required=False)
+    jev_threshold = ThresholdField(min_value=0, max_value=1, required=False)
     speechmatics_model = StrictChoiceField(choices=SpeechmaticsModel.values, required=False)
     smile_collector_id = StrictStringField(max_length=36, allow_null=True, required=False)
     smile_source = StrictStringField(max_length=64, required=False)
@@ -129,7 +140,7 @@ class OperationalConfigSerializer(StrictSerializer):
         ))
         backup_enabled = data.get("backup_enabled", getattr(self.instance, "backup_enabled", False))
         errors = self._smile_errors(data)
-        processing_or_smile = {"jev_model", "speechmatics_model", *SMILE_FIELDS}
+        processing_or_smile = {"jev_model", "jev_threshold", "speechmatics_model", *SMILE_FIELDS}
         for field, active in (
             ("primary_email", mode == NotificationMode.DISTRIBUTION_LIST),
             ("backup_email", backup_enabled),
