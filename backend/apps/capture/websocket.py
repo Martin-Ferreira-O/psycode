@@ -546,6 +546,8 @@ class RemoteControl:
                 session__scheduled_end__gt=timezone.now(),
                 session__authorization_ended_at=None,
             )
+        elif command["kind"] == "detencion":
+            candidates = candidates.filter(session__actual_end=None)
         return candidates.exists()
 
 

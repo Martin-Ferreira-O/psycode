@@ -2,7 +2,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone as dt_timezone
 from io import StringIO
-from threading import Barrier
+from threading import Barrier, Event
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -36,9 +36,12 @@ class CaptureFixtures:
         self.service.acknowledge("box-3", command.command_id, now=NOW)
         return session
 
-    def stop(self):
+    def revoke(self, now=NOW + timedelta(seconds=30)):
         denied = replace(self.authorization, authorized=False, inicio=None, termino=None)
-        self.service.apply_authorization(denied, now=NOW + timedelta(seconds=30))
+        return self.service.apply_authorization(denied, now=now)
+
+    def stop(self):
+        self.revoke()
         command, = self.service.commands("box-3", now=NOW + timedelta(seconds=31))
         return command
 
@@ -233,17 +236,6 @@ class CaptureLifecycleTests(CaptureFixtures, TestCase):
         self.assert_code("COMMAND_NOT_FOUND", self.service.acknowledge, 4, command.pk, now=NOW)
         self.assert_code("COMMAND_NOT_FOUND", self.service.acknowledge, 3, uuid4(), now=NOW)
 
-    def test_revocation_cancels_undelivered_start_and_generates_one_stop(self):
-        self.create()
-        stop = self.stop()
-        self.assertEqual(stop.kind, "detencion")
-        self.stop()
-        self.assertEqual(AgentCommand.objects.filter(kind=CommandKind.STOP).count(), 1)
-        self.assertIsNotNone(AgentCommand.objects.get(kind=CommandKind.START).cancelled_at)
-        result = self.ack_stop(stop, last_sequence=-1)
-        self.assertEqual(result.state, "completada")
-        self.assertIsNone(result.actual_start)
-
     def test_complete_only_after_stop_ack_and_final_sequence_arrives(self):
         session = self.active()
         stop = self.stop()
@@ -334,8 +326,10 @@ class CaptureLifecycleTests(CaptureFixtures, TestCase):
     def test_recovery_stops_expired_window_without_delivering_start(self):
         self.create()
         commands = CaptureSessionService().commands(3, now=self.authorization.termino)
-        self.assertEqual([item.kind for item in commands], ["detencion"])
-        self.assertEqual(CaptureSession.objects.get().state, "finalizando")
+        self.assertEqual(commands, ())
+        saved = CaptureSession.objects.get()
+        self.assertEqual(saved.state, "completada")
+        self.assertEqual(saved.actual_end, self.authorization.termino)
 
     def test_recovery_diagnoses_missing_start_without_closing_and_is_idempotent(self):
         self.create()
@@ -440,7 +434,7 @@ class CaptureLifecycleTests(CaptureFixtures, TestCase):
         self.assertEqual(CaptureSession.objects.count(), 1)
         OperationalConfiguration.objects.update(enabled_days=[])
         self.assertFalse(service.authorize_box_capture(3, NOW).authorized)
-        self.assertEqual(CaptureSession.objects.get().state, "finalizando")
+        self.assertEqual(CaptureSession.objects.get().state, "completada")
 
     def test_factory_uses_injected_scrum70_and_recovers_from_persisted_state(self):
         config = OperationalConfiguration(enabled_days=[0], open_time="08:00", close_time="18:00")
@@ -537,6 +531,73 @@ class CaptureConcurrencyTests(CaptureFixtures, TransactionTestCase):
         deliveries = self.race(*[lambda: self.service.commands(3, now=NOW)] * 4)
         self.assertEqual(len({delivery[0].command_id for delivery in deliveries}), 1)
         self.assertEqual(AgentCommand.objects.get().delivery_count, 4)
+
+    def race_with_first_writer(self, first, second):
+        written, waiting = Event(), Event()
+
+        def first_writer():
+            with transaction.atomic():
+                result = first()
+                written.set()
+                self.assertTrue(waiting.wait(timeout=5))
+                return result
+
+        def second_writer():
+            self.assertTrue(written.wait(timeout=5))
+
+            def signal_transaction(execute, sql, params, many, context):
+                if sql.startswith("BEGIN"):
+                    waiting.set()
+                return execute(sql, params, many, context)
+
+            with connections["default"].execute_wrapper(signal_transaction):
+                return second()
+
+        return self.race(first_writer, second_writer)
+
+    def test_poll_first_requires_stop_even_without_start_ack(self):
+        self.create()
+        (start,), stopped = self.race_with_first_writer(
+            lambda: self.service.commands(3, now=NOW, reconcile=False), self.revoke,
+        )
+        self.assertEqual(start.kind, CommandKind.START)
+        order = AgentCommand.objects.get(pk=start.command_id)
+        self.assertEqual(order.delivery_count, 1)
+        self.assertIsNone(order.acknowledged_at)
+        self.assertEqual(stopped.state, SessionState.STOPPING)
+        self.assertIsNone(stopped.actual_end)
+        stop, = self.service.commands(3, now=NOW + timedelta(seconds=31))
+        self.assertEqual(stop.kind, CommandKind.STOP)
+
+    def test_cancellation_first_leaves_nothing_to_poll_or_ack(self):
+        self.create()
+        start = AgentCommand.objects.get()
+        stopped, commands = self.race_with_first_writer(
+            self.revoke, lambda: self.service.commands(3, now=NOW + timedelta(seconds=31), reconcile=False),
+        )
+        self.assertEqual(commands, ())
+        self.assertEqual(stopped.state, SessionState.COMPLETED)
+        self.assertEqual(stopped.final_sequence, -1)
+        start.refresh_from_db()
+        self.assertEqual(start.delivery_count, 0)
+        self.assertEqual(AgentCommand.objects.count(), 1)
+        self.assert_code("COMMAND_NOT_DELIVERED", self.service.acknowledge, 3, start.pk, now=NOW + timedelta(seconds=32))
+
+    def test_concurrent_historical_recovery_closes_once(self):
+        self.create()
+        cutoff = NOW + timedelta(seconds=30)
+        CaptureSession.objects.update(state=SessionState.STOPPING, stop_requested_at=cutoff)
+        start = AgentCommand.objects.get()
+        start.cancelled_at = cutoff
+        start.save(update_fields=["cancelled_at"])
+        AgentCommand.objects.create(session_id=start.session_id, kind=CommandKind.STOP, created_at=cutoff)
+        results = self.race(*[
+            lambda: CaptureSessionService().recover(now=cutoff + timedelta(seconds=1))
+        ] * 4)
+        self.assertEqual(sorted(results), [0, 0, 0, 1])
+        self.assertEqual(CaptureSession.objects.get().actual_end, cutoff)
+        self.assertEqual(CaptureEvent.objects.filter(action="capture.start.cancelled_before_delivery").count(), 1)
+        self.assertEqual(CaptureEvent.objects.filter(action="capture.session.completed").count(), 1)
 
     def test_concurrent_stop_confirmations_complete_once(self):
         session = self.active()

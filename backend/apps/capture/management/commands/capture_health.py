@@ -6,7 +6,7 @@ from django.utils import timezone
 from backend.apps.capture.models import (
     AUDIO_TEST_ORIGIN, OPEN_STATES, AgentConnectivityEvent, AgentStatus, CaptureSession, FragmentJob, RuntimeLease, SessionState,
 )
-from backend.apps.capture.services import CaptureSessionService
+from backend.apps.capture.services import STOP_CONFIRMATION_ESCALATED, CaptureSessionService
 from backend.apps.agenda.models import AgendaBoxRevision, AgendaCollection
 
 class Command(BaseCommand):
@@ -32,6 +32,8 @@ class Command(BaseCommand):
             'reception_pending': sum(s['reception'] == 'pending' for s in lifecycles),
             'reception_intervention': sum(s['reception'] == 'intervention_required' for s in lifecycles),
             'capture_stop_unconfirmed': sum(s['capture'] == 'stop_unconfirmed' for s in lifecycles),
+            'capture_stop_escalated': sum(s['capture'] == 'stop_unconfirmed'
+                                          and s['diagnostic_code'] == STOP_CONFIRMATION_ESCALATED for s in lifecycles),
             'processing_intervention_jobs': clinical_jobs.filter(state=FragmentJob.State.REVIEW).count(),
             'processing_pending_jobs': clinical_jobs.filter(
                 state__in=[FragmentJob.State.PENDING, FragmentJob.State.PROCESSING]).count(),

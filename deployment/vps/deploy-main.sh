@@ -118,24 +118,10 @@ trap resume_on_error ERR
 coordinator_stopped=1
 sudo /usr/bin/systemctl stop psycode-coordinator.service
 if [[ -n "$previous" && -f "$HOME/shared/db.sqlite3" ]]; then
-  # HTTP and worker stay available while agents finish their sessions.
+  # The previous web (HTTP/WSS) and worker stay up during the drain.
+  # The new release checks evidence against the existing schema without writing.
   for ((attempt=0; attempt<60; attempt++)); do
-    open_sessions=$(cd "$previous" && .venv/bin/python manage.py shell --verbosity 0 <<'PY'
-from django.db.models import Exists, OuterRef
-
-from backend.apps.capture.models import AgentCommand, CaptureSession, CommandKind, OPEN_STATES, SessionState
-
-# A cancelled START that was never sent cannot have opened the microphone.
-never_sent_start = AgentCommand.objects.filter(
-    session_id=OuterRef("pk"), kind=CommandKind.START, cancelled_at__isnull=False,
-    delivered_at__isnull=True, delivery_count=0, acknowledged_at__isnull=True,
-)
-print(CaptureSession.objects.filter(state__in=OPEN_STATES, actual_end__isnull=True).exclude(
-    Exists(never_sent_start), state=SessionState.STOPPING, actual_start__isnull=True,
-    final_sequence__isnull=True, next_sequence=0,
-).count())
-PY
-    )
+    open_sessions=$(.venv/bin/python manage.py recover_capture_sessions --check-drain)
     [[ "$open_sessions" == 0 ]] && break
     sleep 5
   done

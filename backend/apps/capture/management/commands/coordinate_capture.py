@@ -53,5 +53,5 @@ class Command(BaseCommand):
                     expires_at__gt=timezone.now()).exists():
                 raise CommandError("PROCESS_LEASE_LOST")
             for session in CaptureSession.objects.select_for_update().filter(
-                    state__in=OPEN_STATES, actual_end__isnull=True):
+                    state__in=OPEN_STATES, actual_end__isnull=True).order_by("pk"):
                 service._stop(session, timezone.now())
