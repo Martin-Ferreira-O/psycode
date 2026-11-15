@@ -103,6 +103,37 @@
 .ui-button:disabled { opacity: .62; cursor: not-allowed; }
 .ui-button[aria-busy] { cursor: progress; }
 .ui-button .ui-icon { width: 17px; height: 17px; }
+
+.ui-filter-select {
+    position: relative;
+    display: inline-grid;
+    color: var(--azul);
+}
+
+.ui-filter-select select {
+    appearance: none;
+    padding-inline: 36px 34px;
+    text-align: start;
+}
+
+.ui-filter-select select[data-filtered="true"] {
+    --button-bg: var(--azul-claro);
+    --button-border: var(--azul);
+    --button-text: var(--azul);
+}
+
+.ui-filter-select .ui-icon {
+    position: absolute;
+    inset-block: 0;
+    margin-block: auto;
+    width: 16px;
+    height: 16px;
+    pointer-events: none;
+}
+
+.ui-filter-icon { inset-inline-start: 12px; }
+.ui-filter-chevron { inset-inline-end: 10px; }
+
 .ui-button:focus-visible, .ui-app :is(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
     outline: 3px solid var(--foco);
     outline-offset: 2px;

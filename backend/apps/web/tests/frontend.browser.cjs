@@ -67,9 +67,13 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
                 const parametros = new URL(route.request().url()).searchParams;
                 const limit = Number(parametros.get('limit'));
                 const offset = Number(parametros.get('offset'));
+                const filtro = parametros.get('estado_evaluacion');
+                const coincidencias = filtro
+                    ? registros.filter(registro => registro.estado_evaluacion === filtro)
+                    : registros;
                 assert.equal(limit, 10);
                 respuesta = { success: true, data: {
-                    items: registros.slice(offset, offset + limit), total: registros.length, limit, offset,
+                    items: coincidencias.slice(offset, offset + limit), total: coincidencias.length, limit, offset,
                 } };
             }
             await route.fulfill({ status: estado, contentType: 'application/json', body: JSON.stringify(respuesta) });
@@ -235,6 +239,26 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
             console.log(`Registro de evaluaciones: ${total} registros, ${paginas} páginas sin duplicados a ${ancho}px.`);
         }
         await page.setViewportSize({ width: 375, height: 800 });
+        registros = registros.map((registro, index) => index % 40 === 0 ? registro : {
+            ...registro, estado_evaluacion: 'falso_positivo', evaluacion: { evaluacion: 'falso_positivo' },
+        });
+        const filtroEvaluaciones = page.getByRole('combobox', { name: 'Filtrar evaluaciones por estado' });
+        await filtroEvaluaciones.focus();
+        await filtroEvaluaciones.selectOption('correcta');
+        await page.getByText('Página 1 de 2', { exact: true }).waitFor();
+        assert.equal(await page.locator('#resultadoEvaluaciones').innerText(), 'Mostrando 1–10 de 13 registros');
+        assert.equal(await filas.getByText('Correcta', { exact: true }).count(), 10);
+        assert.equal(await filtroEvaluaciones.evaluate(select => document.activeElement === select), true);
+        await siguiente.click();
+        await page.getByText('Página 2 de 2', { exact: true }).waitFor();
+        await vistaTarjetas.click();
+        assert.equal(await tarjeta.getByText('Correcta', { exact: true }).count(), 3);
+        assert.equal(await filtroEvaluaciones.inputValue(), 'correcta');
+        await filtroEvaluaciones.selectOption('neutro');
+        await page.getByText('No hay registros que coincidan con el estado seleccionado.').waitFor();
+        await filtroEvaluaciones.selectOption('');
+        await page.getByText('Página 1 de 50', { exact: true }).waitFor();
+        assert.equal(await page.locator('#resultadoEvaluaciones').innerText(), 'Mostrando 1–10 de 500 registros');
         await page.evaluate(() => localStorage.removeItem('evaluaciones.vista'));
         await page.reload();
         await tarjeta.first().waitFor();

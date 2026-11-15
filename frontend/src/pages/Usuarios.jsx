@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { apiGetDatos, describirError } from "../api.js";
 import { solicitarCambioAdministrativo } from "../admin/solicitudes.js";
 import { PageHeader } from "../layout.jsx";
-import { Badge, Button, DataTable, Dialog, Icon, Skeleton, SkeletonRows, Status } from "../ui.jsx";
+import { Badge, Button, DataTable, Dialog, FilterSelect, Icon, Skeleton, SkeletonRows, Status } from "../ui.jsx";
 
 const ENDPOINT = "/api/v1/auth/admin/users";
 const POR_PAGINA = 10;
@@ -38,21 +38,6 @@ async function obtenerUsuarios(offset, activo, signal) {
         offset = Math.floor((datos.total - 1) / POR_PAGINA) * POR_PAGINA;
     } while (!signal.aborted);
     throw new DOMException("Solicitud cancelada", "AbortError");
-}
-
-function FiltroEstadoUsuarios({ activo, filtrar }) {
-    return (
-        <div className="filtro-estado-usuarios">
-            <Icon name="filter" className="filtro-estado-icono" />
-            <select className="ui-button" aria-label="Filtrar usuarios por estado"
-                value={activo} data-filtrado={Boolean(activo)} onChange={(evento) => filtrar(evento.target.value)}>
-                <option value="">Todos los estados</option>
-                <option value="true">Solo activos</option>
-                <option value="false">Solo inactivos</option>
-            </select>
-            <Icon name="chevron_down" className="filtro-estado-flecha" />
-        </div>
-    );
 }
 
 function TablaUsuarios({ usuarios, usuarioActual, editar, confirmar, loading }) {
@@ -331,7 +316,11 @@ export default function Usuarios({ user }) {
                     </div>
                     {user?.rol === "admin" && listado.error?.estado !== 403 && (
                         <div className="barra-usuarios">
-                            <FiltroEstadoUsuarios activo={consulta.activo} filtrar={filtrar} />
+                            <FilterSelect label="Filtrar usuarios por estado" value={consulta.activo} onChange={filtrar}>
+                                <option value="">Todos los estados</option>
+                                <option value="true">Solo activos</option>
+                                <option value="false">Solo inactivos</option>
+                            </FilterSelect>
                             <Button id="botonCrearUsuario" variant="primary" onClick={(evento) => abrir("formulario", null, evento.currentTarget)}>
                                 + Crear usuario
                             </Button>

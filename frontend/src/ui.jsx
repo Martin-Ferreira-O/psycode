@@ -23,6 +23,19 @@ export function Badge({ tone = "neutral", className = "", children, ...props }) 
     return <span {...props} className={`ui-badge ${className}`} data-tone={tone}>{children}</span>;
 }
 
+export function FilterSelect({ label, value, onChange, children }) {
+    return (
+        <div className="ui-filter-select">
+            <Icon name="filter" className="ui-filter-icon" />
+            <select className="ui-button" aria-label={label} value={value}
+                data-filtered={Boolean(value)} onChange={event => onChange(event.target.value)}>
+                {children}
+            </select>
+            <Icon name="chevron_down" className="ui-filter-chevron" />
+        </div>
+    );
+}
+
 export function DataTable({ label, className = "", wrapperClassName = "", wrapperId, stickyActions, children, ...props }) {
     const region = useRef(null);
     const table = useRef(null);

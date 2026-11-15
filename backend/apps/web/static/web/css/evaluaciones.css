@@ -134,6 +134,10 @@
 }
 
 @media (max-width: 600px) {
+    .evaluation-toolbar {
+        column-gap: 8px;
+    }
+
     .evaluation-view-toggle .ui-icon {
         display: none;
     }

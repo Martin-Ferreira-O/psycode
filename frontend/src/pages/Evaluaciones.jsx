@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { formatearBox, formatearFecha, formatearHora, formatearTipoRiesgo, obtenerEtiquetaEvaluacion, obtenerResultado } from "../format.js";
 import { PageHeader } from "../layout.jsx";
-import { Badge, Button, DataTable, Icon, Skeleton, SkeletonRows, Status } from "../ui.jsx";
+import { Badge, Button, DataTable, FilterSelect, Icon, Skeleton, SkeletonRows, Status } from "../ui.jsx";
 import AlertDetail from "../monitor/AlertDetail.jsx";
 import { ALERTS_URL, ALERT_PAGE_SIZE, saveEvaluation } from "../monitor/alerts.js";
 import { usePage } from "../monitor/resources.js";
@@ -137,6 +137,7 @@ function EvaluationCards({ records, loading, onOpen }) {
 export default function Evaluaciones() {
     const [view, setView] = useState(initialView);
     const [offset, setOffset] = useState(0);
+    const [status, setStatus] = useState("");
     const [selected, setSelected] = useState(null);
     const [evaluation, setEvaluation] = useState(null);
     const [saving, setSaving] = useState(false);
@@ -144,7 +145,8 @@ export default function Evaluaciones() {
     const titleRef = useRef(null);
     const detailTrigger = useRef(null);
     const shouldFocus = useRef(false);
-    const { data, loading, error, reload } = usePage(ALERTS_URL, "registro_evaluaciones=true", offset, ALERT_PAGE_SIZE);
+    const query = status ? `registro_evaluaciones=true&estado_evaluacion=${status}` : "registro_evaluaciones=true";
+    const { data, loading, error, reload } = usePage(ALERTS_URL, query, offset, ALERT_PAGE_SIZE);
 
     useEffect(() => {
         if (!loading && shouldFocus.current) {
@@ -182,6 +184,12 @@ export default function Evaluaciones() {
     function movePage(newOffset) {
         shouldFocus.current = true;
         setOffset(newOffset);
+    }
+
+    function filterByStatus(nextStatus) {
+        shouldFocus.current = false;
+        setStatus(nextStatus);
+        setOffset(0);
     }
 
     function retry() {
@@ -228,11 +236,24 @@ export default function Evaluaciones() {
                                 </Button>
                             ))}
                         </div>
+                        <FilterSelect label="Filtrar evaluaciones por estado" value={status} onChange={filterByStatus}>
+                            <option value="">Todos los estados</option>
+                            <option value="pendiente">Pendiente</option>
+                            {Object.keys(resultTones).map(result => (
+                                <option key={result} value={result}>{obtenerEtiquetaEvaluacion(result)}</option>
+                            ))}
+                        </FilterSelect>
                         <Button onClick={reload} busy={loading} busyLabel="Actualizando…"><Icon name="refresh" />Actualizar</Button>
                     </div>
                 </div>
                 {error && <Status id="estadoVacioEvaluaciones" type="error" error={error} messages={{ 404: "No encontramos el registro de evaluaciones solicitado." }} onRetry={retry} />}
-                {data && data.items.length === 0 && <Status id="estadoVacioEvaluaciones" type="vacio">Todavía no existen evaluaciones ni alertas de prueba.</Status>}
+                {data && data.items.length === 0 && (
+                    <Status id="estadoVacioEvaluaciones" type="vacio">
+                        {status
+                            ? "No hay registros que coincidan con el estado seleccionado."
+                            : "Todavía no existen evaluaciones ni alertas de prueba."}
+                    </Status>
+                )}
                 {(loading || records.length > 0) && <EvaluationView records={records} loading={loading} onOpen={openDetail} />}
                 {pages > 1 && (
                     <nav id="paginacionEvaluaciones" className="monitor-pagination" aria-label="Paginación de evaluaciones">

@@ -14,41 +14,6 @@
     margin-inline-start: auto;
 }
 
-.filtro-estado-usuarios {
-    position: relative;
-    display: inline-grid;
-    color: var(--azul);
-}
-
-.filtro-estado-usuarios select {
-    appearance: none;
-    padding-inline: 36px 34px;
-    text-align: start;
-}
-
-.filtro-estado-usuarios select[data-filtrado="true"] {
-    --button-bg: var(--azul-claro);
-    --button-border: var(--azul);
-    --button-text: var(--azul);
-}
-
-.filtro-estado-usuarios .ui-icon {
-    position: absolute;
-    inset-block: 0;
-    margin-block: auto;
-    width: 16px;
-    height: 16px;
-    pointer-events: none;
-}
-
-.filtro-estado-icono {
-    inset-inline-start: 12px;
-}
-
-.filtro-estado-flecha {
-    inset-inline-end: 10px;
-}
-
 .panel-cabecera-usuarios h2 {
     scroll-margin-block-start: 1rem;
 }
