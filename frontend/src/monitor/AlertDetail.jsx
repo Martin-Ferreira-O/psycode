@@ -35,6 +35,7 @@ export default function AlertDetail({ id, onClose, returnFocusRef, evaluation, s
     const closeRef = useRef(null);
     const [option, setOption] = useState("");
     const [feedback, setFeedback] = useState(null);
+    const [transcriptOpen, setTranscriptOpen] = useState(false);
     const load = useCallback(async (signal) => {
         const detail = await apiGetDatos(alertUrl(id), { signal });
         if (detail?.alerta_id !== id) throw new ErrorSolicitud();
@@ -111,12 +112,18 @@ export default function AlertDetail({ id, onClose, returnFocusRef, evaluation, s
                                 <DetailValue label="Estado" id="detalleEstado">{pending ? "Pendiente" : obtenerEtiquetaEvaluacion(alert.estado_evaluacion)}</DetailValue>
                                 <DetailValue label="Sesión" id="detalleSesion">{alert.sesion_id || "—"}</DetailValue>
                             </div>
-                            {!alert.es_prueba && <section id="seccionTranscripcion" className="alert-detail-section" aria-labelledby="tituloTranscripcion">
+                            <section id="seccionTranscripcion" className="alert-detail-section" aria-labelledby="tituloTranscripcion">
                                 <h3 id="tituloTranscripcion">Fragmento de transcripción</h3>
-                                <p id="detalleTranscripcion" className="alert-detail-transcript">
+                                {alert.es_prueba && (
+                                    <Button aria-expanded={transcriptOpen} aria-controls="detalleTranscripcion"
+                                        onClick={() => setTranscriptOpen(open => !open)}>
+                                        {transcriptOpen ? "Ocultar transcripción" : "Ver transcripción"}
+                                    </Button>
+                                )}
+                                <p id="detalleTranscripcion" className="alert-detail-transcript" hidden={alert.es_prueba && !transcriptOpen}>
                                     {transcript.trim() ? transcript : "Esta alerta no tiene un fragmento de transcripción disponible."}
                                 </p>
-                            </section>}
+                            </section>
                             {canEvaluate && (
                                 <form id="formularioEvaluacion" className="alert-detail-section" onSubmit={submit}>
                                     <fieldset>

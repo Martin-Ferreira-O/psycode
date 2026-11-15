@@ -274,6 +274,10 @@ dialog.alert-detail-dialog {
     overflow-wrap: anywhere;
 }
 
+.alert-detail-section > .ui-button + .alert-detail-transcript {
+    margin-top: 8px;
+}
+
 .alert-detail-options {
     margin: 14px 0;
 }

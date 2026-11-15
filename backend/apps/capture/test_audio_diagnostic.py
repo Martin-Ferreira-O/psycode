@@ -195,7 +195,7 @@ class AudioDiagnosticTests(TestCase):
                     if expected:
                         alert_id = finished["alerts"][0]["id"]
                         self.assertEqual(store.get_alert(alert_id).sesion_id, data["test_id"])
-                        self.assertIsNone(store.get_alert(alert_id).descripcion)
+                        self.assertEqual(store.get_alert(alert_id).descripcion, text)
                         message = mail.outbox[0]
                         self.assertEqual(message.to, ["demo@example.test"])
                         self.assertTrue(message.subject.startswith("[PRUEBA]"))
@@ -209,7 +209,9 @@ class AudioDiagnosticTests(TestCase):
                         ))
                         detail = "/api/v1/alerts/" + alert_id
                         with patch("backend.apps.alerts.views.get_service", return_value=AlertsService(store)):
-                            self.assertIs(browser.get(detail).json()["data"]["es_prueba"], True)
+                            alert_detail = browser.get(detail).json()["data"]
+                            self.assertIs(alert_detail["es_prueba"], True)
+                            self.assertEqual(alert_detail["descripcion"], text)
                             response = browser.post(detail + "/evaluacion", {"evaluacion": "correcta"}, format="json")
                             self.assertEqual(response.status_code, 201, response.json())
                             reviewed = browser.get(detail).json()["data"]

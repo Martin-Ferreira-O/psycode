@@ -115,8 +115,9 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
             ...cuerpo.data.items[0], alerta_id: '33333333-3333-4333-8333-000000000001',
             es_prueba: true, estado_evaluacion: 'pendiente', evaluacion: null,
         };
+        let transcripcion = 'Fragmento redactado de la prueba de audio.';
         await page.route(`**/api/v1/alerts/${alertaPrueba.alerta_id}`, route =>
-            route.fulfill({ json: { success: true, data: alertaPrueba } }));
+            route.fulfill({ json: { success: true, data: { ...alertaPrueba, descripcion: transcripcion } } }));
         await page.route(`**/api/v1/alerts/${alertaPrueba.alerta_id}/evaluacion`, route => {
             assert.equal(route.request().method(), 'POST');
             assert.deepEqual(route.request().postDataJSON(), { evaluacion: 'correcta' });
@@ -135,6 +136,17 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         await filaPrueba.getByRole('button').click();
         const detallePrueba = page.getByRole('dialog');
         await detallePrueba.getByText('Alerta de prueba', { exact: true }).waitFor();
+        const verTranscripcion = detallePrueba.getByRole('button', { name: 'Ver transcripción' });
+        const fragmento = detallePrueba.locator('#detalleTranscripcion');
+        assert.equal(await verTranscripcion.getAttribute('aria-expanded'), 'false');
+        assert.equal(await fragmento.isVisible(), false);
+        await verTranscripcion.press('Enter');
+        await fragmento.waitFor();
+        assert.equal(await fragmento.innerText(), transcripcion);
+        const ocultarTranscripcion = detallePrueba.getByRole('button', { name: 'Ocultar transcripción' });
+        assert.equal(await ocultarTranscripcion.getAttribute('aria-expanded'), 'true');
+        await ocultarTranscripcion.click();
+        assert.equal(await fragmento.isVisible(), false);
         await detallePrueba.getByRole('radio', { name: /escenario simulado/ }).check();
         await detallePrueba.getByRole('button', { name: 'Guardar evaluación' }).click();
         const confirmacionPrueba = detallePrueba.locator('#estadoDetalle [data-estado="exito"]');
@@ -143,6 +155,11 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         await detallePrueba.getByRole('button', { name: 'Cerrar' }).click();
         await filaPrueba.getByText('Revisada', { exact: true }).waitFor();
         assert.equal(await filaPrueba.getByText('Alerta de prueba', { exact: true }).isVisible(), true);
+        transcripcion = null;
+        await filaPrueba.getByRole('button').click();
+        await verTranscripcion.click();
+        assert.match(await fragmento.innerText(), /no tiene un fragmento de transcripción disponible/);
+        await detallePrueba.getByRole('button', { name: 'Cerrar' }).click();
 
         const anterior = page.locator('#evaluacionesAnterior');
         const siguiente = page.locator('#evaluacionesSiguiente');
