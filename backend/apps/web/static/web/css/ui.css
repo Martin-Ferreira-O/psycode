@@ -216,15 +216,11 @@
 }
 
 .ui-table-scroll .ui-table td { border-bottom: 1px solid var(--borde); }
-.ui-table:is(.monitor-table-alerts, .tabla-usuarios) td { white-space: nowrap; }
+.ui-table.tabla-usuarios td { white-space: nowrap; }
 
-.ui-table:is(.monitor-table-alerts, .tabla-usuarios) td > .ui-badge {
+.ui-table.tabla-usuarios td > .ui-badge {
     width: var(--table-badge-width, 7em);
     justify-content: center;
-}
-
-#tablaContenedor td:nth-child(4) {
-    --table-badge-width: 6em;
 }
 
 .tabla-usuarios td:nth-child(4) {

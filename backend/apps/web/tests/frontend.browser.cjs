@@ -9,6 +9,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     });
     const page = await browser.newPage();
     const base = process.env.FRONTEND_TEST_URL || 'http://127.0.0.1:8765';
+    const registrosPorPagina = 12;
     const errores = [];
     page.on('pageerror', e => errores.push(e.message));
     let estado = 503;
@@ -71,7 +72,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
                 const coincidencias = filtro
                     ? registros.filter(registro => registro.estado_evaluacion === filtro)
                     : registros;
-                assert.equal(limit, 10);
+                assert.equal(limit, registrosPorPagina);
                 respuesta = { success: true, data: {
                     items: coincidencias.slice(offset, offset + limit), total: coincidencias.length, limit, offset,
                 } };
@@ -195,7 +196,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         const anterior = page.locator('#evaluacionesAnterior');
         const siguiente = page.locator('#evaluacionesSiguiente');
         const filas = page.locator('#tablaEvaluaciones tr');
-        for (const [total, ancho] of [[100, 1366], [500, 320]]) {
+        for (const [total, ancho] of [[52, 1920], [100, 1366], [500, 320]]) {
             registros = Array.from({ length: total }, (_, index) => ({
                 ...cuerpo.data.items[0],
                 alerta_id: `33333333-3333-4333-8333-${String(index + 1).padStart(12, '0')}`,
@@ -203,6 +204,14 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
             await page.setViewportSize({ width: ancho, height: 800 });
             await page.reload();
             await filas.first().waitFor();
+            if (total === 52) {
+                await vistaTarjetas.click();
+                const tarjetasPorFila = await tarjeta.evaluateAll(tarjetas =>
+                    Array.from(Map.groupBy(tarjetas, item => item.getBoundingClientRect().top).values(), fila => fila.length));
+                assert.deepEqual(tarjetasPorFila, [4, 4, 4]);
+                assert.equal(await page.locator('#resultadoEvaluaciones').innerText(), 'Mostrando 1–12 de 52 registros');
+                await vistaTabla.click();
+            }
             assert.equal(await anterior.isDisabled(), true);
             assert.equal(await filas.first().locator('td').count(), 4);
             assert.equal(await page.evaluate(() => document.documentElement.scrollWidth === window.innerWidth),
@@ -218,16 +227,17 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
             assert.equal(visible, true, 'acción visible sin desplazar la tabla y con área táctil suficiente');
 
             const visibles = [];
-            const paginas = Math.ceil(total / 10);
+            const paginas = Math.ceil(total / registrosPorPagina);
             for (let pagina = 1; pagina <= paginas; pagina++) {
                 await page.getByText(`Página ${pagina} de ${paginas}`, { exact: true }).waitFor();
-                assert.equal(await filas.count(), 10);
+                assert.equal(await filas.count(), Math.min(registrosPorPagina, total - (pagina - 1) * registrosPorPagina));
                 visibles.push(...await filas.locator('button').evaluateAll(botones => botones.map(boton => boton.dataset.alerta)));
                 if (pagina < paginas) await siguiente.click();
             }
             assert.deepEqual(visibles, registros.map(alerta => alerta.alerta_id));
             assert.equal(await siguiente.isDisabled(), true);
-            assert.equal(await page.locator('#resultadoEvaluaciones').innerText(), `Mostrando ${total - 9}–${total} de ${total} registros`);
+            const primerRegistroUltimaPagina = (paginas - 1) * registrosPorPagina + 1;
+            assert.equal(await page.locator('#resultadoEvaluaciones').innerText(), `Mostrando ${primerRegistroUltimaPagina}–${total} de ${total} registros`);
             await anterior.click();
             await page.getByText(`Página ${paginas - 1} de ${paginas}`, { exact: true }).waitFor();
             const registrosEnTabla = await filas.locator('button').evaluateAll(botones => botones.map(boton => boton.dataset.alerta));
@@ -246,19 +256,19 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         await filtroEvaluaciones.focus();
         await filtroEvaluaciones.selectOption('correcta');
         await page.getByText('Página 1 de 2', { exact: true }).waitFor();
-        assert.equal(await page.locator('#resultadoEvaluaciones').innerText(), 'Mostrando 1–10 de 13 registros');
-        assert.equal(await filas.getByText('Correcta', { exact: true }).count(), 10);
+        assert.equal(await page.locator('#resultadoEvaluaciones').innerText(), 'Mostrando 1–12 de 13 registros');
+        assert.equal(await filas.getByText('Correcta', { exact: true }).count(), registrosPorPagina);
         assert.equal(await filtroEvaluaciones.evaluate(select => document.activeElement === select), true);
         await siguiente.click();
         await page.getByText('Página 2 de 2', { exact: true }).waitFor();
         await vistaTarjetas.click();
-        assert.equal(await tarjeta.getByText('Correcta', { exact: true }).count(), 3);
+        assert.equal(await tarjeta.getByText('Correcta', { exact: true }).count(), 1);
         assert.equal(await filtroEvaluaciones.inputValue(), 'correcta');
         await filtroEvaluaciones.selectOption('neutro');
         await page.getByText('No hay registros que coincidan con el estado seleccionado.').waitFor();
         await filtroEvaluaciones.selectOption('');
-        await page.getByText('Página 1 de 50', { exact: true }).waitFor();
-        assert.equal(await page.locator('#resultadoEvaluaciones').innerText(), 'Mostrando 1–10 de 500 registros');
+        await page.getByText('Página 1 de 42', { exact: true }).waitFor();
+        assert.equal(await page.locator('#resultadoEvaluaciones').innerText(), 'Mostrando 1–12 de 500 registros');
         await page.evaluate(() => localStorage.removeItem('evaluaciones.vista'));
         await page.reload();
         await tarjeta.first().waitFor();

@@ -3,7 +3,7 @@ import { formatearBox, formatearFecha, formatearHora, formatearTipoRiesgo, obten
 import { PageHeader } from "../layout.jsx";
 import { Badge, Button, DataTable, FilterSelect, Icon, Skeleton, SkeletonRows, Status } from "../ui.jsx";
 import AlertDetail from "../monitor/AlertDetail.jsx";
-import { ALERTS_URL, ALERT_PAGE_SIZE, saveEvaluation } from "../monitor/alerts.js";
+import { ALERTS_URL, saveEvaluation } from "../monitor/alerts.js";
 import { usePage } from "../monitor/resources.js";
 
 const viewKey = "evaluaciones.vista";
@@ -12,6 +12,8 @@ const views = [
     { value: "table", label: "Tabla", icon: "view_table" },
 ];
 const resultTones = { correcta: "success", falso_positivo: "danger", neutro: "neutral" };
+// Completa las filas de la cuadrícula, que admite de una a cuatro columnas.
+const EVALUATION_PAGE_SIZE = 12;
 
 function initialView() {
     try {
@@ -146,7 +148,7 @@ export default function Evaluaciones() {
     const detailTrigger = useRef(null);
     const shouldFocus = useRef(false);
     const query = status ? `registro_evaluaciones=true&estado_evaluacion=${status}` : "registro_evaluaciones=true";
-    const { data, loading, error, reload } = usePage(ALERTS_URL, query, offset, ALERT_PAGE_SIZE);
+    const { data, loading, error, reload } = usePage(ALERTS_URL, query, offset, EVALUATION_PAGE_SIZE);
 
     useEffect(() => {
         if (!loading && shouldFocus.current) {
@@ -157,8 +159,8 @@ export default function Evaluaciones() {
 
     const total = data?.total ?? 0;
     const pageOffset = data?.offset ?? offset;
-    const pages = Math.ceil(total / ALERT_PAGE_SIZE);
-    const page = Math.floor(pageOffset / ALERT_PAGE_SIZE) + 1;
+    const pages = Math.ceil(total / EVALUATION_PAGE_SIZE);
+    const page = Math.floor(pageOffset / EVALUATION_PAGE_SIZE) + 1;
     const summary = loading ? <Skeleton className="ui-skeleton-count" />
         : error ? "No se pudieron consultar las evaluaciones."
         : pages > 1 ? `Mostrando ${pageOffset + 1}–${pageOffset + data.items.length} de ${total} registros`
@@ -259,8 +261,8 @@ export default function Evaluaciones() {
                     <nav id="paginacionEvaluaciones" className="monitor-pagination" aria-label="Paginación de evaluaciones">
                         <span id="paginaEvaluaciones">Página {page} de {pages}</span>
                         <div className="monitor-pagination-buttons">
-                            <Button id="evaluacionesAnterior" variant="secondary" disabled={page === 1} onClick={() => movePage(pageOffset - ALERT_PAGE_SIZE)}>Anterior</Button>
-                            <Button id="evaluacionesSiguiente" variant="secondary" disabled={page === pages} onClick={() => movePage(pageOffset + ALERT_PAGE_SIZE)}>Siguiente</Button>
+                            <Button id="evaluacionesAnterior" variant="secondary" disabled={page === 1} onClick={() => movePage(pageOffset - EVALUATION_PAGE_SIZE)}>Anterior</Button>
+                            <Button id="evaluacionesSiguiente" variant="secondary" disabled={page === pages} onClick={() => movePage(pageOffset + EVALUATION_PAGE_SIZE)}>Siguiente</Button>
                         </div>
                     </nav>
                 )}

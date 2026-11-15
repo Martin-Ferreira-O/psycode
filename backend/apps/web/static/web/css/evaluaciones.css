@@ -76,9 +76,12 @@
 }
 
 .evaluation-grid {
+    --evaluation-grid-gap: 16px;
+    /* Limita la cuadrícula a cuatro columnas, incluso en pantallas grandes. */
+    --evaluation-card-min-width: max(17.5rem, (100% - 3 * var(--evaluation-grid-gap)) / 4);
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(min(100%, 17.5rem), 1fr));
-    gap: 16px;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--evaluation-card-min-width)), 1fr));
+    gap: var(--evaluation-grid-gap);
     margin: 0;
     padding: clamp(12px, 2vw, 24px);
     list-style: none;
