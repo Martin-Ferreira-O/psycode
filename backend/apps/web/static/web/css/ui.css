@@ -196,7 +196,6 @@
     --table-badge-width: 6em;
 }
 
-#tablaEvaluacionesContenedor td:nth-child(2),
 .tabla-usuarios td:nth-child(4) {
     --table-badge-width: 9em;
 }

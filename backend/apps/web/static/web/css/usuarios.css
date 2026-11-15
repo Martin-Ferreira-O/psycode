@@ -2,11 +2,51 @@
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 24px;
+    column-gap: 24px;
+    row-gap: 14px;
 }
 
-.panel-cabecera-usuarios > #botonCrearUsuario {
+.barra-usuarios {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
     margin-inline-start: auto;
+}
+
+.filtro-estado-usuarios {
+    position: relative;
+    display: inline-grid;
+    color: var(--azul);
+}
+
+.filtro-estado-usuarios select {
+    appearance: none;
+    padding-inline: 36px 34px;
+    text-align: start;
+}
+
+.filtro-estado-usuarios select[data-filtrado="true"] {
+    --button-bg: var(--azul-claro);
+    --button-border: var(--azul);
+    --button-text: var(--azul);
+}
+
+.filtro-estado-usuarios .ui-icon {
+    position: absolute;
+    inset-block: 0;
+    margin-block: auto;
+    width: 16px;
+    height: 16px;
+    pointer-events: none;
+}
+
+.filtro-estado-icono {
+    inset-inline-start: 12px;
+}
+
+.filtro-estado-flecha {
+    inset-inline-end: 10px;
 }
 
 .panel-cabecera-usuarios h2 {
@@ -181,6 +221,12 @@ dialog.modal-confirmacion-contenido {
 }
 
 @media (max-width: 600px) {
+    .barra-usuarios {
+        flex-basis: 100%;
+        margin-inline-start: 0;
+        margin-block-end: 12px;
+    }
+
     .paginacion-usuarios,
     .pie-usuarios {
         padding-inline: 16px;

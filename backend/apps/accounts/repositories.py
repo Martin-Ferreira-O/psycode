@@ -62,8 +62,10 @@ class AccountsRepository:
         PasswordReset.objects.filter(user=user).delete()
         RefreshSession.objects.filter(user=user, revoked_at__isnull=True).update(revoked_at=timezone.now())
 
-    def list_users(self, *, limit=None, offset=0):
+    def list_users(self, *, limit=None, offset=0, is_active=None):
         users = User.objects.order_by("-date_joined", "-pk")
+        if is_active is not None:
+            users = users.filter(is_active=is_active)
         if limit is None:
             items = list(users)
             return items, len(items)
