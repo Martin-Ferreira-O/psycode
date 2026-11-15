@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from uuid import UUID
 
 from django.db import IntegrityError, transaction
+from django.db.models import Exists, F, OuterRef, Q
 from django.utils import timezone
 
 from backend.common.audit import AuditWriter
@@ -13,6 +14,53 @@ from .models import (
     AUDIO_TEST_ORIGIN, OPEN_STATES, AcceptedSequence, AgentCommand, CaptureEvent, CaptureSession,
     CommandKind, FragmentJob, SessionState,
 )
+
+STOP_CONFIRMATION_ESCALATED = "STOP_CONFIRMATION_ESCALATED"
+STOP_CONFIRMATION_DIAGNOSTICS = {"STOP_CONFIRMATION_PENDING", STOP_CONFIRMATION_ESCALATED}
+
+
+def _unconfirmed_stops():
+    return AgentCommand.objects.filter(kind=CommandKind.STOP).exclude(succeeded=True)
+
+
+def _failed_with_pending_stop():
+    return Q(state=SessionState.FAILED, actual_end=None) & Exists(
+        _unconfirmed_stops().filter(session_id=OuterRef("pk")),
+    )
+
+
+def _sessions_pending_stop():
+    return CaptureSession.objects.filter(actual_end=None).filter(
+        Q(state__in=OPEN_STATES) | _failed_with_pending_stop(),
+    )
+
+
+def _undelivered_start_sessions(now):
+    # El drenaje consulta también esquemas anteriores a las migraciones.
+    delivery_evidence = CaptureEvent.objects.filter(
+        session_id=OuterRef("session_id"), command_id=OuterRef("pk"),
+        action__in=("capture.command.delivered", "capture.command.acknowledged"),
+    )
+    start = AgentCommand.objects.filter(
+        session_id=OuterRef("pk"), kind=CommandKind.START,
+        created_at__lte=OuterRef("stop_requested_at"), cancelled_at__gte=F("created_at"), cancelled_at__lte=now,
+        delivery_count=0, delivered_at=None, acknowledged_at=None, succeeded=None,
+        occurred_at=None, last_sequence=None, error_code="",
+    ).filter(~Exists(delivery_evidence))
+    conflicting_stop = AgentCommand.objects.filter(
+        session_id=OuterRef("pk"), kind=CommandKind.STOP,
+    ).filter(Q(succeeded=True) | Q(last_sequence__gte=0))
+    capture_evidence = CaptureEvent.objects.filter(
+        session_id=OuterRef("pk"), action__in=("capture.sequence.accepted", "capture.capture.ended"),
+    )
+    return CaptureSession.objects.filter(
+        Q(final_sequence=None) | Q(final_sequence=-1),
+        Exists(start), ~Exists(conflicting_stop), ~Exists(capture_evidence),
+        ~Exists(AcceptedSequence.objects.filter(session_id=OuterRef("pk"))),
+        state__in=(SessionState.STOPPING, SessionState.FAILED),
+        actual_start=None, actual_end=None, next_sequence=0,
+        stop_requested_at__range=(F("authorized_at"), now),
+    )
 
 
 def _instant(value=None):
@@ -99,7 +147,7 @@ class CaptureSessionService:
             ending = CaptureSession.objects.select_for_update().filter(box=box, authorization_ended_at=None)
             if authorization.authorized:
                 ending = ending.exclude(origin=authorization.origen, scheduled_start=start, scheduled_end=end)
-            for previous in ending:
+            for previous in ending.order_by("pk"):
                 previous.authorization_ended_at = now
                 previous.save(update_fields=["authorization_ended_at"])
                 _event(previous, "authorization.ended", now)
@@ -118,8 +166,7 @@ class CaptureSessionService:
                 return None
             # Una detención de una sesión fallida bloquea nuevos inicios
             # hasta que el agente confirme que dejó de capturar.
-            if AgentCommand.objects.filter(session__box=box, session__actual_end__isnull=True,
-                                           kind=CommandKind.STOP).exclude(succeeded=True).exists():
+            if _unconfirmed_stops().filter(session__box=box, session__actual_end=None).exists():
                 return None
             previous = CaptureSession.objects.filter(
                 box=box, origin=authorization.origen, scheduled_start=start, scheduled_end=end,
@@ -162,22 +209,45 @@ class CaptureSessionService:
             _event(session, "command.created", now, command=command)
         return command
 
-    def _stop(self, session, now):
+    def _stop(self, session, now, *, complete=True, end_reported=False):
         if session.state not in (SessionState.STARTED, SessionState.ACTIVE):
             return
         session.state = SessionState.STOPPING
         session.stop_requested_at = now
         session.save(update_fields=["state", "stop_requested_at"])
-        AgentCommand.objects.filter(session=session, kind=CommandKind.START, acknowledged_at=None).update(cancelled_at=now)
+        AgentCommand.objects.filter(
+            session=session, kind=CommandKind.START, acknowledged_at=None, cancelled_at=None,
+        ).update(cancelled_at=now)
+        if not end_reported and self._close_undelivered_start(session, now):
+            if complete:
+                self._complete(session, now)
+            return
         self._command(session, CommandKind.STOP, now)
         _event(session, "session.stopping", now)
 
-    def _fail(self, session, code, now):
+    def _close_undelivered_start(self, session, now):
+        # El llamador ya bloqueó la sesión, igual que la entrega y el ACK.
+        if (session.state not in (SessionState.STOPPING, SessionState.FAILED)
+                or session.actual_end is not None or session.stop_requested_at is None):
+            return False
+        if not _undelivered_start_sessions(now).filter(pk=session.pk).exists():
+            return False
+        start = session.commands.get(kind=CommandKind.START)
+        session.actual_end = session.stop_requested_at
+        session.final_sequence = -1
+        session.capture_end_reason = "RECOVERY_STOPPED"
+        session.diagnostic_code = ""
+        session.save(update_fields=["actual_end", "final_sequence", "capture_end_reason", "diagnostic_code"])
+        _event(session, "start.cancelled_before_delivery", now, command=start)
+        return True
+
+    def _fail(self, session, code, now, *, end_reported=False):
         if session.state not in OPEN_STATES:
             return
-        self._stop(session, now)
+        self._stop(session, now, complete=False, end_reported=end_reported)
         session.state, session.error_code, session.closed_at = SessionState.FAILED, code, now
-        session.diagnostic_code = ""
+        if session.diagnostic_code not in STOP_CONFIRMATION_DIAGNOSTICS:
+            session.diagnostic_code = ""
         session.save(update_fields=["state", "error_code", "closed_at", "diagnostic_code"])
         _event(session, "session.failed", now, error_code=code)
 
@@ -202,21 +272,29 @@ class CaptureSessionService:
             return
         session.diagnostic_code = code
         session.save(update_fields=["diagnostic_code"])
-        _event(session, "session.diagnostic", now, error_code=code)
+        if code != STOP_CONFIRMATION_ESCALATED or not session.events.filter(
+                action="capture.session.diagnostic", error_code=code).exists():
+            _event(session, "session.diagnostic", now, error_code=code)
 
     def _expire(self, session, now):
         if session.state in (SessionState.STARTED, SessionState.ACTIVE) and now >= session.scheduled_end:
             self._stop(session, now)
-        if session.state == SessionState.STOPPING or (session.state == SessionState.FAILED and session.actual_end is not None):
+        if session.state == SessionState.STOPPING or (session.state == SessionState.FAILED
+                and (session.actual_end is not None or _unconfirmed_stops().filter(session=session).exists())):
             if (session.actual_end is not None and session.final_sequence is not None
                     and session.next_sequence == session.final_sequence + 1):
                 return
-            if now >= self._reception_deadline(session):
+            reception_overdue = now >= self._reception_deadline(session)
+            if reception_overdue:
                 if session.reception_intervention_at is None:
                     session.reception_intervention_at = now
                     session.save(update_fields=["reception_intervention_at"])
+            waiting_for_stop = session.actual_end is None and session.stop_requested_at is not None
+            if waiting_for_stop and now >= session.stop_requested_at + timedelta(hours=1):
+                self._diagnose(session, STOP_CONFIRMATION_ESCALATED, now)
+            elif reception_overdue:
                 self._diagnose(session, "RECEPTION_INTERVENTION_REQUIRED", now)
-            elif session.actual_end is None and now >= session.stop_requested_at + self.finalization_timeout:
+            elif waiting_for_stop and now >= session.stop_requested_at + self.finalization_timeout:
                 self._diagnose(session, "STOP_CONFIRMATION_PENDING", now)
         elif session.state == SessionState.STARTED and now >= session.authorized_at + self.start_timeout:
             self._diagnose(session, "START_CONFIRMATION_PENDING", now)
@@ -226,14 +304,27 @@ class CaptureSessionService:
     def recover(self, *, now=None):
         """Una pasada recuperable tras reinicio; ejecutar periódicamente."""
         now, changed = _instant(now), 0
-        ids = list(CaptureSession.objects.filter(state__in=OPEN_STATES).values_list("pk", flat=True))
+        ids = list(CaptureSession.objects.filter(
+            Q(state__in=OPEN_STATES) | _failed_with_pending_stop(),
+        ).order_by("pk").values_list("pk", flat=True))
         for session_id in ids:
             with transaction.atomic():
                 session = CaptureSession.objects.select_for_update().get(pk=session_id)
-                previous = session.state, session.diagnostic_code, session.reception_intervention_at
-                self._expire(session, now)
-                changed += previous != (session.state, session.diagnostic_code, session.reception_intervention_at)
+                previous = (session.state, session.actual_end, session.diagnostic_code, session.reception_intervention_at)
+                if self._close_undelivered_start(session, now):
+                    self._complete(session, now)
+                    changed += 1
+                else:
+                    self._expire(session, now)
+                    changed += previous != (
+                        session.state, session.actual_end, session.diagnostic_code, session.reception_intervention_at,
+                    )
         return changed
+
+    def count_pending_drain(self, *, now=None):
+        """Cuenta capturas que requieren confirmación en el esquema previo al despliegue."""
+        proven_closed = _undelivered_start_sessions(_instant(now)).values("pk")
+        return _sessions_pending_stop().exclude(pk__in=proven_closed).count()
 
     def _load(self, box, session_id):
         session = (CaptureSession.objects.select_for_update().filter(pk=_uuid(session_id), box=_box(box))
@@ -248,19 +339,19 @@ class CaptureSessionService:
         # Recuperación y entrega comparten la transacción: no se publica un
         # inicio vencido, incluso si el programador externo dejó de ejecutar ticks.
         with transaction.atomic():
+            sessions = list(_sessions_pending_stop().select_for_update().filter(box=box).order_by("pk"))
             if reconcile:
-                sessions = CaptureSession.objects.select_for_update().filter(
-                    box=box, state__in=OPEN_STATES, actual_end__isnull=True)
                 for session in sessions:
                     self._expire(session, now)
-            pending = AgentCommand.objects.filter(session__box=box, cancelled_at=None).exclude(succeeded=True)
-            pending = pending.exclude(kind=CommandKind.STOP, session__actual_end__isnull=False)
+            pending = AgentCommand.objects.filter(
+                session_id__in=[session.pk for session in sessions], session__actual_end=None, cancelled_at=None,
+            ).exclude(succeeded=True)
             # Fallos de inicio no se reejecutan; las detenciones sí se reintentan.
             pending = pending.exclude(kind=CommandKind.START, acknowledged_at__isnull=False)
             stops = pending.filter(kind=CommandKind.STOP)
             if stops.exists():
                 pending = stops
-            pending = pending.select_for_update().select_related("session").order_by("created_at", "command_id")
+            pending = pending.select_for_update(of=("self",)).select_related("session").order_by("created_at", "command_id")
             commands = list(pending[:limit]) if limit is not None else list(pending)
             result = []
             for item in commands:
@@ -362,7 +453,8 @@ class CaptureSessionService:
             session.last_seen_at = max(session.last_seen_at, now)
             if (session.diagnostic_code == "CONTROL_DISCONNECTED"
                     or command.kind == CommandKind.START and session.diagnostic_code == "START_CONFIRMATION_PENDING"
-                    or command.kind == CommandKind.STOP and session.diagnostic_code == "STOP_CONFIRMATION_PENDING"):
+                    or success and command.kind == CommandKind.STOP
+                    and session.diagnostic_code in STOP_CONFIRMATION_DIAGNOSTICS):
                 session.diagnostic_code = ""
             session.save(update_fields=["state", "actual_start", "actual_end", "final_sequence", "last_seen_at", "diagnostic_code"])
             _event(session, "command.acknowledged", now, command=command, error_code=code)
@@ -495,11 +587,11 @@ class CaptureSessionService:
                     session.save(update_fields=["state", "error_code"])
                     _event(session, "session.failed", now, error_code="AGENT_INTERRUPTED")
                 else:
-                    self._fail(session, "AGENT_INTERRUPTED", now)
+                    self._fail(session, "AGENT_INTERRUPTED", now, end_reported=True)
             if (session.actual_end == ended_at and session.capture_end_reason == reason_code
                     and (last_sequence is None or session.final_sequence == last_sequence)):
                 return _snapshot(session)
-            self._stop(session, now)
+            self._stop(session, now, end_reported=True)
             session.actual_end = ended_at
             session.capture_end_reason = reason_code
             if last_sequence is not None:
@@ -509,6 +601,8 @@ class CaptureSessionService:
                 session.diagnostic_code = "FINAL_SEQUENCE_UNKNOWN"
             elif session.diagnostic_code == "FINAL_SEQUENCE_UNKNOWN":
                 session.reception_intervention_at = None
+                session.diagnostic_code = ""
+            elif session.diagnostic_code in STOP_CONFIRMATION_DIAGNOSTICS:
                 session.diagnostic_code = ""
             session.save(update_fields=["actual_end", "capture_end_reason", "final_sequence", "reception_intervention_at", "diagnostic_code"])
             _event(session, "capture.ended", now)

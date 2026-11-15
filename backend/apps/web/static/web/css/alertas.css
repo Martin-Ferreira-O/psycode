@@ -26,31 +26,6 @@
     font-size: 14px;
 }
 
-.seccion-historial {
-    container: historial-alertas / inline-size;
-}
-
-.panel-filtros {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    align-items: end;
-    gap: 15px;
-    margin-bottom: 24px;
-    padding: 22px;
-    border: 1px solid var(--borde);
-    border-radius: 15px;
-    background: var(--blanco);
-}
-
-.panel-filtros > .campo-busqueda,
-.panel-filtros > .dashboard-clear-filters {
-    grid-column: 1 / -1;
-}
-
-.dashboard-clear-filters {
-    justify-self: end;
-}
-
 .campo {
     min-width: 0;
 }
@@ -81,21 +56,7 @@
     width: 100%;
 }
 
-.entrada-busqueda-alertas {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-}
-
-.entrada-busqueda-alertas input {
-    flex: 1 1 146px;
-}
-
-.entrada-busqueda-alertas button {
-    min-height: 46px;
-}
-
-:is(.acciones-dashboard, .acciones-cabecera-bitacora) > .estado-solicitud {
+.acciones-cabecera-bitacora > .estado-solicitud {
     flex: 1 0 100%;
     grid-column: 1 / -1;
     margin: 0;
@@ -121,10 +82,6 @@
 
 .ui-table-scroll .monitor-table {
     min-width: 740px;
-}
-
-.monitor-table-alerts td:first-child {
-    min-width: 10.75rem;
 }
 
 .monitor-cell-stack {
@@ -274,6 +231,10 @@ dialog.alert-detail-dialog {
     overflow-wrap: anywhere;
 }
 
+.alert-detail-section > .ui-button + .alert-detail-transcript {
+    margin-top: 8px;
+}
+
 .alert-detail-options {
     margin: 14px 0;
 }
@@ -318,24 +279,12 @@ dialog.alert-detail-dialog {
     font-size: 13px;
 }
 
-@container historial-alertas (min-width: 760px) {
-    .panel-filtros { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-    .panel-filtros > .campo-busqueda, .panel-filtros > .dashboard-clear-filters { grid-column: auto; }
-}
-
-@container historial-alertas (min-width: 1020px) {
-    .panel-filtros { grid-template-columns: minmax(240px, 2fr) repeat(4, minmax(0, 1fr)) auto; }
-}
-
 @media (max-width: 900px) {
     .alert-detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .alert-detail-options { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 700px) {
-    .panel-filtros { grid-template-columns: 1fr; padding: 16px; }
-    .dashboard-clear-filters { justify-self: stretch; }
-    .acciones-dashboard > .ui-button { width: 100%; min-width: 0; padding-inline: 9px; }
     .monitor-pagination { justify-content: center; }
     .monitor-pagination-buttons { justify-content: center; }
 }

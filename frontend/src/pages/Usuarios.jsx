@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { apiGetDatos, describirError } from "../api.js";
 import { solicitarCambioAdministrativo } from "../admin/solicitudes.js";
 import { PageHeader } from "../layout.jsx";
-import { Badge, Button, DataTable, Dialog, Icon, Skeleton, SkeletonRows, Status } from "../ui.jsx";
+import { Badge, Button, DataTable, Dialog, FilterSelect, Icon, Skeleton, SkeletonRows, Status } from "../ui.jsx";
 
 const ENDPOINT = "/api/v1/auth/admin/users";
 const POR_PAGINA = 10;
@@ -24,10 +24,11 @@ function mensajeError(error) {
     }).mensaje;
 }
 
-async function obtenerUsuarios(offset, signal) {
+async function obtenerUsuarios(offset, activo, signal) {
     let datos;
     do {
         const parametros = new URLSearchParams({ limit: POR_PAGINA, offset });
+        if (activo) parametros.set("activo", activo);
         datos = await apiGetDatos(`${ENDPOINT}?${parametros}`, { signal });
         if (!Array.isArray(datos?.items) || !Number.isInteger(datos.total) || datos.total < 0) {
             throw new Error("Respuesta de usuarios inválida.");
@@ -213,7 +214,7 @@ function FormularioUsuario({ usuario, cancelar, guardar, indicarError, busy, err
 }
 
 export default function Usuarios({ user }) {
-    const [consulta, setConsulta] = useState({ offset: 0, enfocar: false });
+    const [consulta, setConsulta] = useState({ offset: 0, activo: "", enfocar: false });
     const [listado, setListado] = useState({ tipo: "carga" });
     const [modal, setModal] = useState(null);
     const [procesando, setProcesando] = useState(false);
@@ -227,7 +228,7 @@ export default function Usuarios({ user }) {
     useEffect(() => {
         const controlador = new AbortController();
         const { signal } = controlador;
-        obtenerUsuarios(consulta.offset, signal)
+        obtenerUsuarios(consulta.offset, consulta.activo, signal)
             .then((datos) => {
                 if (!signal.aborted) setListado({ tipo: "listo", datos });
             })
@@ -244,7 +245,12 @@ export default function Usuarios({ user }) {
 
     function recargar(offset) {
         setListado({ tipo: "carga" });
-        setConsulta({ offset, enfocar: true });
+        setConsulta((actual) => ({ ...actual, offset, enfocar: true }));
+    }
+
+    function filtrar(activo) {
+        setListado({ tipo: "carga" });
+        setConsulta({ offset: 0, activo, enfocar: false });
     }
 
     function abrir(tipo, usuario, origen) {
@@ -295,7 +301,8 @@ export default function Usuarios({ user }) {
     const usuarioConfirmacion = confirmando ? modal.usuario : null;
     const activar = usuarioConfirmacion && !usuarioConfirmacion.activo;
     const accion = activar ? "Activar" : "Desactivar";
-    const resultado = datos?.total === 1 ? "1 usuario registrado" : `${datos?.total} usuarios registrados`;
+    const estado = { "": "registrado", true: "activo", false: "inactivo" }[consulta.activo];
+    const resultado = datos?.total === 1 ? `1 usuario ${estado}` : `${datos?.total} usuarios ${estado}s`;
 
     return (
         <>
@@ -308,9 +315,16 @@ export default function Usuarios({ user }) {
                         {listado.tipo === "carga" && <p><Skeleton className="ui-skeleton-count" /></p>}
                     </div>
                     {user?.rol === "admin" && listado.error?.estado !== 403 && (
-                        <Button id="botonCrearUsuario" variant="primary" onClick={(evento) => abrir("formulario", null, evento.currentTarget)}>
-                            + Crear usuario
-                        </Button>
+                        <div className="barra-usuarios">
+                            <FilterSelect label="Filtrar usuarios por estado" value={consulta.activo} onChange={filtrar}>
+                                <option value="">Todos los estados</option>
+                                <option value="true">Solo activos</option>
+                                <option value="false">Solo inactivos</option>
+                            </FilterSelect>
+                            <Button id="botonCrearUsuario" variant="primary" onClick={(evento) => abrir("formulario", null, evento.currentTarget)}>
+                                + Crear usuario
+                            </Button>
+                        </div>
                     )}
                 </div>
 
@@ -328,7 +342,11 @@ export default function Usuarios({ user }) {
                         <PaginacionUsuarios datos={datos} cambiarPagina={recargar} />
                     </>
                 ) : (
-                    <Status type="vacio">No hay usuarios registrados. Crea una cuenta para comenzar a gestionar los accesos.</Status>
+                    <Status type="vacio">
+                        {consulta.activo
+                            ? `No hay usuarios ${estado}s.`
+                            : "No hay usuarios registrados. Crea una cuenta para comenzar a gestionar los accesos."}
+                    </Status>
                 ))}
 
                 <div className="pie-usuarios">Las cuentas administrativas permiten controlar el acceso y los permisos dentro de Psycode.</div>

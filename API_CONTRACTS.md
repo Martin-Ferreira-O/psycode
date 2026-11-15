@@ -273,9 +273,10 @@ SCRUM-42 y SCRUM-43. Gestión de cuentas sobre SQLite y Django REST Framework me
 Sin cuerpo. Retorna la colección completa cuando se consulta sin parámetros.
 La colección se ordena de la cuenta más reciente a la más antigua, con el identificador como desempate.
 
-Enviar `limit` u `offset` activa la paginación. `limit` admite enteros de 1 a 100 y por defecto es 10.
+Enviar `limit`, `offset` o `activo` activa la paginación. `limit` admite enteros de 1 a 100 y por defecto es 10.
 `offset` admite enteros de 0 a 2147483647 y por defecto es 0.
-En ese caso, `data` contiene `items` (las cuentas de la página), `total` (todas las cuentas),
+`activo=true` muestra las cuentas activas y `activo=false` las inactivas. Si se omite, se incluyen ambos estados.
+En ese caso, `data` contiene `items` (las cuentas de la página), `total` (las cuentas que coinciden con la consulta),
 `limit` y `offset`. Un desplazamiento posterior a la última cuenta devuelve `items: []`.
 Los parámetros desconocidos, repetidos o fuera de rango devuelven HTTP 400.
 

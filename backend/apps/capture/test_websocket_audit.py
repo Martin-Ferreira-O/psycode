@@ -51,6 +51,7 @@ class WebSocketAuditTests(TransactionTestCase):
         service = CaptureSessionService()
         window = BoxCaptureAuthorization("box-3", True, now, now + timedelta(hours=1), "agenda")
         sid = service.apply_authorization(window, now=now).session_id
+        service.commands("box-3", now=now)
         from dataclasses import replace
         service.apply_authorization(replace(window, authorized=False, inicio=None, termino=None), now=now)
 

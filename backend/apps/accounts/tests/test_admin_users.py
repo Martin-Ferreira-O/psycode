@@ -77,13 +77,33 @@ class AdminUserManagementTests(APITestCase):
 
     def test_rechaza_parametros_de_paginacion_invalidos(self):
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.admin_token}")
-        for query in ("limit=0", "limit=101", "offset=-1", "offset=2147483648", "limit=10&limit=20", "pagina=1"):
+        for query in (
+            "limit=0", "limit=101", "offset=-1", "offset=2147483648", "limit=10&limit=20", "pagina=1",
+            "activo=pendiente", "activo=true&activo=false",
+        ):
             with self.subTest(query=query):
                 res = self.client.get(f"{self.url_users}?{query}")
                 self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
 
         res = self.client.post(f"{self.url_users}?limit=10", {}, format="json")
         self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_filtra_usuarios_por_estado_antes_de_paginar(self):
+        User.objects.create_user(username="inactivo_antiguo", email="antiguo@example.test", is_active=False)
+        User.objects.create_user(username="activo_reciente", email="activo@example.test", is_active=True)
+        User.objects.create_user(username="inactivo_reciente", email="inactivo@example.test", is_active=False)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.admin_token}")
+
+        for activo, total, esperado in (
+            ("false", 2, "inactivo_antiguo"),
+            ("true", 3, self.supervisor_user.username),
+        ):
+            with self.subTest(activo=activo):
+                res = self.client.get(self.url_users, {"activo": activo, "limit": 1, "offset": 1})
+                self.assertEqual(res.status_code, status.HTTP_200_OK)
+                data = res.data["data"]
+                self.assertEqual((data["total"], data["limit"], data["offset"]), (total, 1, 1))
+                self.assertEqual([item["usuario"] for item in data["items"]], [esperado])
 
     def test_actualizacion_usuario(self):
         """Actualizar nombre y rol de un usuario."""

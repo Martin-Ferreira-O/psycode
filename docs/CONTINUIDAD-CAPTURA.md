@@ -48,10 +48,17 @@ término autorizado puede confirmarse aunque el coordinador central haya creado
 la orden después de ese instante. Se conservan la deduplicación de órdenes y
 las reglas de confirmaciones contradictorias.
 
-El box se libera únicamente cuando existe evidencia de detención física. Una
-recepción pendiente de la sesión A puede coexistir con una captura B autorizada
-posteriormente. El vencimiento del horario, por sí solo, no prueba que OBS haya
-quedado detenido.
+El box se libera cuando se confirma la detención física o cuando el servidor
+acredita que canceló el inicio antes de entregarlo y que la sesión no registró
+captura ni secuencias. En ese segundo caso, la bitácora registra
+`capture.start.cancelled_before_delivery`. El coordinador y
+`recover_capture_sessions` también recuperan sesiones históricas con esa evidencia.
+
+A los 60 minutos desde `stop_requested_at`, una detención pendiente se registra
+una vez en la bitácora como diagnóstico `STOP_CONFIRMATION_ESCALATED`.
+`capture_health` la cuenta en `capture_stop_escalated`. El escalamiento conserva
+el bloqueo hasta obtener evidencia de cierre. Una recepción pendiente de la
+sesión A puede coexistir con una captura B autorizada después del cierre.
 
 ## Evidencia física sin inventar un manifiesto
 

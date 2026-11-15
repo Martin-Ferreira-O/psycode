@@ -9,10 +9,12 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     });
     const page = await browser.newPage();
     const base = process.env.FRONTEND_TEST_URL || 'http://127.0.0.1:8765';
+    const registrosPorPagina = 12;
     const errores = [];
     page.on('pageerror', e => errores.push(e.message));
     let estado = 503;
     let peticiones = 0;
+    let consultasRegistro = 0;
     let liberar;
     let cuerpo = { success: true, data: { items: [], total: 0 } };
     let registros;
@@ -54,6 +56,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         const primeraConsulta = new Promise(resolve => { confirmarConsulta = resolve; });
         liberar = null;
         await page.route(url => url.pathname === '/api/v1/alerts' && url.searchParams.get('registro_evaluaciones') === 'true', async route => {
+            consultasRegistro++;
             if (liberar === null) {
                 await new Promise(resolve => {
                     liberar = resolve;
@@ -65,9 +68,13 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
                 const parametros = new URL(route.request().url()).searchParams;
                 const limit = Number(parametros.get('limit'));
                 const offset = Number(parametros.get('offset'));
-                assert.equal(limit, 10);
+                const filtro = parametros.get('estado_evaluacion');
+                const coincidencias = filtro
+                    ? registros.filter(registro => registro.estado_evaluacion === filtro)
+                    : registros;
+                assert.equal(limit, registrosPorPagina);
                 respuesta = { success: true, data: {
-                    items: registros.slice(offset, offset + limit), total: registros.length, limit, offset,
+                    items: coincidencias.slice(offset, offset + limit), total: coincidencias.length, limit, offset,
                 } };
             }
             await route.fulfill({ status: estado, contentType: 'application/json', body: JSON.stringify(respuesta) });
@@ -76,7 +83,8 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         const panel = page.locator('#estadoVacioEvaluaciones');
         await page.locator('#tablaEvaluacionesContenedor .ui-skeleton').first().waitFor();
         assert.equal(await page.getByRole('heading', { name: 'Registro de evaluaciones' }).isVisible(), true);
-        assert.equal(await page.getByRole('columnheader', { name: 'Fecha de evaluación' }).isVisible(), true);
+        assert.equal(await page.getByRole('columnheader', { name: 'Fecha' }).isVisible(), true);
+        assert.equal(await page.getByRole('button', { name: 'Tabla', exact: true }).getAttribute('aria-pressed'), 'true');
         assert.equal(await page.locator('.panel-evaluaciones').getAttribute('aria-busy'), 'true');
         await primeraConsulta;
         liberar();
@@ -115,8 +123,9 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
             ...cuerpo.data.items[0], alerta_id: '33333333-3333-4333-8333-000000000001',
             es_prueba: true, estado_evaluacion: 'pendiente', evaluacion: null,
         };
+        let transcripcion = 'Fragmento redactado de la prueba de audio.';
         await page.route(`**/api/v1/alerts/${alertaPrueba.alerta_id}`, route =>
-            route.fulfill({ json: { success: true, data: alertaPrueba } }));
+            route.fulfill({ json: { success: true, data: { ...alertaPrueba, descripcion: transcripcion } } }));
         await page.route(`**/api/v1/alerts/${alertaPrueba.alerta_id}/evaluacion`, route => {
             assert.equal(route.request().method(), 'POST');
             assert.deepEqual(route.request().postDataJSON(), { evaluacion: 'correcta' });
@@ -132,22 +141,62 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         const filaPrueba = page.locator('#tablaEvaluaciones tr').first();
         await filaPrueba.getByText('Alerta de prueba', { exact: true }).waitFor();
         assert.equal(await filaPrueba.getByText('Pendiente', { exact: true }).isVisible(), true);
-        await filaPrueba.getByRole('button').click();
+        assert.equal(await filaPrueba.getByText('Detección', { exact: true }).isVisible(), true);
+        assert.doesNotMatch(await filaPrueba.innerText(), /33333333-3333/);
+        const vistaTarjetas = page.getByRole('button', { name: 'Tarjetas', exact: true });
+        const vistaTabla = page.getByRole('button', { name: 'Tabla', exact: true });
+        const tarjeta = page.getByRole('article');
+        const consultasAntesDelCambio = consultasRegistro;
+        await vistaTarjetas.press('Enter');
+        assert.equal(await vistaTarjetas.getAttribute('aria-pressed'), 'true');
+        assert.equal(await vistaTabla.getAttribute('aria-pressed'), 'false');
+        assert.equal(await filaPrueba.count(), 0);
+        assert.equal(consultasRegistro, consultasAntesDelCambio, 'cambiar la vista reutiliza la página consultada');
+        assert.equal(await tarjeta.getByRole('heading', { name: 'Riesgo suicida' }).isVisible(), true);
+        assert.equal(await tarjeta.getByText('Box 01', { exact: true }).isVisible(), true);
+        assert.equal(await tarjeta.getByText('Pendiente', { exact: true }).isVisible(), true);
+        assert.doesNotMatch(await tarjeta.innerText(), /33333333-3333/);
+        await page.reload();
+        const evaluarTarjeta = tarjeta.getByRole('button', { name: /^Evaluar/ });
+        await evaluarTarjeta.press('Enter');
+        await page.getByRole('dialog').getByRole('button', { name: 'Cerrar' }).click();
+        assert.equal(await evaluarTarjeta.evaluate(button => document.activeElement === button), true);
+        await evaluarTarjeta.press('Enter');
         const detallePrueba = page.getByRole('dialog');
         await detallePrueba.getByText('Alerta de prueba', { exact: true }).waitFor();
+        const verTranscripcion = detallePrueba.getByRole('button', { name: 'Ver transcripción' });
+        const fragmento = detallePrueba.locator('#detalleTranscripcion');
+        assert.equal(await verTranscripcion.getAttribute('aria-expanded'), 'false');
+        assert.equal(await fragmento.isVisible(), false);
+        await verTranscripcion.press('Enter');
+        await fragmento.waitFor();
+        assert.equal(await fragmento.innerText(), transcripcion);
+        const ocultarTranscripcion = detallePrueba.getByRole('button', { name: 'Ocultar transcripción' });
+        assert.equal(await ocultarTranscripcion.getAttribute('aria-expanded'), 'true');
+        await ocultarTranscripcion.click();
+        assert.equal(await fragmento.isVisible(), false);
         await detallePrueba.getByRole('radio', { name: /escenario simulado/ }).check();
         await detallePrueba.getByRole('button', { name: 'Guardar evaluación' }).click();
         const confirmacionPrueba = detallePrueba.locator('#estadoDetalle [data-estado="exito"]');
         await confirmacionPrueba.waitFor();
         assert.equal(await confirmacionPrueba.innerText(), 'Evaluación registrada.');
         await detallePrueba.getByRole('button', { name: 'Cerrar' }).click();
-        await filaPrueba.getByText('Revisada', { exact: true }).waitFor();
+        await tarjeta.getByText('Correcta', { exact: true }).waitFor();
+        assert.equal(await tarjeta.getByText('Evaluación', { exact: true }).isVisible(), true);
+        assert.equal(await tarjeta.locator('time').getAttribute('datetime'), alertaPrueba.evaluacion.fecha_hora);
+        await vistaTabla.click();
+        await filaPrueba.getByText('Correcta', { exact: true }).waitFor();
         assert.equal(await filaPrueba.getByText('Alerta de prueba', { exact: true }).isVisible(), true);
+        transcripcion = null;
+        await filaPrueba.getByRole('button').click();
+        await verTranscripcion.click();
+        assert.match(await fragmento.innerText(), /no tiene un fragmento de transcripción disponible/);
+        await detallePrueba.getByRole('button', { name: 'Cerrar' }).click();
 
         const anterior = page.locator('#evaluacionesAnterior');
         const siguiente = page.locator('#evaluacionesSiguiente');
         const filas = page.locator('#tablaEvaluaciones tr');
-        for (const [total, ancho] of [[100, 1366], [500, 320]]) {
+        for (const [total, ancho] of [[52, 1920], [100, 1366], [500, 320]]) {
             registros = Array.from({ length: total }, (_, index) => ({
                 ...cuerpo.data.items[0],
                 alerta_id: `33333333-3333-4333-8333-${String(index + 1).padStart(12, '0')}`,
@@ -155,8 +204,16 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
             await page.setViewportSize({ width: ancho, height: 800 });
             await page.reload();
             await filas.first().waitFor();
+            if (total === 52) {
+                await vistaTarjetas.click();
+                const tarjetasPorFila = await tarjeta.evaluateAll(tarjetas =>
+                    Array.from(Map.groupBy(tarjetas, item => item.getBoundingClientRect().top).values(), fila => fila.length));
+                assert.deepEqual(tarjetasPorFila, [4, 4, 4]);
+                assert.equal(await page.locator('#resultadoEvaluaciones').innerText(), 'Mostrando 1–12 de 52 registros');
+                await vistaTabla.click();
+            }
             assert.equal(await anterior.isDisabled(), true);
-            assert.equal(await filas.first().locator('td').count(), 6);
+            assert.equal(await filas.first().locator('td').count(), 4);
             assert.equal(await page.evaluate(() => document.documentElement.scrollWidth === window.innerWidth),
                 true, `sin desplazamiento horizontal de la página a ${ancho}px`);
             const accion = filas.first().getByRole('button');
@@ -170,20 +227,53 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
             assert.equal(visible, true, 'acción visible sin desplazar la tabla y con área táctil suficiente');
 
             const visibles = [];
-            const paginas = Math.ceil(total / 10);
+            const paginas = Math.ceil(total / registrosPorPagina);
             for (let pagina = 1; pagina <= paginas; pagina++) {
                 await page.getByText(`Página ${pagina} de ${paginas}`, { exact: true }).waitFor();
-                assert.equal(await filas.count(), 10);
+                assert.equal(await filas.count(), Math.min(registrosPorPagina, total - (pagina - 1) * registrosPorPagina));
                 visibles.push(...await filas.locator('button').evaluateAll(botones => botones.map(boton => boton.dataset.alerta)));
                 if (pagina < paginas) await siguiente.click();
             }
             assert.deepEqual(visibles, registros.map(alerta => alerta.alerta_id));
             assert.equal(await siguiente.isDisabled(), true);
-            assert.equal(await page.locator('#resultadoEvaluaciones').innerText(), `Mostrando ${total - 9}–${total} de ${total} registros`);
+            const primerRegistroUltimaPagina = (paginas - 1) * registrosPorPagina + 1;
+            assert.equal(await page.locator('#resultadoEvaluaciones').innerText(), `Mostrando ${primerRegistroUltimaPagina}–${total} de ${total} registros`);
             await anterior.click();
             await page.getByText(`Página ${paginas - 1} de ${paginas}`, { exact: true }).waitFor();
+            const registrosEnTabla = await filas.locator('button').evaluateAll(botones => botones.map(boton => boton.dataset.alerta));
+            await vistaTarjetas.click();
+            assert.deepEqual(await tarjeta.locator('[data-alerta]').evaluateAll(botones => botones.map(boton => boton.dataset.alerta)), registrosEnTabla);
+            assert.equal(await page.getByText(`Página ${paginas - 1} de ${paginas}`, { exact: true }).isVisible(), true);
+            assert.equal(await page.evaluate(() => document.documentElement.scrollWidth === window.innerWidth), true);
+            await vistaTabla.click();
             console.log(`Registro de evaluaciones: ${total} registros, ${paginas} páginas sin duplicados a ${ancho}px.`);
         }
+        await page.setViewportSize({ width: 375, height: 800 });
+        registros = registros.map((registro, index) => index % 40 === 0 ? registro : {
+            ...registro, estado_evaluacion: 'falso_positivo', evaluacion: { evaluacion: 'falso_positivo' },
+        });
+        const filtroEvaluaciones = page.getByRole('combobox', { name: 'Filtrar evaluaciones por estado' });
+        await filtroEvaluaciones.focus();
+        await filtroEvaluaciones.selectOption('correcta');
+        await page.getByText('Página 1 de 2', { exact: true }).waitFor();
+        assert.equal(await page.locator('#resultadoEvaluaciones').innerText(), 'Mostrando 1–12 de 13 registros');
+        assert.equal(await filas.getByText('Correcta', { exact: true }).count(), registrosPorPagina);
+        assert.equal(await filtroEvaluaciones.evaluate(select => document.activeElement === select), true);
+        await siguiente.click();
+        await page.getByText('Página 2 de 2', { exact: true }).waitFor();
+        await vistaTarjetas.click();
+        assert.equal(await tarjeta.getByText('Correcta', { exact: true }).count(), 1);
+        assert.equal(await filtroEvaluaciones.inputValue(), 'correcta');
+        await filtroEvaluaciones.selectOption('neutro');
+        await page.getByText('No hay registros que coincidan con el estado seleccionado.').waitFor();
+        await filtroEvaluaciones.selectOption('');
+        await page.getByText('Página 1 de 42', { exact: true }).waitFor();
+        assert.equal(await page.locator('#resultadoEvaluaciones').innerText(), 'Mostrando 1–12 de 500 registros');
+        await page.evaluate(() => localStorage.removeItem('evaluaciones.vista'));
+        await page.reload();
+        await tarjeta.first().waitFor();
+        assert.equal(await vistaTarjetas.getAttribute('aria-pressed'), 'true');
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth === window.innerWidth), true);
         await page.setViewportSize({ width: 1280, height: 720 });
         registros = undefined;
         estado = 401;

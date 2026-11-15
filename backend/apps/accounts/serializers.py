@@ -45,6 +45,7 @@ class PasswordResetConfirmSerializer(StrictSerializer):
 class AdminUsersQuerySerializer(serializers.Serializer):
     limit = serializers.IntegerField(default=10, min_value=1, max_value=100)
     offset = serializers.IntegerField(default=0, min_value=0, max_value=2_147_483_647)
+    activo = serializers.BooleanField(default=None, allow_null=True)
 
     def to_internal_value(self, data):
         errors = {}

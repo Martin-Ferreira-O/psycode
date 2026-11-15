@@ -6,7 +6,7 @@ import re
 from threading import Lock
 from uuid import NAMESPACE_URL, uuid4, uuid5
 
-from backend.apps.alerts.domain import ORIGEN_PRUEBA_AUDIO
+from backend.apps.alerts.domain import DESCRIPCION_MAX, ORIGEN_PRUEBA_AUDIO
 from backend.apps.alerts.exceptions import AlertAlreadyExists
 from backend.common.errors import PersistenceUnavailable
 from backend.common.processing_models import JEV_DEFAULT_THRESHOLD
@@ -485,7 +485,7 @@ class AnalysisService:
                         nivel_severidad=signal.severity, fecha_hora=fragment.captured_at,
                         sesion_id=fragment.session_id,
                         origen=ORIGEN_PRUEBA_AUDIO if fragment.audio_test else "analysis.speechmatics-jev/1.0",
-                        descripcion=None if fragment.audio_test else " ".join(signal.excerpt.split())[:500],
+                        descripcion=" ".join(signal.excerpt.split())[:DESCRIPCION_MAX],
                         **options)
                     if checkpoint is not None:
                         delivery[ident] = "done"

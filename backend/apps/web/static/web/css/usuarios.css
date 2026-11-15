@@ -2,10 +2,15 @@
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 24px;
+    column-gap: 24px;
+    row-gap: 14px;
 }
 
-.panel-cabecera-usuarios > #botonCrearUsuario {
+.barra-usuarios {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
     margin-inline-start: auto;
 }
 
@@ -181,6 +186,12 @@ dialog.modal-confirmacion-contenido {
 }
 
 @media (max-width: 600px) {
+    .barra-usuarios {
+        flex-basis: 100%;
+        margin-inline-start: 0;
+        margin-block-end: 12px;
+    }
+
     .paginacion-usuarios,
     .pie-usuarios {
         padding-inline: 16px;

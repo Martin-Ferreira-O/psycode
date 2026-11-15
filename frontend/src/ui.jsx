@@ -23,6 +23,19 @@ export function Badge({ tone = "neutral", className = "", children, ...props }) 
     return <span {...props} className={`ui-badge ${className}`} data-tone={tone}>{children}</span>;
 }
 
+export function FilterSelect({ label, value, onChange, children }) {
+    return (
+        <div className="ui-filter-select">
+            <Icon name="filter" className="ui-filter-icon" />
+            <select className="ui-button" aria-label={label} value={value}
+                data-filtered={Boolean(value)} onChange={event => onChange(event.target.value)}>
+                {children}
+            </select>
+            <Icon name="chevron_down" className="ui-filter-chevron" />
+        </div>
+    );
+}
+
 export function DataTable({ label, className = "", wrapperClassName = "", wrapperId, stickyActions, children, ...props }) {
     const region = useRef(null);
     const table = useRef(null);
@@ -173,6 +186,7 @@ const iconPaths = {
     arrow_back: "M19 12H5m7-7-7 7 7 7",
     arrow_forward: "M5 12h14m-7-7 7 7-7 7",
     calendar: "M3 5h18v16H3zm0 5h18M8 3v4m8-4v4m-8 7h2m4 0h2m-8 3h2",
+    chevron_down: "m6 9 6 6 6-6",
     chevron_left: "m15 18-6-6 6-6",
     chevron_right: "m9 18 6-6-6-6",
     check: "m5 12 4 4L19 6",
@@ -185,6 +199,7 @@ const iconPaths = {
     fact_check: "M4 4h16v16H4zm3 8 2 2 4-4m2 1h2m-2 4h2",
     history: "M4 11a8 8 0 1 1 1 5m-1-5V5m0 6h6m2-4v5l3 2",
     hard_drive: "M5 5h14l3 9v5H2v-5zm-3 9h20M6 17h.1m4 0h.1",
+    filter: "M3 4h18l-7 8v6l-4 2v-8Z",
     info: "M12 11v5m0-8v.1M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0Z",
     lock: "M5 10h14v11H5zm3 0V7a4 4 0 0 1 8 0v3",
     lock_open: "M5 10h14v11H5zm3 0V7a4 4 0 0 1 7.5-2",
@@ -201,6 +216,8 @@ const iconPaths = {
     settings: "M4 7h16M4 17h16M8 4v6m8 4v6",
     visibility: "M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Zm13 0a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z",
     visibility_off: "m3 3 18 18M10.6 10.7a2 2 0 0 0 2.7 2.7M9.9 5.3A10.8 10.8 0 0 1 12 5c6.5 0 10 7 10 7a17.8 17.8 0 0 1-2.1 3M6.2 6.2C3.5 8 2 12 2 12s3.5 7 10 7a9.6 9.6 0 0 0 4.2-.9",
+    view_grid: "M4 4h6v6H4zm10 0h6v6h-6zM4 14h6v6H4zm10 0h6v6h-6z",
+    view_table: "M3 5h18v14H3zm0 5h18M3 14h18M9 5v14",
     warning: "M12 3 2 20h20zm0 6v4m0 3v.1",
 };
 

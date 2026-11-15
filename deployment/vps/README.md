@@ -28,14 +28,19 @@ como `psycode`; no permite una shell interactiva, túneles ni acceso como root.
 El script está instalado con propietario root y verifica que el SHA solicitado
 coincida con el `main` actual. Los eventos de commits superados se omiten.
 `flock` y la concurrencia de Actions evitan despliegues simultáneos.
+Para aplicar cambios de `deployment/vps/deploy-main.sh`, actualice también la
+copia instalada en `/usr/local/sbin/psycode-deploy-main`.
 
 El script prepara una versión en `/srv/psycode/releases/<SHA>`, instala las
 dependencias fijadas, compila React, ejecuta límites de módulos, pruebas Django, comprobación
 de migraciones y chequeos de producción, y recopila estáticos. Después detiene
-el coordinador, espera hasta cinco minutos por las sesiones abiertas y drena
-el trabajador. Si siguen abiertas, cancela el despliegue y reanuda los servicios.
-Con los procesos detenidos, crea un respaldo SQLite, ejecuta las migraciones y
-apunta `/srv/psycode/current` a la nueva versión. Reinicia y verifica web,
+el coordinador y deja HTTP, WSS y el trabajador disponibles hasta cinco minutos
+mientras espera las confirmaciones de captura. La versión nueva comprueba el
+drenaje con `recover_capture_sessions --check-drain` sobre el esquema anterior.
+Si quedan capturas pendientes de confirmación, cancela el despliegue y reanuda el
+coordinador. Tras el drenaje, detiene el trabajador y el servidor web, crea un
+respaldo SQLite, ejecuta las migraciones y recupera sesiones con inicio sin
+entregar antes de apuntar `/srv/psycode/current` a la nueva versión. Reinicia y verifica web,
 fragmentos y coordinador, incluyendo una petición HTTP al ASGI. Si
 `psycode-storage.service` está instalado, también lo drena antes de migrar y
 lo vuelve a comprobar. El SHA instalado queda en

@@ -181,10 +181,10 @@ class AccountsService:
 
     # --- Módulo Administrativo de Usuarios ---
 
-    def list_users(self, actor, *, limit=None, offset=0):
+    def list_users(self, actor, *, limit=None, offset=0, activo=None):
         if not (actor.is_authenticated and actor.is_active and getattr(actor, "is_admin", False)):
             raise ServiceError("AUTH_FORBIDDEN", "No tienes permisos para administrar usuarios", 403)
-        users, total = self.repository.list_users(limit=limit, offset=offset)
+        users, total = self.repository.list_users(limit=limit, offset=offset, is_active=activo)
         items = [self._format_user(user) for user in users]
         if limit is None:
             return items

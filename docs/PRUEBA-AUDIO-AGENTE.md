@@ -49,8 +49,9 @@ al asistente como alertas de prueba sin textos.
 
 1. En el agente, abre **Probar conexión con audio** y elige **Con alerta esperada**.
 2. En la web, abre **Registro de evaluaciones** y pulsa **Actualizar** tras la
-   detección. La fila aparece como **Alerta de prueba** y **Pendiente**. Puedes
-   guardar una evaluación desde su detalle.
+   detección. La fila aparece como **Alerta de prueba** y **Pendiente**. Desde el
+   detalle, pulsa **Ver transcripción** para leer el fragmento redactado que
+   originó la detección y guarda una evaluación si corresponde.
 3. Si el servidor tiene `NOTIFICATIONS_ENABLED=true` y el correo configurado,
    usa los destinatarios de **Configuración operativa** y envía un mensaje con
    el asunto **[PRUEBA] Alerta simulada**. El cuerpo indica que la detección es
