@@ -827,13 +827,13 @@
 .dashboard-alert-table [data-column="level"] .ui-badge,
 .dashboard-alert-table .dashboard-review-status {
     min-height: 28px;
+    justify-content: center;
     vertical-align: middle;
+    white-space: nowrap;
 }
 
 .dashboard-alert-table [data-column="level"] .ui-badge {
-    width: min(100%, 4.5rem);
-    justify-content: center;
-    text-align: center;
+    inline-size: 5.5em;
 }
 
 .dashboard-alert-table [data-column="date"] {
@@ -841,10 +841,10 @@
 }
 
 .dashboard-alert-table .dashboard-review-status {
+    inline-size: 8.5em;
     gap: 5px;
     border-radius: 999px;
     padding-inline: 8px;
-    white-space: nowrap;
 }
 
 .dashboard-review-status::before {
