@@ -1,3 +1,99 @@
+.evaluation-toast {
+    position: fixed;
+    inset-inline-end: max(1rem, env(safe-area-inset-right));
+    inset-block-end: calc(1rem + env(safe-area-inset-bottom));
+    z-index: 20;
+    max-inline-size: min(24rem, calc(100% - 2rem - env(safe-area-inset-right) - env(safe-area-inset-left)));
+    pointer-events: none;
+}
+
+.evaluation-toast-card {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 10px;
+    padding: 12px;
+    border: 1px solid var(--azul);
+    border-radius: 12px;
+    background: var(--azul-oscuro);
+    color: var(--blanco);
+    box-shadow: 0 6px 20px color-mix(in srgb, var(--azul-sidebar) 25%, transparent);
+    overflow-wrap: anywhere;
+}
+
+.evaluation-toast-icon {
+    display: grid;
+    place-items: center;
+    padding: 10px;
+    border-radius: 8px;
+    background: var(--azul-claro);
+    color: var(--azul-oscuro);
+}
+
+.evaluation-toast-card strong {
+    display: block;
+    margin-block-start: 2px;
+    font-size: .9375rem;
+}
+
+.evaluation-toast-card p {
+    margin: 4px 0 0;
+    color: var(--azul-claro);
+    font-size: .875rem;
+}
+
+.evaluation-toast-close {
+    --button-text: var(--blanco);
+    --button-hover-bg: var(--azul);
+    --button-hover-border: transparent;
+    pointer-events: auto;
+}
+
+.evaluation-toast .evaluation-toast-close:focus-visible { outline-color: var(--azul-claro); }
+
+.evaluation-toast-time {
+    grid-column: 1 / -1;
+    height: 4px;
+    margin: 2px -12px -12px;
+    overflow: hidden;
+    border-radius: 0 0 11px 11px;
+    background: var(--azul-hover);
+}
+
+.evaluation-toast-time > span {
+    display: block;
+    height: 100%;
+    background: var(--azul-claro);
+    transform-origin: left center;
+    animation: evaluation-toast-time 8s linear both;
+}
+
+.evaluation-toast-card:has(.evaluation-toast-close:is(:hover, :focus)) .evaluation-toast-time > span {
+    animation-play-state: paused;
+}
+
+@keyframes evaluation-toast-time {
+    from { transform: scaleX(1); }
+    to { transform: scaleX(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .evaluation-toast-time > span { animation-timing-function: steps(8, end); }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .evaluation-toast-card { animation: evaluation-toast-enter .2s ease-out; }
+
+    @keyframes evaluation-toast-enter {
+        from { opacity: 0; transform: translateY(.375rem); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+}
+
+.panel-evaluaciones > .evaluation-request-status {
+    margin: 0 16px 12px;
+}
+
 .panel-evaluaciones .panel-cabecera,
 .evaluation-toolbar {
     display: flex;

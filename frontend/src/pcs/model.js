@@ -6,11 +6,28 @@ const dateFormatter = new Intl.DateTimeFormat('es-CL', {
     timeStyle: 'medium',
 });
 const numberFormatter = new Intl.NumberFormat('es-CL', { maximumFractionDigits: 1 });
+const listFormatter = new Intl.ListFormat('es-CL');
+const elapsedUnits = ['day', 'hour', 'minute'].map(unit =>
+    new Intl.NumberFormat('es-CL', { style: 'unit', unit, unitDisplay: 'long' }));
 
 export function fecha(value) {
     if (!value) return 'Sin datos';
     const date = new Date(value);
     return Number.isNaN(date.getTime()) ? 'Desconocida' : dateFormatter.format(date);
+}
+
+export function tiempoDesde(value, ahora) {
+    if (!value) return 'Sin datos';
+    const timestamp = Date.parse(value);
+    if (!Number.isFinite(timestamp)) return 'Desconocido';
+    const minutos = Math.floor(Math.abs(ahora - timestamp) / 60_000);
+    if (!minutos) return 'Hace menos de un minuto';
+
+    const valores = [Math.floor(minutos / 1440), Math.floor(minutos % 1440 / 60), minutos % 60];
+    const primera = valores.findIndex(valor => valor > 0);
+    const partes = valores.slice(primera, primera + 2).flatMap((valor, indice) => valor
+        ? [elapsedUnits[primera + indice].format(valor)] : []);
+    return `${timestamp > ahora ? 'En' : 'Hace'} ${listFormatter.format(partes)}`;
 }
 
 export function boxNombre(value) {

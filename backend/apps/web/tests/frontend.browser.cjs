@@ -56,6 +56,12 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         const primeraConsulta = new Promise(resolve => { confirmarConsulta = resolve; });
         liberar = null;
         await page.route(url => url.pathname === '/api/v1/alerts' && url.searchParams.get('registro_evaluaciones') === 'true', async route => {
+            const parametros = new URL(route.request().url()).searchParams;
+            if (parametros.get('limit') === '1') {
+                const data = registros ? { items: registros, total: registros.length } : cuerpo.data;
+                const snapshot = data?.items ? { items: data.items.slice(0, 1), total: data.total } : data;
+                return route.fulfill({ status: estado, json: { success: true, data: snapshot } });
+            }
             consultasRegistro++;
             if (liberar === null) {
                 await new Promise(resolve => {
@@ -65,7 +71,6 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
             }
             let respuesta = cuerpo;
             if (registros) {
-                const parametros = new URL(route.request().url()).searchParams;
                 const limit = Number(parametros.get('limit'));
                 const offset = Number(parametros.get('offset'));
                 const filtro = parametros.get('estado_evaluacion');
@@ -270,10 +275,63 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         await page.getByText('Página 1 de 42', { exact: true }).waitFor();
         assert.equal(await page.locator('#resultadoEvaluaciones').innerText(), 'Mostrando 1–12 de 500 registros');
         await page.evaluate(() => localStorage.removeItem('evaluaciones.vista'));
+        await page.clock.install();
+        const consultaInicial = page.waitForResponse(response => {
+            const url = new URL(response.url());
+            return url.pathname === '/api/v1/alerts' && url.searchParams.get('limit') === '1';
+        });
         await page.reload();
         await tarjeta.first().waitFor();
+        await consultaInicial;
         assert.equal(await vistaTarjetas.getAttribute('aria-pressed'), 'true');
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth === window.innerWidth), true);
+
+        const avisoNuevoRegistro = page.locator('.evaluation-toast');
+        assert.equal(await avisoNuevoRegistro.innerText(), '', 'la consulta inicial no genera avisos');
+        await filtroEvaluaciones.selectOption('correcta');
+        await siguiente.click();
+        await page.getByText('Página 2 de 2', { exact: true }).waitFor();
+        await filtroEvaluaciones.focus();
+        const panelAntesDelAviso = await page.locator('.panel-evaluaciones').boundingBox();
+        const consultasAntesDelAviso = consultasRegistro;
+        registros.unshift({ ...registros[0], alerta_id: 'registro-recien-incorporado', estado_evaluacion: 'pendiente', es_prueba: true, evaluacion: null });
+        await page.clock.fastForward(15_000);
+        const contenidoDelAviso = avisoNuevoRegistro.getByRole('status');
+        await contenidoDelAviso.getByText(/Actualizaremos la lista/).waitFor();
+        assert.deepEqual(await page.locator('.panel-evaluaciones').boundingBox(), panelAntesDelAviso, 'la notificación flotante no mueve el listado');
+        assert.equal(await avisoNuevoRegistro.evaluate(toast => getComputedStyle(toast).pointerEvents), 'none');
+        assert.equal(consultasRegistro, consultasAntesDelAviso, 'avisa antes de volver a consultar la página');
+        await page.clock.fastForward(1_500);
+        await contenidoDelAviso.getByText(/está al día/).waitFor();
+        assert.equal(consultasRegistro, consultasAntesDelAviso + 1);
+        assert.equal(await filtroEvaluaciones.evaluate(select => document.activeElement === select && select.value === 'correcta'), true);
+        assert.equal(await page.getByText('Página 2 de 2', { exact: true }).isVisible(), true);
+        await avisoNuevoRegistro.locator('.evaluation-toast-time > span').evaluate(barra => barra.getAnimations()[0].finish());
+        await contenidoDelAviso.getByText('Nueva alerta en evaluaciones').waitFor({ state: 'hidden' });
+        await page.clock.fastForward(15_000);
+        assert.equal(await avisoNuevoRegistro.innerText(), '', 'no vuelve a anunciar el mismo registro');
+
+        const consultasAntesDeCerrar = consultasRegistro;
+        registros.unshift({ ...registros[0], alerta_id: 'otro-registro-recien-incorporado' });
+        await page.clock.fastForward(15_000);
+        await contenidoDelAviso.getByText(/Actualizaremos la lista/).waitFor();
+        await anterior.focus();
+        await page.keyboard.press('Tab');
+        const cerrarAviso = avisoNuevoRegistro.getByRole('button', { name: 'Cerrar notificación de nueva alerta' });
+        assert.equal(await cerrarAviso.evaluate(button => document.activeElement === button), true);
+        assert.equal(await avisoNuevoRegistro.locator('.evaluation-toast-time > span').evaluate(barra => getComputedStyle(barra).animationPlayState), 'paused');
+        await page.keyboard.press('Enter');
+        await cerrarAviso.waitFor({ state: 'hidden' });
+        assert.equal(await anterior.evaluate(button => document.activeElement === button), true);
+        const recargaDespuesDeCerrar = page.waitForResponse(response => {
+            const url = new URL(response.url());
+            return url.pathname === '/api/v1/alerts' && url.searchParams.get('limit') === '12';
+        });
+        await page.clock.fastForward(1_500);
+        await recargaDespuesDeCerrar;
+        assert.equal(consultasRegistro, consultasAntesDeCerrar + 1, 'cerrar el aviso deja que el registro se actualice');
+        assert.equal(await avisoNuevoRegistro.innerText(), '', 'la actualización no vuelve a abrir el aviso cerrado');
+
         await page.setViewportSize({ width: 1280, height: 720 });
         registros = undefined;
         estado = 401;
