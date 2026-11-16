@@ -32,6 +32,7 @@
 .pc-tarjeta .pc-datos { gap: 10px 14px; padding: 4px var(--pc-padding) 14px; }
 .pc-datos dt, .pc-flujo dt { margin-bottom: 4px; color: var(--texto-secundario); font-size: 12px; overflow-wrap: anywhere; }
 .pc-datos dd, .pc-flujo dd { margin: 0; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.pc-estado-captura { display: inline-block; max-width: 100%; }
 .pc-flujo-bloque { padding: 12px var(--pc-padding); border-block: 1px solid var(--borde); background: #fbfcfe; }
 .pc-flujo-bloque h4 { margin: 0 0 8px; color: var(--azul); font-size: 12px; font-weight: 600; }
 .pc-flujo { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0; }

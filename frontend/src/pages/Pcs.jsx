@@ -34,6 +34,7 @@ export default function Pcs({ config }) {
     const [box, setBox] = useState('');
     const [smileStatus, setSmileStatus] = useState(null);
     const [testing, setTesting] = useState([]);
+    const [ahora, setAhora] = useState(Date.now);
     const pendingMutation = useRef(null);
     const smileRequests = useRef(new Map());
     const listaRef = useRef(null);
@@ -51,6 +52,16 @@ export default function Pcs({ config }) {
 
     const { equipos, salas, salasConsultadas, errorSalas, ultimaConsulta, estado, cargando, cargar, actualizarPrueba, actualizarNombre } =
         useRegistry({ paused: Boolean(dialog) || busy, beforeCardsChange: captureFocus });
+
+    useEffect(() => {
+        const tick = () => setAhora(Date.now());
+        const timer = window.setInterval(tick, 15000);
+        document.addEventListener('visibilitychange', tick);
+        return () => {
+            window.clearInterval(timer);
+            document.removeEventListener('visibilitychange', tick);
+        };
+    }, []);
 
     useLayoutEffect(() => {
         if (!focusedCard.current) return;
@@ -269,7 +280,7 @@ export default function Pcs({ config }) {
                         </div>
                     ))}
                     {equiposVisibles.map(pc => (
-                        <EquipoCard key={pc.agent_id} pc={pc} testing={testing.includes(pc.agent_id)} onTest={probarSmile}
+                        <EquipoCard key={pc.agent_id} pc={pc} ahora={ahora} testing={testing.includes(pc.agent_id)} onTest={probarSmile}
                             onAction={(target, action, origen) => abrir({ kind: action === 'renombrar' ? 'renombrar' : 'accion', pc: target, action }, origen)}
                             onHistory={(target, origen) => abrir({ kind: 'historial', pc: target }, origen)} />
                     ))}

@@ -5,6 +5,7 @@ import { Badge, Button, DataTable, FilterSelect, Icon, Skeleton, SkeletonRows, S
 import AlertDetail from "../monitor/AlertDetail.jsx";
 import { ALERTS_URL, saveEvaluation } from "../monitor/alerts.js";
 import { usePage } from "../monitor/resources.js";
+import { useEvaluationUpdates } from "../monitor/useEvaluationUpdates.js";
 
 const viewKey = "evaluaciones.vista";
 const views = [
@@ -146,9 +147,17 @@ export default function Evaluaciones() {
     const inFlight = useRef(false);
     const titleRef = useRef(null);
     const detailTrigger = useRef(null);
+    const beforeToastFocus = useRef(null);
     const shouldFocus = useRef(false);
     const query = status ? `registro_evaluaciones=true&estado_evaluacion=${status}` : "registro_evaluaciones=true";
-    const { data, loading, error, reload } = usePage(ALERTS_URL, query, offset, EVALUATION_PAGE_SIZE);
+    const { data, previousData, loading, error, reload, refresh, refreshing, refreshError } =
+        usePage(ALERTS_URL, query, offset, EVALUATION_PAGE_SIZE);
+    const { notice, checkFailed, dismissNotice } = useEvaluationUpdates({ enabled: Boolean(previousData), paused: !data || Boolean(selected), refresh });
+    let liveMessage = "";
+    if (notice?.pending) liveMessage = "Actualizaremos la lista en unos segundos y mantendremos tus filtros.";
+    else if (notice && (error || refreshError)) liveMessage = "No pudimos actualizar la lista. Pulsa Actualizar para volver a intentarlo.";
+    else if (notice && (refreshing || loading)) liveMessage = "Estamos incorporando la novedad al registro de evaluaciones.";
+    else if (notice) liveMessage = "El registro de evaluaciones está al día y conserva tu vista y tus filtros.";
 
     useEffect(() => {
         if (!loading && shouldFocus.current) {
@@ -221,6 +230,17 @@ export default function Evaluaciones() {
         }
     }
 
+    function closeNotice(event) {
+        if (event.currentTarget === document.activeElement) {
+            const previous = beforeToastFocus.current;
+            if (previous?.isConnected && previous !== document.body && !previous.matches(":disabled")) {
+                previous.focus({ preventScroll: true });
+            }
+            if (document.activeElement === event.currentTarget) titleRef.current?.focus();
+        }
+        dismissNotice();
+    }
+
     return (
         <>
             <PageHeader title="Registro de evaluaciones" />
@@ -248,6 +268,16 @@ export default function Evaluaciones() {
                         <Button onClick={reload} busy={loading} busyLabel="Actualizando…"><Icon name="refresh" />Actualizar</Button>
                     </div>
                 </div>
+                {checkFailed && data && !liveMessage && (
+                    <Status className="evaluation-request-status" type="info">
+                        No pudimos comprobar si hay nuevas alertas. Volveremos a intentarlo automáticamente.
+                    </Status>
+                )}
+                {refreshError && (
+                    <Status className="evaluation-request-status" type="error" error={refreshError}>
+                        No se pudo actualizar el registro. Se muestran los últimos datos disponibles. Pulsa Actualizar para reintentar.
+                    </Status>
+                )}
                 {error && <Status id="estadoVacioEvaluaciones" type="error" error={error} messages={{ 404: "No encontramos el registro de evaluaciones solicitado." }} onRetry={retry} />}
                 {data && data.items.length === 0 && (
                     <Status id="estadoVacioEvaluaciones" type="vacio">
@@ -267,6 +297,25 @@ export default function Evaluaciones() {
                     </nav>
                 )}
             </section>
+            <div className="evaluation-toast">
+                <div className={notice ? "evaluation-toast-card" : undefined}>
+                    {notice && <span className="evaluation-toast-icon"><Icon name="bell" /></span>}
+                    <div role="status" aria-atomic="true">
+                        {notice && <><strong>Nueva alerta en evaluaciones</strong><p>{liveMessage}</p></>}
+                    </div>
+                    {notice && (
+                        <>
+                            <Button variant="ghost" iconOnly className="evaluation-toast-close" aria-label="Cerrar notificación de nueva alerta"
+                                onFocus={event => { beforeToastFocus.current = event.relatedTarget; }} onClick={closeNotice}>
+                                <Icon name="close" />
+                            </Button>
+                            <div className="evaluation-toast-time" aria-hidden="true">
+                                <span key={notice.id} onAnimationEnd={dismissNotice} />
+                            </div>
+                        </>
+                    )}
+                </div>
+            </div>
             {selected && <AlertDetail key={selected} id={selected} onClose={closeDetail} returnFocusRef={detailTrigger}
                 evaluation={evaluation?.alerta_id === selected ? evaluation : null} saving={saving} onEvaluate={evaluateTest} />}
         </>

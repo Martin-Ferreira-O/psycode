@@ -1,7 +1,8 @@
+import { useLayoutEffect, useRef } from 'react';
 import { Badge, Button } from '../ui.jsx';
 import {
     boxNombre, codigoPendiente, duracion, espacio, estadoFlujo, estadoSmile,
-    fecha, informado, numero, pruebaSmileActiva,
+    fecha, informado, numero, pruebaSmileActiva, tiempoDesde,
 } from './model.js';
 
 export function BoxOptions({ boxes, placeholder = 'Todos los boxes' }) {
@@ -119,7 +120,28 @@ function InstalacionInicial({ pc, onAction }) {
     );
 }
 
-function TelemetriaPC({ pc, conectado }) {
+function EstadoCaptura({ estado, anuncio }) {
+    const text = useRef(null);
+    const previous = useRef(estado);
+    useLayoutEffect(() => {
+        if (previous.current === estado) return;
+        previous.current = estado;
+        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+        const animation = text.current.animate([
+            { opacity: 0.8, transform: 'translateY(.2rem)' },
+            { opacity: 1, transform: 'translateY(0)' },
+        ], { duration: 240, easing: 'ease-out' });
+        return () => animation.cancel();
+    }, [estado]);
+
+    return (
+        <span role={anuncio ? 'status' : undefined} aria-label={anuncio}>
+            <span className="pc-estado-captura" ref={text}>{estado}</span>
+        </span>
+    );
+}
+
+function TelemetriaPC({ pc, conectado, ahora }) {
     let captura = 'Sin datos';
     if (informado(pc, 'capturing') && typeof pc.capturing === 'boolean') {
         captura = pc.capturing ? 'Capturando' : 'Sin captura';
@@ -129,19 +151,30 @@ function TelemetriaPC({ pc, conectado }) {
             <dl className="pc-datos">
                 <Dato titulo="Versión informada del agente">{pc.version || 'Sin datos'}</Dato>
                 <Dato titulo="Última comunicación · Chile">{fecha(pc.last_seen_at)}</Dato>
-                <Dato titulo={conectado ? 'Captura informada por el PC' : 'Última captura informada'}>{captura}</Dato>
+                <Dato titulo={conectado ? 'Captura informada por el PC' : 'Última captura informada'}>
+                    <EstadoCaptura estado={captura} />
+                </Dato>
                 <Dato titulo="Último audio recibido de este PC">{fecha(pc.last_audio?.accepted_at)}</Dato>
             </dl>
             <section className="pc-flujo-bloque">
                 <h4>Flujo de {boxNombre(pc.box)}</h4>
                 <dl className="pc-flujo">
-                    <Dato titulo="Captura">{estadoFlujo(pc.capture_status)}</Dato>
+                    <Dato titulo="Captura">
+                        <EstadoCaptura estado={pc.capture_status === 'active' ? 'Capturando' : estadoFlujo(pc.capture_status)}
+                            anuncio={`Captura de ${boxNombre(pc.box)}`} />
+                    </Dato>
                     <Dato titulo="Recepción">{estadoFlujo(pc.reception_status)}</Dato>
                     <Dato titulo="Procesamiento">{estadoFlujo(pc.processing_status)}</Dato>
                 </dl>
             </section>
             <dl className="pc-datos pc-capacidad">
-                <Dato titulo="Último diagnóstico del PC · Chile">{fecha(pc.status_reported_at)}</Dato>
+                <Dato titulo="Último diagnóstico del PC">
+                    {Number.isFinite(Date.parse(pc.status_reported_at)) ? (
+                        <time dateTime={pc.status_reported_at} title={`${fecha(pc.status_reported_at)} · Chile`}>
+                            {tiempoDesde(pc.status_reported_at, ahora)}
+                        </time>
+                    ) : tiempoDesde(pc.status_reported_at, ahora)}
+                </Dato>
                 <Dato titulo="Pendientes del PC">
                     {informado(pc, 'pending') && numero(pc.pending) ? pc.pending : 'Sin datos'}
                 </Dato>
@@ -208,7 +241,7 @@ function ColectorSmile({ pc, conectado, testing, onTest }) {
     );
 }
 
-export function EquipoCard({ pc, onAction, onHistory, onTest, testing }) {
+export function EquipoCard({ pc, ahora, onAction, onHistory, onTest, testing }) {
     const conectado = pc.connection === 'online';
     const instalacion = codigoPendiente(pc);
     let estado = conectado ? 'Conectado' : 'Sin comunicación';
@@ -226,7 +259,7 @@ export function EquipoCard({ pc, onAction, onHistory, onTest, testing }) {
             {pc.initial_installation ? <InstalacionInicial pc={pc} onAction={onAction} /> : (
                 <>
                     <CabeceraTarjeta box={pc.box} nombre={pc.name} estado={estado} estilo={estilo} />
-                    <TelemetriaPC pc={pc} conectado={conectado} />
+                    <TelemetriaPC pc={pc} conectado={conectado} ahora={ahora} />
                     <AvisosPC pc={pc} conectado={conectado} instalacion={instalacion} />
                     <ColectorSmile pc={pc} conectado={conectado} testing={testing} onTest={onTest} />
                     <footer className="pc-tarjeta-pie">
