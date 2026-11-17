@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef } from 'react';
 import { Badge, Button } from '../ui.jsx';
 import {
-    boxNombre, codigoPendiente, duracion, espacio, estadoFlujo, estadoSmile,
+    boxNombre, codigoPendiente, espacio, estadoFlujo, estadoSmile,
     fecha, informado, numero, pruebaSmileActiva, tiempoDesde,
 } from './model.js';
 
@@ -141,6 +141,13 @@ function EstadoCaptura({ estado, anuncio }) {
     );
 }
 
+function TiempoRelativo({ value, ahora }) {
+    const texto = tiempoDesde(value, ahora);
+    if (!Number.isFinite(Date.parse(value))) return texto;
+
+    return <time dateTime={value} title={`${fecha(value)} · Chile`}>{texto}</time>;
+}
+
 function TelemetriaPC({ pc, conectado, ahora }) {
     let captura = 'Sin datos';
     if (informado(pc, 'capturing') && typeof pc.capturing === 'boolean') {
@@ -150,11 +157,15 @@ function TelemetriaPC({ pc, conectado, ahora }) {
         <>
             <dl className="pc-datos">
                 <Dato titulo="Versión informada del agente">{pc.version || 'Sin datos'}</Dato>
-                <Dato titulo="Última comunicación · Chile">{fecha(pc.last_seen_at)}</Dato>
+                <Dato titulo="Última comunicación">
+                    <TiempoRelativo value={pc.last_seen_at} ahora={ahora} />
+                </Dato>
                 <Dato titulo={conectado ? 'Captura informada por el PC' : 'Última captura informada'}>
                     <EstadoCaptura estado={captura} />
                 </Dato>
-                <Dato titulo="Último audio recibido de este PC">{fecha(pc.last_audio?.accepted_at)}</Dato>
+                <Dato titulo="Último audio recibido de este PC">
+                    <TiempoRelativo value={pc.last_audio?.accepted_at} ahora={ahora} />
+                </Dato>
             </dl>
             <section className="pc-flujo-bloque">
                 <h4>Flujo de {boxNombre(pc.box)}</h4>
@@ -169,17 +180,12 @@ function TelemetriaPC({ pc, conectado, ahora }) {
             </section>
             <dl className="pc-datos pc-capacidad">
                 <Dato titulo="Último diagnóstico del PC">
-                    {Number.isFinite(Date.parse(pc.status_reported_at)) ? (
-                        <time dateTime={pc.status_reported_at} title={`${fecha(pc.status_reported_at)} · Chile`}>
-                            {tiempoDesde(pc.status_reported_at, ahora)}
-                        </time>
-                    ) : tiempoDesde(pc.status_reported_at, ahora)}
+                    <TiempoRelativo value={pc.status_reported_at} ahora={ahora} />
                 </Dato>
                 <Dato titulo="Pendientes del PC">
                     {informado(pc, 'pending') && numero(pc.pending) ? pc.pending : 'Sin datos'}
                 </Dato>
                 <Dato titulo="Disco libre">{espacio(pc.free_bytes)}</Dato>
-                <Dato titulo="Autonomía estimada">{duracion(pc.remaining_seconds)}</Dato>
             </dl>
         </>
     );
@@ -207,7 +213,7 @@ function AvisosPC({ pc, conectado, instalacion }) {
             {conectado && pc.obs === 'unavailable' && <p className="pcs-aviso pc-aviso">La aplicación de captura no responde. Comprueba que OBS esté abierto en la cuenta de Windows configurada. Si continúa, solicita asistencia técnica.</p>}
             {pc.storage_warning?.active && <p className={`pcs-aviso pc-aviso ${capacidadCritica ? 'critical' : ''}`}>
                 {historico && 'Último diagnóstico del PC. '}
-                {capacidadCritica ? 'Atención: capacidad crítica. Revisa el disco y los envíos pendientes.' : 'Aviso: capacidad baja. Revisa el espacio y la autonomía disponible.'}
+                {capacidadCritica ? 'Atención: capacidad crítica. Revisa el disco y los envíos pendientes.' : 'Aviso: capacidad baja. Revisa el espacio libre.'}
             </p>}
             {pc.operational_code && !pc.storage_warning?.active && <p className="pcs-aviso pc-aviso">
                 {historico && 'Último diagnóstico del PC. '}
