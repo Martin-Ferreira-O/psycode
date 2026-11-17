@@ -303,7 +303,9 @@ class PCPairingExchangeView(APIView):
         result['api_key'] = token
         if installation_id:
             result.update({'installation_id': str(installation_id), 'confirmation_required': True})
-        return success_response(result, "Instalación preparada" if installation_id else "PC vinculado")
+        response = success_response(result, "Instalación preparada" if installation_id else "PC vinculado")
+        response['Cache-Control'] = 'no-store, private'
+        return response
 
 
 class PCPairingConfirmView(PCPairingExchangeView):
@@ -321,4 +323,9 @@ class PCPairingConfirmView(PCPairingExchangeView):
         except (ValueError, KeyError, TypeError, AttributeError, UnicodeError):
             raise ServiceError("PAIRING_INVALID", "Instalación no disponible.", 400) from None
         agent = confirm_pairing(token, installation_id)
-        return success_response({'agent_id': str(agent.pk), 'box': agent.box}, "Instalación confirmada")
+        # Solo anuncia la ruta; los secretos requieren la credencial ya activada
+        # y la designación vigente como colector, nunca el código temporal.
+        response = success_response({'agent_id': str(agent.pk), 'box': agent.box,
+                                     'smile_credentials_version': '1'}, "Instalación confirmada")
+        response['Cache-Control'] = 'no-store, private'
+        return response

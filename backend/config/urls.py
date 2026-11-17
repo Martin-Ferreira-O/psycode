@@ -8,8 +8,10 @@ from .composition import accounts_service
 from backend.apps.capture.views import FragmentV2UploadView
 from backend.apps.agenda.views import CollectionView, ReportView, SmileCatalogView, SmileConfigurationView
 from backend.apps.agenda.collector_check import AgentSmileCheckView
+from backend.apps.agenda.credentials import SmileCredentialsView
 
 urlpatterns = [
+    path("api/v1/internal/smile-credentials", SmileCredentialsView.as_view()),
     path("api/v1/internal/smile-configuration", SmileConfigurationView.as_view()),
     path("api/v1/internal/smile-room-catalogues", SmileCatalogView.as_view()),
     path("api/v1/internal/smile-collector-check", AgentSmileCheckView.as_view()),

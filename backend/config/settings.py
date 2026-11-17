@@ -272,6 +272,11 @@ except (ValueError, TypeError):
 # Ruta absoluta y privada. Sin configuración no se ofrece la descarga.
 PC_WINDOWS_INSTALLER_DIR = os.getenv("PC_WINDOWS_INSTALLER_DIR", "").strip()
 
+# Secretos solo en el entorno privado del VPS, nunca en perfiles operativos/SQL.
+# PASSWORD en el nombre permite que el filtro de errores de Django lo oculte.
+SMILE_USERNAME = os.getenv("SMILE_USERNAME", "")
+SMILE_PASSWORD = os.getenv("SMILE_PASSWORD", "")
+
 PC_PAIRING_TTL_SECONDS = positive_int("PC_PAIRING_TTL_SECONDS", 300)
 PC_PAIRING_IP_LIMIT = positive_int("PC_PAIRING_IP_LIMIT", 5)
 PC_PAIRING_GLOBAL_LIMIT = positive_int("PC_PAIRING_GLOBAL_LIMIT", 20)
