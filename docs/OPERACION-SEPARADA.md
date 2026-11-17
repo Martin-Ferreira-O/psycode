@@ -105,12 +105,13 @@ el alcance del reporte. JSON permite varios boxes. Excel requiere un solo box.
 La fuente identifica el catálogo existente. Conserva ese identificador al
 mover la recolección entre PCs.
 
-Instala el extra `smile` en el agente y provisiona `SMILE_USER`,
-`SMILE_PASSWORD` y, si corresponde, `SMILE_CA_FILE` en el archivo privado local.
-El agente consulta el perfil mediante HTTPS cada cinco segundos cuando está
-disponible. La publicación de catálogo y agenda sigue sujeta a la designación
-y a la revisión vigentes en SQL. Si el descargador falla, corrige la causa antes
-de usar `psycode-agent retry-smile`.
+Instala el extra `smile` en el agente y configura `SMILE_USERNAME` y
+`SMILE_PASSWORD` en el entorno privado del VPS. Solo el colector vigente recibe
+la cuenta por HTTPS autenticado y la conserva con DPAPI en Windows.
+[Aprovisionamiento, compatibilidad y rotación](CREDENCIALES-SMILE.md).
+El agente consulta el perfil por HTTPS cada cinco segundos. La publicación de
+catálogo y agenda sigue sujeta a la designación y revisión vigentes en SQL.
+Si el descargador falla, corrige la causa antes de usar `psycode-agent retry-smile`.
 
 Para un despliegue anterior, mantén el antiguo `CAPTURE_AGENDA_SOURCES`
 disponible al aplicar la migración `operational.0004`. La migración importa

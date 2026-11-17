@@ -9,6 +9,10 @@ ejecute `configure-github.sh` desde el equipo de administración. Con
 distinta, incorpore `agent-publisher-host.patch` en el repositorio del agente
 para que su workflow use `AGENT_INSTALLER_HOST`.
 
+La cuenta institucional Smile se configura solo en `server.env` mediante
+`SMILE_USERNAME` y `SMILE_PASSWORD`; se entrega al colector autenticado.
+[Configuración, almacenamiento y rotación](../../docs/CREDENCIALES-SMILE.md).
+
 ## VPS de referencia
 
 Destino: `144.22.56.52`, Ubuntu 22.04, usuario SSH de mantenimiento `ubuntu`.

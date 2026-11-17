@@ -13,16 +13,18 @@
     "agent-events-v1.schema.json": "ccdedce6cacd987f576c59af0a158cb87c6a3302f6156cd5198276dda913b19f",
     "capture-ended-v1.schema.json": "ff88561d3cc64ec17884651752e9a022114756b4e93b23b25fba3f04e70b1900",
     "smile-room-catalogue-v1.schema.json": "ce8f0b34d179a55a66f44b108beaa7126f86a9a677b25d955335535ffbc7abbf",
-    "pc-installation-v2.schema.json": "9830cf765ba7f241db150a00d9048d2e34e2f1d7ea0464aaf2339bf35899831b",
+    "pc-installation-v2.schema.json": "ec21dd584f08dafb0690feb05631e1b2d5d9931ffd2e77d3bb16e2040e4d8e96",
     "smile-collector-check-v1.schema.json": "de0d6462bf71adb4e1b545540a110efc4b1a2691e15a9b59f400eaf3677927d6",
     "smile-collector-check-valid.json": "bec1de9dae76b9c685f19288c02e07ccfe96e9759c98a00b2c20dd80dc28e32f",
     "audio-test-profile-v1.schema.json": "a31e93ab417ff97b16789b7cb29ed453c9b598740fcb89a1d8e8347eda32c82b",
     "audio-test-profile-v2.schema.json": "069bd2d6669da62a816fc3e05676cf710b5763b5a825fd9bd7cfd1f4aa21e587",
     "audio-test-fragment-details-v1.schema.json": "0a7e9dd45d2a79fc54a6d44b526d6ed3e87316a88afc3d12d1b573329d623a8b",
-    "smile-configuration-v1.schema.json": "84e1a1b0c8e45c98096628e2f9b7572a60f130a2f33f35054486b34122fd7bdf"
+    "smile-configuration-v1.schema.json": "84e1a1b0c8e45c98096628e2f9b7572a60f130a2f33f35054486b34122fd7bdf",
+    "smile-credentials-v1.schema.json": "6d0b82ce17d237b92d2298d28790a0eeeee2d6011dc3eaa136346b8d425afbaa"
   },
   "extensions": [
     "agent.config.v1",
-    "agenda.smile-config.v1"
+    "agenda.smile-config.v1",
+    "agenda.smile-credentials.v1"
   ]
 }

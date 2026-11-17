@@ -22,6 +22,8 @@ LOGGING = {"version": 1, "disable_existing_loggers": False,
            "loggers": {"psycode.audit": {"handlers": ["null"], "propagate": False}}}
 
 NOTIFICATIONS_ENABLED = False
+SMILE_USERNAME = ""
+SMILE_PASSWORD = ""
 NOTIFICATION_EMAIL_TO = "primary@example.test"
 NOTIFICATION_EMAIL_BACKUP_TO = "backup@example.test"
 
