@@ -5,9 +5,13 @@ from datetime import timedelta
 from unittest.mock import patch
 from uuid import uuid4
 
+import httpx
+from asgiref.sync import async_to_sync
 from django.test import TestCase, TransactionTestCase, override_settings
+from django.test.client import BOUNDARY, MULTIPART_CONTENT, encode_multipart
 
 from backend.apps.operational.models import OperationalConfiguration
+from backend.config.asgi import application
 from .authentication import AgentIdentity
 from .chunk_config import CAPABILITY, byte_limit, duration
 from .models import CaptureSession, FragmentJob
@@ -179,7 +183,7 @@ class ConfiguredIngestionTests(IngestionFixtures, TestCase):
 
 
 # Reuse API fixtures without inheriting the legacy test methods.
-class ConfiguredUploadTests(IngestionFixtures, TestCase):
+class ConfiguredUploadTests(IngestionFixtures, TransactionTestCase):
     payload = api_tests.FragmentAPITests.payload
 
     def setUp(self):
@@ -201,9 +205,23 @@ class ConfiguredUploadTests(IngestionFixtures, TestCase):
         temporal = dict(session_start_sample=0, session_end_sample=900 * 16000,
                         new_audio_start_sample=0, sample_rate=16000, chunk_samples=3600 * 16000,
                         overlap_samples=16000)
+
+        async def upload():
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=application),
+                                         base_url="http://testserver") as client:
+                return await client.post(
+                    "/api/v2/internal/fragments",
+                    content=encode_multipart(BOUNDARY, self.payload(data, **temporal)),
+                    headers={"Authorization": "Agent " + TOKEN, "Content-Type": MULTIPART_CONTENT},
+                )
+
         with patch("django.utils.timezone.now", return_value=NOW + timedelta(seconds=910)):
-            response = self.client.post("/api/v2/internal/fragments", self.payload(data, **temporal), format="multipart")
-        self.assertEqual(response.status_code, 201, response.data)
+            response = async_to_sync(upload)()
+            retry = async_to_sync(upload)()
+        self.assertEqual(response.status_code, 201, response.text)
+        self.assertEqual(retry.status_code, 200, retry.text)
+        self.assertEqual(retry.json()["data"], response.json()["data"])
+        self.assertEqual(FragmentJob.objects.count(), 1)
         self.assertFalse(list(self.root.glob("*.part")))
 
     def test_legacy_session_cannot_use_negotiated_size_allowance(self):

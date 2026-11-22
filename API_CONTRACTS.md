@@ -469,7 +469,7 @@ Incluye `jev_model` (`1.14` o `1.13`) y `speechmatics_model`
 `smile_collector_id` (UUID registrado o `null` para desactivar), `smile_source`,
 `smile_url`, `smile_interval`, `smile_timeout`, `smile_request_timeout`,
 `smile_format`, `smile_timezone` y `smile_boxes`. Smile usa la zona fija
-`America/Santiago` y la URL predeterminada `https://192.168.10.184/providencia/usmile/index.php/`.
+`America/Santiago`. La URL inicial se configura mediante `SMILE_DEFAULT_URL` o en el panel operativo.
 El objeto `options` expone los valores admitidos y los PCs activos con su estado de conexión.
 
 Extracto de una respuesta 200 para una configuración guardada:

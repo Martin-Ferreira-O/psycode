@@ -13,10 +13,11 @@ La cuenta institucional Smile se configura solo en `server.env` mediante
 `SMILE_USERNAME` y `SMILE_PASSWORD`; se entrega al colector autenticado.
 [Configuración, almacenamiento y rotación](../../docs/CREDENCIALES-SMILE.md).
 
-## VPS de referencia
+## Parámetros del VPS
 
-Destino: `144.22.56.52`, Ubuntu 22.04, usuario SSH de mantenimiento `ubuntu`.
-Aplicación: `https://144.22.56.52/`. Se despliega exclusivamente `main`.
+Configure `PSYCODE_HOST` en `/etc/psycode/deploy.conf` con el host público de la
+instalación. En instalaciones anteriores, el sondeo HTTP puede usar
+`FRONTEND_BASE_URL` de `server.env`. Se despliega exclusivamente `main`.
 
 ## Despliegue automático
 
@@ -60,7 +61,7 @@ no prometen cero interrupción: reinician HTTP y las conexiones WebSocket.
 
 Los archivos operativos en `/usr/local/sbin`, `/etc/systemd/system` y
 `/etc/nginx` son de root. Cambiar sus ejemplos en Git no los reinstala: requieren
-una actualización explícita de mantenimiento como `ubuntu` mediante `sudo`.
+una actualización explícita de mantenimiento mediante `sudo`.
 El instalador prepara Node.js 22 para compilar React. En una VPS administrada
 manualmente, se necesita Node.js 22.12 o superior con `npm` en el `PATH`.
 
@@ -103,7 +104,7 @@ de emisión falla y conserva su reintento horario. Tras abrirlos:
 ```sh
 sudo systemctl start psycode-certificate.service
 sudo systemctl status psycode-certificate.timer
-curl -I https://144.22.56.52/
+curl -I https://psycode.example.test/
 ```
 
 Referencias: [certificados de IP de Let's Encrypt](https://letsencrypt.org/2026/03/11/shorter-certs-certbot/),

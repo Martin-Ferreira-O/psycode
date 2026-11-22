@@ -32,6 +32,7 @@ LOGGING = {"version": 1, "disable_existing_loggers": False,
 NOTIFICATIONS_ENABLED = False
 SMILE_USERNAME = ""
 SMILE_PASSWORD = ""
+SMILE_DEFAULT_URL = ""
 NOTIFICATION_EMAIL_TO = "primary@example.test"
 NOTIFICATION_EMAIL_BACKUP_TO = "backup@example.test"
 

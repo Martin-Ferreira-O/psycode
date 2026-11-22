@@ -9,6 +9,9 @@ No copiar los valores a `.env.example`, al código, al instalador ni a los logs.
 Actualizar el entorno y reiniciar el servicio web por el procedimiento de
 operación del VPS para cargar cambios. La configuración operativa de la web
 sigue administrando colector, fuente y URL; nunca devuelve los secretos.
+Una instalación nueva puede inicializar la URL mediante `SMILE_DEFAULT_URL`
+en el mismo archivo privado. Una URL guardada se conserva y se puede editar
+en el panel operativo.
 
 Después de confirmar la vinculación recuperable, el servidor anuncia
 `smile_credentials_version: "1"`. El agente consulta por HTTPS
