@@ -2,6 +2,8 @@
 import os
 from unittest.mock import patch
 
+from django.conf import global_settings
+
 os.environ["DJANGO_DEBUG"] = "true"
 os.environ["DJANGO_SECRET_KEY"] = "test-only-not-for-deployment-" * 3
 os.environ["FRONTEND_ORIGIN"] = "http://localhost:5173"
@@ -16,6 +18,12 @@ MONGODB_URI = os.getenv("PSYCODE_TEST_MONGODB_URI", "").strip()
 MONGODB_DATABASE = "psycode_test"
 ALLOWED_HOSTS = ["testserver", "localhost", "127.0.0.1"]
 DATABASES["default"]["TEST"] = {"NAME": os.getenv("PSYCODE_TEST_SQLITE_PATH", str(BASE_DIR / ".local/test-auth.sqlite3"))}
+# Los usuarios de prueba son sintéticos. Las pruebas de seguridad de login
+# seleccionan explícitamente los hashers habituales.
+PASSWORD_HASHERS = [
+    "django.contrib.auth.hashers.MD5PasswordHasher",
+    *global_settings.PASSWORD_HASHERS,
+]
 EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
 LOGGING = {"version": 1, "disable_existing_loggers": False,
            "handlers": {"null": {"class": "logging.NullHandler"}},

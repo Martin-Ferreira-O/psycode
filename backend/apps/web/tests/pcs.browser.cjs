@@ -20,6 +20,7 @@ const ok = data => ({ status: 200, contentType: 'application/json', body: JSON.s
     if (scrum97) await context.route('**/*', route => new URL(route.request().url()).origin === new URL(base).origin
         ? route.continue() : route.abort('blockedbyclient'));
     const page = await context.newPage();
+    await page.clock.install();
     const errors = [];
     page.on('pageerror', e => errors.push(e.message));
     const configurationRequests=[];
@@ -402,9 +403,14 @@ finally: c.close()
         pcs[0].pending = 23;
         pcs[2].connection = 'offline';
         pcs[3].connection = 'online';
-        await page.waitForTimeout(16500);
+        const refresh = page.waitForResponse(response => new URL(response.url()).pathname === '/api/v1/pcs' &&
+            response.request().method() === 'GET' && response.ok());
+        await page.clock.fastForward(16500);
+        await refresh;
+        const pending = page.locator('.pc-tarjeta[data-box="box-3"]')
+            .getByText('Pendientes del PC', { exact: true }).locator('..').locator('dd');
+        await pending.filter({ hasText: /^23$/ }).waitFor();
         assert.equal(await historyButton.evaluate(x => x === document.activeElement), true);
-        assert.match(await page.locator('[data-agent-id]').first().innerText(), /23/);
         assert.deepEqual(await ordenBoxes(), ['box-3', 'box-6', 'box-5', 'box-4', 'box-7']);
         await historyButton.focus(); await page.keyboard.press('Enter');
         await page.locator('#dialogoHistorialPC[open]').waitFor(); await page.keyboard.press('Escape');

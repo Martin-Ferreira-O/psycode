@@ -105,7 +105,9 @@ def evaluate(case, variant, client, settings, repetition):
     alerts = Mock()
     service = AnalysisService(Mock(), adapter, Mock(), alerts, Mock())
     started = monotonic()
-    result = service._process_block(fragment, case["utterances"], case["roles"], None, [], None)
+    result = service._process_block(
+        fragment, case["utterances"], case["roles"], None, [], None, threshold=THRESHOLDS["candidate"]
+    )
     elapsed_ms = round((monotonic() - started) * 1000, 2)
     decision = result.decisions[0] if result.decisions else None
     current = adapter.current or {"turns": []}

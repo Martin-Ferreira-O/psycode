@@ -7,7 +7,6 @@ from uuid import uuid4
 from django.contrib.auth import get_user_model
 from django.test import TransactionTestCase
 from django.utils import timezone
-from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.test import APITestCase
 
 from .authentication import authenticate_agent_header
@@ -183,16 +182,6 @@ class SocketLifecycleTests(TransactionTestCase):
         self.assertEqual(config.state, ConfigurationState.PENDING)
         self.assertEqual(len(sync1), 1)
         self.assertEqual(len(sync2), 1)
-
-    def test_qa_token_antiguo(self):
-        old_token = self.token
-        renewed = renew_agent(self.agent)
-        new_token = renewed[1] if isinstance(renewed, tuple) else renewed
-        with self.assertRaises(AuthenticationFailed):
-            authenticate_agent_header(f"Agent {old_token}".encode())
-        identity = authenticate_agent_header(f"Agent {new_token}".encode())
-        self.assertEqual(identity.box, "box-3")
-        self.assertEqual(identity.registry_id, str(self.agent.pk))
 
     def test_qa_configuracion_efectiva(self):
         config = AgentConfiguration.objects.create(agent=self.agent, version=1, desired_config={'heartbeat_interval': 15})

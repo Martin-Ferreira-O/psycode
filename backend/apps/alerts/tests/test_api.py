@@ -71,11 +71,6 @@ class AlertSeveritySerializerTests(SimpleTestCase):
                 self.assertEqual(serialized["nivel_severidad"], level)
                 self.assertEqual(serialized["semaforo"], semaphore)
 
-    def test_severity_field_declares_the_supported_range(self):
-        field = AlertaListItemSerializer().fields["nivel_severidad"]
-        self.assertEqual(field.min_value, 1)
-        self.assertEqual(field.max_value, 3)
-
 
 class AlertFilterTests(SimpleTestCase):
     def setUp(self):

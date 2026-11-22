@@ -1,7 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict
 from datetime import date, datetime, time, timedelta, timezone
-import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from threading import Barrier
@@ -211,15 +210,3 @@ class AgendaTests(SimpleTestCase):
         self.assertEqual({item.box for item in self.agenda.records}, set(BOXES))
         self.assertFalse(self.agenda.is_busy(3, WHEN))
         self.assertTrue(all(self.agenda.is_busy(box, WHEN.replace(hour=11)) for box in range(3, 8)))
-
-    def test_client_files(self):
-        cases = [("PSYCODE_TEST_CITAS_XLSX", 9, 0, 3, datetime(2026, 9, 24, 12, 30)),
-                 ("PSYCODE_TEST_CITAS2_XLSX", 11, 7, 5, datetime(2026, 10, 13, 10, 30))]
-        available = [case for case in cases if os.environ.get(case[0])]
-        if not available:
-            self.skipTest("Definir PSYCODE_TEST_CITAS_XLSX o PSYCODE_TEST_CITAS2_XLSX para incluir las muestras.")
-        for variable, accepted, rejected, box, when in available:
-            with self.subTest(variable=variable):
-                report = self.agenda.load_excel(os.environ[variable])
-                self.assertEqual((report.aceptadas, len(report.rechazadas)), (accepted, rejected))
-                self.assertFalse(self.agenda.is_busy(box, when))

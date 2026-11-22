@@ -1,5 +1,7 @@
 name: Central server
 on: [push, pull_request]
+permissions:
+  contents: read
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -18,8 +20,62 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           python-version: ${{ matrix.python }}
-      - run: uv sync --locked --no-dev
+      - run: uv sync --locked --no-dev --group test
       - run: uv run --no-sync python scripts/check_boundaries.py
-      - run: uv run --no-sync python manage.py test --settings=backend.config.test_settings --noinput
+      - run: uv run --no-sync python manage.py test --settings=backend.config.test_settings --noinput --exclude-tag=mongo --parallel 4 --timing
       - run: uv run --no-sync python manage.py makemigrations --check --dry-run --settings=backend.config.test_settings
       - run: npm test --prefix frontend
+        if: matrix.python == '3.12'
+      - run: uv run --no-sync python -m unittest scripts.jev_eval.test_run
+        if: matrix.python == '3.12'
+      - run: uv run --no-sync python -m unittest discover -s deployment/vps -p test_agent_installer.py
+        if: matrix.python == '3.12'
+
+  mongo:
+    name: MongoDB integration
+    runs-on: ubuntu-latest
+    services:
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017/tcp
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'quit(db.adminCommand({ping: 1}).ok === 1 ? 0 : 1)'"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: '3.12'
+      - run: uv sync --locked --no-dev
+      - run: uv run --no-sync python manage.py test backend.apps.alerts --settings=backend.config.test_settings --noinput --tag=mongo -v 2
+        env:
+          PSYCODE_TEST_MONGODB_URI: mongodb://127.0.0.1:${{ job.services.mongo.ports['27017'] }}
+
+  browser:
+    name: Server browser tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --prefix frontend
+      - run: npm run build --prefix frontend
+      - run: npm exec --prefix frontend -- playwright install --with-deps chromium
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: '3.12'
+      - run: uv sync --locked --no-dev
+      - run: uv run --no-sync python -m tests.run_web_browser --artifacts-dir "$RUNNER_TEMP/psycode-web-browser"
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: server-browser-evidence
+          path: ${{ runner.temp }}/psycode-web-browser
+          if-no-files-found: ignore

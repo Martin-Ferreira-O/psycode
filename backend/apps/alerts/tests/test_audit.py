@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from itertools import count
 from unittest.mock import patch
 
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, tag
 from pymongo.errors import AutoReconnect, WriteError
 from backend.apps.alerts.mongo import close_client
 
@@ -71,7 +71,8 @@ class AuditPersistenceTests(SimpleTestCase):
         self.assertEqual(self.db['audit_events'].docs, [])
 
 
-@unittest.skipUnless(os.getenv('PSYCODE_TEST_MONGODB_URI'), 'requiere MongoDB real')
+@tag("mongo")
+@unittest.skipUnless(os.getenv('PSYCODE_TEST_MONGODB_URI', '').strip(), 'requiere MongoDB real')
 class MongoAuditIntegrationTests(SimpleTestCase):
     def setUp(self):
         close_client()

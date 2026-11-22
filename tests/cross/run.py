@@ -123,8 +123,13 @@ basicConstraints=critical,CA:true
                                     files={'archivo':('synthetic.xlsx',raw)})
                 assert response.status_code==status,response.text
             from backend.apps.operational.models import OperationalConfiguration
-            OperationalConfiguration.objects.create(enabled_days=list(range(7)),open_time='00:00',close_time='23:59',
-                primary_email='synthetic@example.test',backup_email='synthetic-backup@example.test')
+            OperationalConfiguration.objects.update_or_create(pk=1, defaults={
+                'enabled_days': list(range(7)),
+                'open_time': '00:00',
+                'close_time': '23:59',
+                'primary_email': 'synthetic@example.test',
+                'backup_email': 'synthetic-backup@example.test',
+            })
             def coordinate(*flags):subprocess.run([sys.executable,'manage.py','coordinate_capture','--once',*flags],cwd=ROOT,env=env,check=True,capture_output=True)
             coordinate()
             from backend.apps.capture.models import CaptureSession, FragmentJob

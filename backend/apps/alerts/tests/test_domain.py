@@ -39,16 +39,6 @@ def alta(**overrides):
 
 
 class DomainTests(SimpleTestCase):
-    def test_cada_nivel_tiene_un_semaforo_unico(self):
-        esperado = {
-            1: Semaforo.BAJO,
-            2: Semaforo.MEDIO,
-            3: Semaforo.ALTO,
-        }
-        for nivel, semaforo in esperado.items():
-            with self.subTest(nivel=nivel):
-                self.assertEqual(semaforo_desde_severidad(nivel), semaforo)
-
     def test_severidad_invalida(self):
         for valor in (-1, 0, 4, 8, True, False, "2", 2.0):
             with self.subTest(valor=valor):

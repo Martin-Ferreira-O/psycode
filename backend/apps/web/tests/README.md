@@ -12,7 +12,20 @@ Las pruebas de solicitudes ejecutan el cliente de solicitudes real en contextos 
 
 ## Integración en navegador
 
-`frontend.browser.cjs` usa la aplicación React compilada con respuestas HTTP interceptadas por Playwright. No necesita una cuenta real ni escribe evaluaciones en el backend. Requiere una instalación de Playwright con Chromium disponible; no es una dependencia de producción del proyecto.
+Después de instalar las dependencias y compilar el frontend, ejecuta los flujos
+de acceso, evaluaciones, bitácora y almacenamiento con el mismo runner de CI:
+
+```sh
+npm exec --prefix frontend -- playwright install chromium
+uv run --no-sync python -m tests.run_web_browser --artifacts-dir /ruta/a/evidencia
+```
+
+El runner prepara una instancia Django local, una SQLite temporal y archivos
+sintéticos de almacenamiento. `--artifacts-dir` conserva las capturas y el log.
+En Linux, `playwright install --with-deps chromium` también instala las
+dependencias del sistema.
+
+`frontend.browser.cjs` usa la aplicación React compilada con respuestas HTTP interceptadas por Playwright. Los siguientes comandos permiten ejecutarlo por separado junto con el flujo de acceso.
 
 Arrancar Django en una terminal:
 
@@ -23,8 +36,8 @@ Arrancar Django en una terminal:
 En otra terminal, si Playwright está disponible para Node:
 
 ```sh
-node backend/apps/web/tests/frontend.browser.cjs
-node backend/apps/web/tests/auth.browser.cjs
+PLAYWRIGHT_MODULE="$PWD/frontend/node_modules/playwright" node backend/apps/web/tests/frontend.browser.cjs
+PLAYWRIGHT_MODULE="$PWD/frontend/node_modules/playwright" node backend/apps/web/tests/auth.browser.cjs
 ```
 
 Si está instalado fuera del proyecto, indicar `PLAYWRIGHT_MODULE=/ruta/a/node_modules/playwright` al ejecutar. Opcionalmente, `CHROMIUM_PATH` selecciona un navegador instalado y `FRONTEND_TEST_URL` cambia el origen (por defecto `http://127.0.0.1:8765`). No usar un entorno de producción.
@@ -35,7 +48,7 @@ Para comprobar la trazabilidad de notificaciones en la pantalla de bitácora,
 con el mismo servidor y las mismas variables de navegador:
 
 ```sh
-node backend/apps/web/tests/bitacora-notificaciones.browser.cjs
+PLAYWRIGHT_MODULE="$PWD/frontend/node_modules/playwright" node backend/apps/web/tests/bitacora-notificaciones.browser.cjs
 ```
 
 Usa la pantalla real y API simulada para verificar modalidad, resumen y conteos,

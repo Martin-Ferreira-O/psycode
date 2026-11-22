@@ -51,5 +51,4 @@ produce `AgendaNotLoaded`. Cerrar el proceso elimina las agendas de memoria.
 uv run python manage.py test backend.apps.agenda --settings=backend.config.test_settings
 ```
 
-Para incluir las muestras del cliente, definir `PSYCODE_TEST_CITAS_XLSX` y/o
-`PSYCODE_TEST_CITAS2_XLSX` con sus rutas antes de ejecutar las pruebas.
+Las pruebas de Excel generan sus propios archivos sintéticos.
