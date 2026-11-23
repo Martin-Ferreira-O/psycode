@@ -20,7 +20,7 @@
       "const": "1.0"
     },
     "questions_version": {
-      "enum": ["habla-signals-1", "bloque-signals-1", "bloque-signals-2", "bloque-signals-3"]
+      "enum": ["habla-signals-1", "bloque-signals-1", "bloque-signals-2", "bloque-signals-3", "bloque-signals-4"]
     },
     "session_id": {
       "type": "string",
@@ -192,7 +192,7 @@
             "type": "object",
             "additionalProperties": false,
             "patternProperties": {
-              "^[12]$": {
+              "^[1-7]$": {
                 "type": "array",
                 "items": {"type": "string", "pattern": "^t[0-9]+$"}
               }

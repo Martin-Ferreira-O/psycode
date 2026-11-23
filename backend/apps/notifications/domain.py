@@ -22,6 +22,7 @@ class NotificationPayload:
     box: str
     fecha_hora: str
     es_prueba: bool = False
+    hablante_no_confirmado: bool = False
 
     def __post_init__(self):
         if not self.box or not self.tipo_riesgo:
@@ -70,16 +71,24 @@ class NotificationPayload:
     def formatear_asunto_correo(self) -> str:
         if self.es_prueba:
             return f"[PRUEBA] Alerta simulada - {self.box_correo}"
+        if self.hablante_no_confirmado:
+            return f"[REVISAR] Señal con hablante sin confirmar - {self.box_correo}"
         return f"{self.circulo_riesgo} [RIESGO {self.nivel_normalizado}] Alerta del sistema - {self.box_correo}"
 
     @property
     def titulo_correo(self) -> str:
-        return "ALERTA DE PRUEBA" if self.es_prueba else "ALERTA DEL SISTEMA"
+        if self.es_prueba:
+            return "ALERTA DE PRUEBA"
+        if self.hablante_no_confirmado:
+            return "ALERTA PARA REVISIÓN"
+        return "ALERTA DEL SISTEMA"
 
     @property
     def mensaje_correo(self) -> str:
         if self.es_prueba:
             return "Detección generada con audio simulado. No requiere intervención clínica."
+        if self.hablante_no_confirmado:
+            return "Hablante sin confirmar. Se requiere revisión profesional."
         return "Se requiere revisión profesional."
 
     def formatear_cuerpo_correo(self) -> str:

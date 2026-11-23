@@ -48,7 +48,11 @@ class JevAnalizador:
             evidence_turns = [turn["id"] for turn in current.get("turns", ()) if "id" in turn]
             unknown_speakers = [speaker for speaker, role in current.get("speaker_roles", {}).items()
                                 if role == "unknown"]
-            requested = questions(unit, evidence_turns, unknown_speakers)
+            review_turns = {}
+            for turn in current.get("turns", ()):
+                for level in turn.get("review_levels", ()):
+                    review_turns.setdefault(level, []).append(turn["review_id"])
+            requested = questions(unit, evidence_turns, unknown_speakers, review_turns)
             payload = {"model": settings.analysis_model, "state": state, "questions": requested}
 
             def send():

@@ -13,6 +13,7 @@ from uuid import uuid4
 from django.test import SimpleTestCase
 import httpx
 
+from backend.apps.alerts.domain import ORIGEN_HABLANTE_NO_CONFIRMADO
 from backend.apps.alerts.repositories import AlertsRepository
 from backend.apps.alerts.services import AlertsService
 from backend.apps.alerts.tests.test_persistence import FakeDatabase
@@ -34,6 +35,23 @@ def answer(level=None, context="afirmacion_propia", model="jev-1.14.0"):
     answers.update({f"signal_{i}": {"type": "noul", "noul": .9 if i == level else .1}
                     for i in range(8)})
     return {"model": model, "answers": answers, "usage": {"input_tokens": 30, "output_tokens": 15}}
+
+
+def evidence_answer(questions, level, selected=None, score=.96):
+    result = answer(level)
+    for key, question in questions.items():
+        if key in result["answers"]:
+            continue
+        options = question["criteria"]
+        choice = (selected or {}).get(key, "ninguno")
+        confidence = 1. if choice == "ninguno" else score
+        probabilities = dict.fromkeys(options, 0.)
+        probabilities[choice] = confidence
+        if choice != "ninguno":
+            probabilities["ninguno"] = 1 - confidence
+        result["answers"][key] = {"type": "choice", "choice": choice,
+                                  "confidence": confidence, "probabilities": probabilities}
+    return result
 
 
 class IntegrationTests(SimpleTestCase):
@@ -111,7 +129,13 @@ class IntegrationTests(SimpleTestCase):
                 (2, "Ojalá no despertar. Soy Nombre Prueba.", "S2"),
             )
         ]
-        result = self.process(fragment=replace(self.fragment, analysis_unit="fragment"), roles=False)
+        def jev(req):
+            self.jev_requests.append(req)
+            return httpx.Response(200, json=evidence_answer(json.loads(req.content)["questions"], 1))
+
+        worker = self.worker()
+        worker.analyzer = JevAnalizador(self.settings, self.http_client(jev))
+        result = self.process(worker, replace(self.fragment, analysis_unit="fragment"), roles=False)
         request = self.requests[0]
         content_type = request.headers["Content-Type"]
         multipart = BytesParser(policy=policy.default).parsebytes(
@@ -136,6 +160,69 @@ class IntegrationTests(SimpleTestCase):
         self.assertEqual(result.decisions[0].values[1], .9)
         self.assertEqual(result.state, AnalysisState.INDETERMINATE)
         self.assertFalse(self.alerts())
+
+    def test_clinical_block_selects_explicit_evidence_without_a_role_or_a_speaker_label(self):
+        for label, selected, score, expected in (("S1", "t0", .96, True), ("UU", "t0", .96, True),
+                                                 (None, "t0", .96, True), (None, "t0", .74, False),
+                                                 (None, "t9", .96, False)):
+            with self.subTest(label=label, score=score, selected=selected):
+                self.transcript_results = [{
+                    "type": "word", "start_time": 0., "end_time": 1.,
+                    "alternatives": [{"content": "Me quiero matar.", **({"speaker": label} if label else {})}],
+                }]
+
+                def jev(request):
+                    body = json.loads(request.content)
+                    current = body["state"]["current"]
+                    self.assertEqual(current["speaker_roles"], {"voz1": "unknown"} if label == "S1" else {})
+                    turn = current["turns"][0]
+                    self.assertIsNone(turn.get("id"))
+                    self.assertEqual(turn.get("speaker"), "voz1" if label == "S1" else None)
+                    self.assertEqual(turn["review_id"], "t0")
+                    self.assertEqual(turn["review_levels"], [2])
+                    self.assertEqual(set(body["questions"]), {"context", "revision_2_0", *(f"signal_{i}" for i in range(8))})
+                    return httpx.Response(200, json=evidence_answer(body["questions"], 2, {"revision_2_0": selected}, score))
+
+                worker = self.worker()
+                worker.analyzer = JevAnalizador(self.settings, self.http_client(jev))
+                fragment = replace(self.fragment, session_id=str(uuid4()), analysis_unit="fragment")
+                result = self.process(worker, fragment, roles=False)
+                self.assertEqual(result.state, AnalysisState.SIGNAL if expected else AnalysisState.INDETERMINATE)
+                if selected == "t9":
+                    self.assertEqual(result.error_codes, ("JEV_SUBMISSION_UNCERTAIN",))
+                    self.assertFalse(result.decisions)
+                else:
+                    self.assertEqual(result.decisions[0].evidence_turns["2"], ["t0"] if expected else [])
+                if expected:
+                    self.assertIsNone(result.signals[0].speaker)
+                    self.assertEqual(result.signals[0].matrix_level, 2)
+                    self.assertEqual(self.alerts()[-1]["trazabilidad"]["origen"], ORIGEN_HABLANTE_NO_CONFIRMADO)
+        self.assertEqual(len(self.alerts()), 3)
+
+    def test_mixed_clinical_block_requires_local_evidence_for_the_confirmed_patient(self):
+        self.transcript_results = [
+            {"type": "word", "start_time": start, "end_time": start + .5,
+             "alternatives": [{"content": text, "speaker": speaker}]}
+            for start, text, speaker in (
+                (0, "Tengo intención de suicidarme.", "S1"),
+                (2, "Me voy a matar.", "UU"),
+            )
+        ]
+        for selected in ({"revision_4_0": "t1"}, {"evidencia_4_0": "t0"},
+                         {"evidencia_4_0": "t0", "revision_4_0": "t1"}):
+            with self.subTest(selected=selected):
+                def jev(request):
+                    questions = json.loads(request.content)["questions"]
+                    self.assertEqual(set(questions["evidencia_4_0"]["criteria"]), {"ninguno", "t0"})
+                    self.assertEqual(set(questions["revision_4_0"]["criteria"]), {"ninguno", "t1"})
+                    return httpx.Response(200, json=evidence_answer(questions, 4, selected))
+
+                worker = self.worker()
+                worker.analyzer = JevAnalizador(self.settings, self.http_client(jev))
+                result = self.process(worker, replace(self.fragment, session_id=str(uuid4()), analysis_unit="fragment"))
+                self.assertEqual(result.state, AnalysisState.SIGNAL)
+                self.assertEqual(result.signals[0].speaker, "batch-0-S1" if "evidencia_4_0" in selected else None)
+        self.assertEqual(len(self.alerts()), 3)
 
     def test_typesafe_retries_only_a_confirmed_context_rejection_with_long_context(self):
         current = {"analysis_unit": "fragment", "turns": [{"text": "Diálogo sintético."}]}

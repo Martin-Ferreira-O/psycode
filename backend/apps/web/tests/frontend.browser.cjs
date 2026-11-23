@@ -1,5 +1,6 @@
 // Prueba de integración opcional: requiere Playwright y el servidor Django local.
 const assert = require('node:assert/strict');
+const { join } = require('node:path');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 
 (async () => {
@@ -169,6 +170,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         await evaluarTarjeta.press('Enter');
         const detallePrueba = page.getByRole('dialog');
         await detallePrueba.getByText('Alerta de prueba', { exact: true }).waitFor();
+        assert.equal(await detallePrueba.getByText(/Hablante sin confirmar/).count(), 0);
         const verTranscripcion = detallePrueba.getByRole('button', { name: 'Ver transcripción' });
         const fragmento = detallePrueba.locator('#detalleTranscripcion');
         assert.equal(await verTranscripcion.getAttribute('aria-expanded'), 'false');
@@ -342,6 +344,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         const alerta = { ...cuerpo.data.items[0], estado_evaluacion: 'pendiente', evaluacion: null };
         let evaluacion = null;
         let estadoEvaluacion = 503;
+        let estadoDetalle = 503;
         const consultasHistorial = [];
         await page.route('**/api/v1/alerts**', async route => {
             const url = new URL(route.request().url());
@@ -354,7 +357,9 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
                     usuario: 'supervisor-sintetico', fecha_hora: '2026-10-27T15:00:00Z' };
                 data = evaluacion;
             } else if (url.pathname.endsWith('/' + alerta.alerta_id)) {
-                data = { ...alerta, ...(evaluacion ? { evaluacion, estado_evaluacion: 'correcta' } : {}) };
+                if (estadoDetalle !== 200) return route.fulfill({ status: estadoDetalle });
+                data = { ...alerta, hablante_no_confirmado: true, descripcion: 'Afirmación de prueba.' };
+                if (evaluacion) Object.assign(data, { evaluacion, estado_evaluacion: 'correcta' });
             } else {
                 if (url.searchParams.get('limit') === '10') consultasHistorial.push(url.searchParams);
                 const items = url.searchParams.has('q') ? [] : [alerta];
@@ -400,9 +405,25 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         assert.equal(consultasHistorial.at(-1).get('q'), 'texto sin confirmar');
         assert.match(await page.locator('#estadoVacio').innerText(), /filtros/);
         await page.locator('#limpiarFiltros').click();
-        await page.locator('[data-alerta]').first().click();
+        await page.locator('[data-alerta]').first().press('Enter');
         assert.equal(consultasHistorial.at(-1).has('q'), false);
         assert.equal(await buscar.inputValue(), '');
+        const detalle = page.getByRole('dialog');
+        const avisoHablante = detalle.getByText(/Hablante sin confirmar/);
+        await detalle.getByRole('alert').waitFor();
+        assert.equal(await avisoHablante.count(), 0);
+        estadoDetalle = 200;
+        await detalle.getByRole('button', { name: 'Reintentar', exact: true }).press('Enter');
+        await avisoHablante.waitFor();
+        assert.equal(await detalle.locator('#detalleTranscripcion').innerText(), 'Afirmación de prueba.');
+        for (const width of [375, 1280]) {
+            await page.setViewportSize({ width, height: 720 });
+            assert.equal(await detalle.evaluate(dialog => dialog.scrollWidth === dialog.clientWidth), true);
+            assert.equal(await avisoHablante.isVisible(), true);
+            if (process.env.FRONTEND_SCREENSHOT_DIR) {
+                await detalle.screenshot({ path: join(process.env.FRONTEND_SCREENSHOT_DIR, `hablante-sin-confirmar-${width}.png`) });
+            }
+        }
         const guardar = page.locator('#guardarEvaluacion');
         await guardar.waitFor();
 

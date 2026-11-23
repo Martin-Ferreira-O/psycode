@@ -104,6 +104,11 @@ export default function AlertDetail({ id, onClose, returnFocusRef, evaluation, s
                     )}
                     {alert && (
                         <>
+                            {alert.hablante_no_confirmado === true && (
+                                <p className="alert-detail-note">
+                                    Hablante sin confirmar. Verifica quién hizo la afirmación al evaluar la alerta.
+                                </p>
+                            )}
                             <div className="alert-detail-grid">
                                 <DetailValue label="Box" id="detalleBox">{formatearBox(alert.box)}</DetailValue>
                                 <DetailValue label="Tipo de riesgo" id="detalleTipo">{formatearTipoRiesgo(alert.tipo_riesgo)}</DetailValue>
