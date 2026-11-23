@@ -262,6 +262,36 @@ class MongoIntegrationTests(SimpleTestCase):
         self.assertIsNotNone(evento)
         self.assertEqual(evento["actor_id"], EVALUADOR_ID)
 
+    def test_persiste_evidencias_del_analisis_por_bloque(self):
+        evidence = {
+            "categoria": "Caso sintético",
+            "nivel_matriz": 2,
+            "inicio": 1.25,
+            "fin": 3.0,
+            "puntaje": 0.95,
+            "umbral": 0.8,
+            "plazo": None,
+        }
+        analysis = {
+            **evidence,
+            "version": "bloque-texto-1",
+            "evidencias": [{
+                **evidence,
+                "texto": "Evidencia sintética",
+                "contexto_anterior": "",
+                "contexto_posterior": "Contexto de la prueba",
+            }],
+            "evidencias_pendientes": [
+                {"code": "JEV_EVIDENCE_UNCERTAIN", "start": 4.0, "end": 6.0, "matrix_level": None},
+                {"code": "JEV_BELOW_THRESHOLD", "start": 8.0, "end": 10.0, "matrix_level": 2},
+            ],
+        }
+        alert = alta_pendiente(alerta_id=DEMO_ALERTS[0]["alerta_id"], analisis=analysis)
+
+        self.store.insert_alert(alert)
+
+        self.assertEqual(self.store.get_alert(alert.alerta_id).analisis, analysis)
+
     def test_api_real_lista_todas_y_registra_evaluacion(self):
         spec = DEMO_ALERTS[0]
         AlertsService(self.store).register_alert(
