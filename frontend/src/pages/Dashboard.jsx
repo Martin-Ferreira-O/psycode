@@ -283,7 +283,7 @@ export default function Dashboard() {
     return (
         <>
             <PageHeader title="Dashboard de alertas" description="Resumen general de alertas y actividad registrada." />
-            <DashboardOverview summary={overview.summary} chart={overview.chart} />
+            <DashboardOverview summary={overview.summary} recent={overview.recent} monthly={overview.monthly} />
             <section id="historial-alertas" ref={historyRef} className="panel-alertas dashboard-history" aria-labelledby="tituloAlertas">
                 <div className="dashboard-controls">
                     <header className="dashboard-history-header">

@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { apiGetDatos, ErrorSolicitud } from "../api.js";
-import { Skeleton } from "../ui.jsx";
-import { ALERTS_URL } from "./alerts.js";
+import { Button, Skeleton } from "../ui.jsx";
+import AlertActivityChart from "./AlertActivityChart.jsx";
+import { loadMonthlyActivity, loadRecentActivity } from "./alertActivity.js";
+import { getAlertCount } from "./alerts.js";
 import { useResource } from "./resources.js";
 
 const numberFormatter = new Intl.NumberFormat("es-CL");
@@ -77,9 +78,8 @@ function AlertStatusChart({ summary }) {
             {totals && (
                 <div className="resumen-alertas-leyenda" role="group" aria-label="Estados de las alertas">
                     {alertStatuses.map(({ key, label }) => (
-                        <button
+                        <Button
                             key={key}
-                            type="button"
                             className={`resumen-alertas-${key}`}
                             data-active={activeStatus === key}
                             aria-pressed={selectedStatus === key}
@@ -88,7 +88,7 @@ function AlertStatusChart({ summary }) {
                             <span className="resumen-alertas-muestra" aria-hidden="true" />
                             <span>{label}</span>
                             <strong>{numberFormatter.format(totals[key])}</strong>
-                        </button>
+                        </Button>
                     ))}
                 </div>
             )}
@@ -99,15 +99,6 @@ function AlertStatusChart({ summary }) {
     );
 }
 
-async function getAlertCount(query, signal) {
-    const params = new URLSearchParams(query);
-    params.set("limit", "1");
-    params.set("offset", "0");
-    const data = await apiGetDatos(`${ALERTS_URL}?${params}`, { signal });
-    if (!Number.isInteger(data?.total) || data.total < 0) throw new ErrorSolicitud();
-    return data.total;
-}
-
 async function loadSummary(signal) {
     const [pendientes, revisadas] = await Promise.all([
         getAlertCount({ revisadas: "false" }, signal),
@@ -116,49 +107,23 @@ async function loadSummary(signal) {
     return { pendientes, revisadas, total: pendientes + revisadas };
 }
 
-function getMonthlyPeriods() {
-    const currentMonth = new Intl.DateTimeFormat("en-CA", {
-        timeZone: "America/Santiago",
-        year: "numeric",
-        month: "2-digit",
-    }).formatToParts(new Date());
-    const { year, month } = Object.fromEntries(currentMonth.map(({ type, value }) => [type, value]));
-    const formatMonth = new Intl.DateTimeFormat("es-CL", { month: "short", timeZone: "UTC" });
-
-    return Array.from({ length: 6 }, (_, index) => {
-        const start = new Date(Date.UTC(Number(year), Number(month) - 6 + index, 1));
-        const end = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 0));
-        return {
-            label: formatMonth.format(start).replace(".", "").replace(/^./, (letter) => letter.toUpperCase()),
-            start: start.toISOString().slice(0, 10),
-            end: end.toISOString().slice(0, 10),
-        };
-    });
-}
-
-function loadChart(signal) {
-    return Promise.all(getMonthlyPeriods().map(async (period) => ({
-        ...period,
-        total: await getAlertCount({ fecha_desde: period.start, fecha_hasta: period.end }, signal),
-    })));
-}
-
 export function useDashboardOverview() {
     const summary = useResource(loadSummary);
-    const chart = useResource(loadChart);
+    const recent = useResource(loadRecentActivity);
+    const monthly = useResource(loadMonthlyActivity);
     return {
         summary,
-        chart,
+        recent,
+        monthly,
         refresh() {
             summary.reload();
-            chart.reload();
+            recent.reload();
+            monthly.reload();
         },
     };
 }
 
-export default function DashboardOverview({ summary, chart }) {
-    const maximum = Math.max(1, ...(chart.data ?? []).map(({ total }) => total));
-
+export default function DashboardOverview({ summary, recent, monthly }) {
     return (
         <section className="resumen-dashboard">
             <div className="panel-indicadores">
@@ -176,41 +141,7 @@ export default function DashboardOverview({ summary, chart }) {
                 </div>
                 <AlertStatusChart summary={summary} />
             </div>
-            <article className="panel-grafico-dashboard">
-                <header className="cabecera-grafico-dashboard">
-                    <div>
-                        <div className="titulo-grafico-con-ayuda">
-                            <h2 id="tituloGrafico">Comportamiento mensual</h2>
-                            <span className="ayuda-contextual" tabIndex={0} data-tooltip="Muestra cuántas alertas fueron registradas durante el período seleccionado." aria-label="Información sobre el gráfico">i</span>
-                        </div>
-                        <p>Cantidad de alertas registradas por período.</p>
-                    </div>
-                </header>
-                <div id="graficoBarras" className="grafico-dashboard" aria-label="Gráfico de cantidad de alertas registradas" aria-busy={chart.loading}>
-                    {chart.loading && [42, 66, 52, 79, 57, 71].map((height) => (
-                        <div key={height} className="grupo-barra-dashboard" aria-hidden="true">
-                            <div className="contenedor-barra-dashboard">
-                                <span className="ui-skeleton ui-skeleton-bar" style={{ height: `${height}%` }} />
-                            </div>
-                            <Skeleton />
-                        </div>
-                    ))}
-                    {chart.error && <div className="grafico-cargando" role="status">No se pudo cargar el gráfico.</div>}
-                    {chart.data?.map(({ start, label, total }) => (
-                        <div key={start} className="grupo-barra-dashboard" role="img" aria-label={`${label}: ${total} ${total === 1 ? "alerta" : "alertas"}`}>
-                            <span className="valor-barra-dashboard">{total}</span>
-                            <div className="contenedor-barra-dashboard">
-                                <div
-                                    className="barra-dashboard"
-                                    style={{ height: `${total === 0 ? 4 : Math.max(12, Math.round(total / maximum * 100))}%` }}
-                                    title={`${label}: ${total} ${total === 1 ? "alerta" : "alertas"}`}
-                                />
-                            </div>
-                            <span className="etiqueta-barra-dashboard">{label}</span>
-                        </div>
-                    ))}
-                </div>
-            </article>
+            <AlertActivityChart recent={recent} monthly={monthly} />
         </section>
     );
 }
