@@ -136,3 +136,22 @@ class BlockRecoveryTests(SimpleTestCase):
         self.assertEqual(result.questions_version, "bloque-signals-4")
         self.analyzer.evaluate.assert_not_called()
         self.alerts.register_alert.assert_called_once()
+
+    def test_partial_delivery_reuses_both_verified_signals_and_their_identifiers(self):
+        self.checkpoint.data["roles"] = {}
+        self.checkpoint.data["utterances"] = [
+            {"text": "He pensado en quitarme la vida.", "start": 0., "end": 1., "speaker": None, "attribution": "unknown"},
+            {"text": "Me voy a matar mañana.", "start": 2., "end": 3., "speaker": None, "attribution": "unknown"},
+        ]
+        self.analyzer.evaluate.return_value = JevDecision(
+            "simulated", "afirmacion_propia", (.1, .1, .9, .1, .9, .1, .1, .1), 10, 1, {"2": ["t0"], "4": ["t1"]},
+        )
+        self.alerts.register_alert.side_effect = [None, PersistenceUnavailable(), None]
+        with self.assertRaises(PersistenceUnavailable):
+            self.resume()
+        self.resume()
+        self.analyzer.evaluate.assert_called_once()
+        ids = [call.kwargs["alerta_id"] for call in self.alerts.register_alert.call_args_list]
+        self.assertEqual(len(ids), 3)
+        self.assertNotEqual(ids[0], ids[1])
+        self.assertEqual(ids[1], ids[2])

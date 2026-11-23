@@ -24,6 +24,7 @@ class AlertsService:
         sesion_id,
         origen,
         descripcion=None,
+        analisis=None,
         before_notify=None,
     ):
         try:
@@ -36,6 +37,7 @@ class AlertsService:
                 sesion_id=sesion_id,
                 origen=origen,
                 descripcion=descripcion,
+                analisis=analisis,
                 registrada_en=timezone.now(),
             )
         except DomainError as exc:

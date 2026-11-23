@@ -44,6 +44,14 @@ JEV la descartó con suficiente confianza y `JEV_EVIDENCE_UNCERTAIN` indica que
 la elección no alcanzó el soporte requerido. Al cerrar la sesión se conservan
 solo esos códigos en `FragmentJob.checkpoint.analysis_error_codes`.
 
+En `bloque-signals-6`, cada candidato con hablante sin confirmar tiene una pregunta
+individual, incluso cuando hay más de doce candidatos. Las hipótesis se leen de
+la matriz extraída del Excel. Cada expresión distinta verificada conserva su
+categoría más específica y su prioridad de revisión. El detalle incluye intervalo,
+puntaje Noul del bloque, umbral y versión. Los resultados indeterminados conservan
+el motivo técnico permitido, incluido `JEV_BELOW_THRESHOLD` cuando una expresión
+explícita queda por debajo del corte.
+
 La cola durable puede procesar un bloque mientras otro queda en revisión. Los
 trabajos por intervención conservan su dependencia del contexto anterior. Se
 reutilizan las respuestas JEV guardadas con las reglas de su versión y los

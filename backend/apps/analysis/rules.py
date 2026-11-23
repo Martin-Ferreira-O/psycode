@@ -1,19 +1,23 @@
 """Experimental, reviewable signals. Scores are not clinical probabilities."""
+import json
+from pathlib import Path
 import re
 import unicodedata
 
 from backend.common.processing_models import JEV_DEFAULT_THRESHOLD
 
+MATRIX = json.loads(Path(__file__).with_name("matrix.json").read_text(encoding="utf-8"))
 HYPOTHESES = [
-    "La persona expresa malestar psicológico sin expresar deseos de morir.",
-    "La persona expresa el deseo de estar muerta o no despertar.",
-    "La persona expresa pensamientos propios de suicidarse.",
-    "La persona ha considerado una forma de suicidarse.",
-    "La persona expresa intención de actuar sobre sus pensamientos suicidas.",
-    "La persona expresa un plan de suicidio y la intención de llevarlo a cabo.",
-    "La persona relata acciones de preparación para suicidarse.",
-    "La persona relata un intento de suicidio, interrumpido, abortado o realizado.",
+    f"{row['name']}. {row['description']} Indicador de la matriz: {row['limitation']}."
+    for row in MATRIX["categories"]
 ]
+
+
+def review_priority(level):
+    """Prioridad operativa de revisión. La matriz conserva sus ocho categorías."""
+    return (0, 1, 2, 2, 3, 3, 3, 3)[level]
+
+
 THRESHOLDS = {"candidate": JEV_DEFAULT_THRESHOLD}
 
 
@@ -54,11 +58,14 @@ def literal_candidates(text):
 
 _SELF_HARM_ACTION = r"(?:suicidarme|matarme|quitarme la vida|(?:acabar|terminar) con mi vida)"
 _PASSIVE_WISH = re.compile(
-    r"\b(?:ojala (?:que )?no (?:despertar|despierte|existir|exista|estar viv[oa])|"
-    r"(?:preferiria|quisiera|desearia|me gustaria) (?:no (?:despertar|existir|estar viv[oa]|seguir viv[oa])|"
+    r"\b(?:ojala (?:que )?no (?:despertar(?:a)?|despierte|existir|exista|estar viv[oa])|"
+    r"no me importaria morir|estaria mejor si no existiera|(?:preferiria|quisiera|desearia|me gustaria) (?:no (?:despertar|existir|estar viv[oa]|seguir viv[oa])|"
     r"(?:estar|seguir) muert[oa]|morir(?:me)?)|(?:quiero|quisiera) dejar de (?:existir|vivir)|"
     r"(?:quiero|deseo) (?:morir(?:me)?|estar muert[oa])|no (?:quiero|deseo) (?:seguir )?viv(?:ir|iendo))\b"
 )
+# Formulaciones inequívocas de Gradiente clínico, filas 3 y 4.
+# El "no" pertenece a la expresión afirmativa de estas filas.
+_AFFIRMATIVE_THOUGHT = re.compile(r"\bno dejo de pensar en (?:suicidarme|quitarme la vida|matarme)\b")
 _ACTIVE_THOUGHT = r"(?:pienso|he pensado|estoy pensando|sigo pensando) (?:en )?"
 _ACTIVE_INTENT = r"(?:voy a|he decidido|estoy decidid[oa] a|tengo (?:la )?intencion de) "
 _REVIEW_PATTERNS = {
@@ -107,11 +114,14 @@ def unattributed_levels(text):
         return ()
     passive = bool(_PASSIVE_WISH.search(normalized))
     # A negation inside an affirmative passive wish is part of the evidence.
-    if re.search(r"\b(?:no|nunca|jamas|tampoco|ni)\b", _PASSIVE_WISH.sub(" ", normalized)):
+    remaining = _AFFIRMATIVE_THOUGHT.sub(" ", _PASSIVE_WISH.sub(" ", normalized))
+    if re.search(r"\b(?:no|nunca|jamas|tampoco|ni)\b", remaining):
         return ()
     levels = [1] if passive else []
     for level, pattern in _REVIEW_PATTERNS.items():
-        if pattern.search(normalized) and (level != 5 or 4 in levels or re.search(r"\bvoy a hacerlo\b", normalized)):
+        matched = pattern.search(normalized) or (level == 2 and _AFFIRMATIVE_THOUGHT.search(normalized))
+        has_intent = 4 in levels or re.search(r"\bvoy a hacerlo\b", normalized)
+        if matched and (level != 5 or has_intent):
             levels.append(level)
     return tuple(levels)
 
@@ -119,6 +129,18 @@ def unattributed_levels(text):
 def explicit_denial(text):
     t = normalize(text)
     return bool(re.search(r"\b(?:no|nunca|jamas) (?:he |estoy |tengo |quiero |pienso |pensado |en |pensando |pensamientos |de |ganas |intencion |deseo ){0,7}(?:suicidar|suicidio|matarme|quitarme la vida)", t))
+
+
+def expressed_time(text):
+    """Solo un plazo contiguo a la declaración de intención verificada."""
+    timing = r"(?:ahora(?: mismo)?|hoy|manana|esta noche)"
+    intent = _REVIEW_PATTERNS[4].pattern
+    normalized = normalize(text)
+    match = re.search(rf"(?:{intent})\s+({timing})\b", normalized)
+    if match:
+        return match[1].replace("manana", "mañana")
+    match = re.search(rf"\b({timing})[, ]+(?:{intent})", normalized)
+    return match[1].replace("manana", "mañana") if match else None
 
 
 def evidence_dimensions(text, context=""):
@@ -130,7 +152,9 @@ def evidence_dimensions(text, context=""):
     t = normalize(text)
     domain = bool(re.search(r"suicid|quitar.{0,12}vida|matarme|(?:dejar de|no quiero) vivir|morir|muert", normalize(text + " " + context)))
     intent = bool(re.search(r"intencion|(?:voy|quiero|decidido) a (?:hacerlo|actuar)|decidid[oa]|voy a terminar haciendolo|podria hacerlo|poder detenerme|siento que voy a actuar", t))
-    intent = intent and not re.search(r"\b(?:no|sin|ninguna|nunca)\s+(?:tengo |hay |tiene |ninguna )?intencion\b", t)
+    direct_levels = unattributed_levels(text)
+    domain = domain or 4 in direct_levels
+    intent = (intent or 4 in direct_levels) and not re.search(r"\b(?:no|sin|ninguna|nunca)\s+(?:tengo |hay |tiene |ninguna )?intencion\b", t)
     plan = bool(re.search(r"\bplan\b|decidido cuando|se como voy|lo tengo pensado", t))
     plan = plan and not re.search(r"\b(?:no (?:tengo|hay|existe)|sin) (?:un |ningun )?plan\b", t)
     method = bool(re.search(r"\bcomo\b|\bforma\b|\bmanera\b|\bmetodo\b", t))
@@ -153,7 +177,8 @@ def _candidates(text, values, supported_values, matrix, context, score_kind):
     # A denial is not evidence of affirmative ideation. Mixed/contrasting utterances
     # remain reviewable rather than letting one negation cancel a later disclosure.
     denied = explicit_denial(text) and not re.search(r"\b(?:pero|aunque|ahora|sin embargo)\b", normalize(text))
-    literal = literal_candidates(text)
+    direct = unattributed_levels(text)
+    literal = set(literal_candidates(text)).union(direct)
     # A denial of active ideation can coexist with a passive death wish.
     if denied:
         literal = [level for level in literal if level == 1]
@@ -161,14 +186,14 @@ def _candidates(text, values, supported_values, matrix, context, score_kind):
     result = []
     for category, value, supported in zip(matrix["categories"], values, supported_values):
         level = category["level"]
-        if level == 0 or (denied and level not in literal) or not (supported or level in literal):
+        if level == 0 or (denied and level not in literal) or not supported:
             continue
-        if level >= 3 and not dimensions[level]:
+        if level >= 3 and not dimensions[level] and level not in direct:
             continue
         result.append({"category_id": category["id"], "category": category["name"],
                        "matrix_level": level, "source": category["source"],
                        "score": round(value, 4), "score_kind": score_kind,
-                       "basis": "regla y modelo" if level in literal and supported else "regla explícita" if level in literal else "modelo",
+                       "basis": "regla y modelo" if level in literal else "modelo",
                        "context_flags": flags, "review": "pending", "correction": None,
                        "interpretation": "Requiere contexto" if flags else "Hipótesis para revisión",
                        # Do not duplicate potentially operational method details into summaries.

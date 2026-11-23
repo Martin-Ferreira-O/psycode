@@ -177,11 +177,16 @@ def purge_checkpoints(now):
                                            job.checkpoint.get("block_result", {}).get("error_codes", ()))
                 if codes:
                     keep["test_error_codes"] = codes
-            if (session.origin != AUDIO_TEST_ORIGIN and job.state == FragmentJob.State.COMPLETED
-                    and job.result == FragmentJob.Result.INDETERMINATE):
-                codes = job.checkpoint.get("analysis_error_codes",
-                                           job.checkpoint.get("block_result", {}).get("error_codes", ()))
-                reasons = sorted(set(EVIDENCE_ABSTENTION_CODES.values()).intersection(codes))
+            if session.origin != AUDIO_TEST_ORIGIN and job.state == FragmentJob.State.COMPLETED:
+                block = job.checkpoint.get("block_result", {})
+                codes = set(job.checkpoint.get("analysis_error_codes", block.get("error_codes", ())))
+                for decision in block.get("decisions", ()):
+                    for turns in decision.get("review_verdicts", {}).values():
+                        codes.update(EVIDENCE_ABSTENTION_CODES[v] for v in turns.values()
+                                     if v in EVIDENCE_ABSTENTION_CODES)
+                allowed = {*EVIDENCE_ABSTENTION_CODES.values(), "CONTEXT_NOT_EVALUABLE", "TEXT_NOT_EVALUABLE",
+                           "JEV_BELOW_THRESHOLD"}
+                reasons = sorted(allowed.intersection(codes))
                 if reasons:
                     keep["analysis_error_codes"] = reasons
             if job.checkpoint != keep:

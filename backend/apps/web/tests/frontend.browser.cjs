@@ -129,6 +129,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
             ...cuerpo.data.items[0], alerta_id: '33333333-3333-4333-8333-000000000001',
             es_prueba: true, estado_evaluacion: 'pendiente', evaluacion: null,
         };
+        alertaPrueba.analisis = { categoria: "Ideación con alguna intención", nivel_matriz: 4, plazo: "mañana", inicio: 2, fin: 3, puntaje: .9, umbral: .4, version: "bloque-signals-6" };
         let transcripcion = 'Fragmento redactado de la prueba de audio.';
         await page.route(`**/api/v1/alerts/${alertaPrueba.alerta_id}`, route =>
             route.fulfill({ json: { success: true, data: { ...alertaPrueba, descripcion: transcripcion } } }));
@@ -165,9 +166,13 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         await page.reload();
         const evaluarTarjeta = tarjeta.getByRole('button', { name: /^Evaluar/ });
         await evaluarTarjeta.press('Enter');
+        await page.getByRole('dialog').getByText('Ideación con alguna intención', { exact: true }).waitFor();
+        await page.getByText('Plazo expresado en la frase: mañana').waitFor();
         await page.getByRole('dialog').getByRole('button', { name: 'Cerrar' }).click();
         assert.equal(await evaluarTarjeta.evaluate(button => document.activeElement === button), true);
         await evaluarTarjeta.press('Enter');
+        await page.getByRole('dialog').getByText('Ideación con alguna intención', { exact: true }).waitFor();
+        await page.getByText('Plazo expresado en la frase: mañana').waitFor();
         const detallePrueba = page.getByRole('dialog');
         await detallePrueba.getByText('Alerta de prueba', { exact: true }).waitFor();
         assert.equal(await detallePrueba.getByText(/Hablante sin confirmar/).count(), 0);

@@ -94,6 +94,9 @@ class Signal:
     end: float
     speaker: str | None
 
+    score: float | None = None
+    threshold: float | None = None
+
     def __post_init__(self):
         if type(self.severity) is not int or self.severity not in (1, 2, 3):
             raise ValueError("Severidad debe estar entre 1 y 3")

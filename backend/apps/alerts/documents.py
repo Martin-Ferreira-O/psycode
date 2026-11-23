@@ -53,6 +53,7 @@ def alerta_a_documento(alerta: Alerta) -> dict:
         "evaluacion": None if alerta.evaluacion is None else evaluacion_a_documento(alerta.evaluacion),
         "sesion_id": alerta.sesion_id,
         "descripcion": alerta.descripcion,
+        **({"analisis": alerta.analisis} if alerta.analisis is not None else {}),
         "trazabilidad": {
             "registrada_en": alerta.trazabilidad.registrada_en,
             "actualizada_en": alerta.trazabilidad.actualizada_en,
@@ -94,6 +95,7 @@ def documento_a_alerta(documento: dict) -> Alerta:
         ),
         sesion_id=documento["sesion_id"],
         descripcion=documento.get("descripcion"),
+        analisis=documento.get("analisis"),
         trazabilidad=Trazabilidad(
             registrada_en=trazabilidad["registrada_en"],
             actualizada_en=trazabilidad["actualizada_en"],

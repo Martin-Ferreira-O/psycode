@@ -240,7 +240,7 @@ class NotificationsTestCase(TestCase):
                 with patch.object(self.store, 'get_alert', return_value=self.alert):
                     self.assertTrue(self.notify().enviado)
                 message = mail.outbox[-1]
-                self.assertEqual(message.subject, f'{circle} [RIESGO {expected}] Alerta del sistema - Box 03')
+                self.assertEqual(message.subject, f'{circle} [PRIORIDAD {expected}] Alerta del sistema - Box 03')
                 self.assertEqual(message.to, ['primary@example.test'])
                 html = message.alternatives[0][0]
                 self.assertIn(f'<tr class="riesgo-{expected.lower()}">', html)

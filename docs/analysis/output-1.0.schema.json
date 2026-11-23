@@ -22,7 +22,7 @@
     "questions_version": {
       "enum": [
         "habla-signals-1", "bloque-signals-1", "bloque-signals-2", "bloque-signals-3",
-        "bloque-signals-4", "bloque-signals-5"
+        "bloque-signals-4", "bloque-signals-5", "bloque-signals-6", "habla-signals-2", "bloque-diagnostico-4"
       ]
     },
     "session_id": {
@@ -114,6 +114,8 @@
           "speaker"
         ],
         "properties": {
+          "score": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+          "threshold": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
           "category_id": {
             "type": "string"
           },
