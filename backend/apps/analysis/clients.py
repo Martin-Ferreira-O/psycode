@@ -76,9 +76,10 @@ class JevAnalizador:
                                                            settings.analysis_provider, requested)
             except ProviderError:
                 raise SubmissionUncertain("Respuesta JEV no recuperable; requiere revisión") from None
+            evidence_turns, review_verdicts = localized_evidence(data["answers"], requested, current)
             return JevDecision(data["model"], context["choice"], tuple(values),
                                usage["input_tokens"], usage["output_tokens"],
-                               localized_evidence(data["answers"], requested, current))
+                               evidence_turns, review_verdicts)
         finally:
             if own:
                 client.close()

@@ -118,3 +118,21 @@ class BlockRecoveryTests(SimpleTestCase):
         self.assertEqual(context["block_result"]["questions_version"], "bloque-signals-3")
         self.analyzer.evaluate.assert_not_called()
         self.alerts.register_alert.assert_not_called()
+
+    def test_saved_version_four_evidence_remains_usable_after_upgrade(self):
+        self.checkpoint.data["roles"] = {}
+        self.checkpoint.data["utterances"] = [
+            {"text": "Me quiero matar.", "start": 1., "end": 2., "speaker": None, "attribution": "unknown"},
+        ]
+        self.checkpoint.data["jev_pending"] = {
+            "request_id": "legacy-review-request", "questions_version": "bloque-signals-4",
+        }
+        self.checkpoint.data["jev_response"] = {
+            "model": "simulated", "context": "afirmacion_propia", "values": [.1, .1, .9, .1, .1, .1, .1, .1],
+            "input_tokens": 10, "output_tokens": 1, "evidence_turns": {"2": ["t0"]},
+        }
+        result, _ = self.resume()
+        self.assertEqual(result.state, AnalysisState.SIGNAL)
+        self.assertEqual(result.questions_version, "bloque-signals-4")
+        self.analyzer.evaluate.assert_not_called()
+        self.alerts.register_alert.assert_called_once()

@@ -23,7 +23,9 @@ from backend.apps.analysis.domain import AnalysisResult, AnalysisState, Fragment
 from backend.apps.analysis.errors import JevContextLimit
 from backend.apps.analysis.ledger import FileFragmentLedger
 from backend.apps.analysis.providers.http import ProviderError, SubmissionUncertain, request
-from backend.apps.analysis.providers.jev_contract import CONTEXT_CHOICES, validate_response
+from backend.apps.analysis.providers.jev_contract import (
+    CONTEXT_CHOICES, MAX_INDIVIDUAL_REVIEW_QUESTIONS, block_questions, validate_response,
+)
 from backend.apps.analysis.providers.settings import Settings
 from backend.apps.analysis.services import AnalysisService
 from backend.config.composition import analysis_worker
@@ -43,12 +45,13 @@ def evidence_answer(questions, level, selected=None, score=.96):
         if key in result["answers"]:
             continue
         options = question["criteria"]
-        choice = (selected or {}).get(key, "ninguno")
-        confidence = 1. if choice == "ninguno" else score
+        negative = "descartar" if "descartar" in options else "ninguno"
+        choice = (selected or {}).get(key, negative)
+        confidence = 1. if choice == negative else score
         probabilities = dict.fromkeys(options, 0.)
         probabilities[choice] = confidence
-        if choice != "ninguno":
-            probabilities["ninguno"] = 1 - confidence
+        if choice != negative:
+            probabilities[negative] = 1 - confidence
         result["answers"][key] = {"type": "choice", "choice": choice,
                                   "confidence": confidence, "probabilities": probabilities}
     return result
@@ -162,10 +165,14 @@ class IntegrationTests(SimpleTestCase):
         self.assertFalse(self.alerts())
 
     def test_clinical_block_selects_explicit_evidence_without_a_role_or_a_speaker_label(self):
-        for label, selected, score, expected in (("S1", "t0", .96, True), ("UU", "t0", .96, True),
-                                                 (None, "t0", .96, True), (None, "t0", .74, False),
-                                                 (None, "t9", .96, False)):
+        for label, selected, score, code in (
+            ("S1", "afirma", .96, None), ("UU", "afirma", .96, None), (None, "afirma", .75, None),
+            (None, "afirma", .74, "JEV_EVIDENCE_UNCERTAIN"),
+            (None, "descartar", .96, "JEV_EVIDENCE_REJECTED"),
+            (None, "t9", .96, "JEV_SUBMISSION_UNCERTAIN"),
+        ):
             with self.subTest(label=label, score=score, selected=selected):
+                expected = code is None
                 self.transcript_results = [{
                     "type": "word", "start_time": 0., "end_time": 1.,
                     "alternatives": [{"content": "Me quiero matar.", **({"speaker": label} if label else {})}],
@@ -180,16 +187,18 @@ class IntegrationTests(SimpleTestCase):
                     self.assertEqual(turn.get("speaker"), "voz1" if label == "S1" else None)
                     self.assertEqual(turn["review_id"], "t0")
                     self.assertEqual(turn["review_levels"], [2])
-                    self.assertEqual(set(body["questions"]), {"context", "revision_2_0", *(f"signal_{i}" for i in range(8))})
-                    return httpx.Response(200, json=evidence_answer(body["questions"], 2, {"revision_2_0": selected}, score))
+                    question_key = "verificar_2_t0"
+                    self.assertEqual(set(body["questions"]), {"context", question_key, *(f"signal_{i}" for i in range(8))})
+                    self.assertEqual(set(body["questions"][question_key]["criteria"]), {"afirma", "descartar"})
+                    return httpx.Response(200, json=evidence_answer(body["questions"], 2, {question_key: selected}, score))
 
                 worker = self.worker()
                 worker.analyzer = JevAnalizador(self.settings, self.http_client(jev))
                 fragment = replace(self.fragment, session_id=str(uuid4()), analysis_unit="fragment")
                 result = self.process(worker, fragment, roles=False)
                 self.assertEqual(result.state, AnalysisState.SIGNAL if expected else AnalysisState.INDETERMINATE)
+                self.assertEqual(result.error_codes, () if expected else (code,))
                 if selected == "t9":
-                    self.assertEqual(result.error_codes, ("JEV_SUBMISSION_UNCERTAIN",))
                     self.assertFalse(result.decisions)
                 else:
                     self.assertEqual(result.decisions[0].evidence_turns["2"], ["t0"] if expected else [])
@@ -198,6 +207,38 @@ class IntegrationTests(SimpleTestCase):
                     self.assertEqual(result.signals[0].matrix_level, 2)
                     self.assertEqual(self.alerts()[-1]["trazabilidad"]["origen"], ORIGEN_HABLANTE_NO_CONFIRMADO)
         self.assertEqual(len(self.alerts()), 3)
+
+    def test_two_candidate_turns_are_verified_independently_in_one_request(self):
+        self.transcript_results = [
+            {"type": "word", "start_time": start, "end_time": start + .5,
+             "alternatives": [{"content": text}]}
+            for start, text in ((0, "Me quiero matar."), (2, "He pensado en quitarme la vida."))
+        ]
+
+        def jev(request):
+            self.jev_requests.append(request)
+            questions = json.loads(request.content)["questions"]
+            for turn in ("t0", "t1"):
+                self.assertIn(f"review_id {turn} como evidencia", questions[f"verificar_2_{turn}"]["instructions"])
+            return httpx.Response(200, json=evidence_answer(questions, 2, {"verificar_2_t1": "afirma"}))
+
+        worker = self.worker()
+        worker.analyzer = JevAnalizador(self.settings, self.http_client(jev))
+        result = self.process(worker, replace(self.fragment, analysis_unit="fragment"), roles=False)
+        self.assertEqual(len(self.jev_requests), 1)
+        self.assertEqual(result.state, AnalysisState.SIGNAL)
+        self.assertEqual(result.decisions[0].evidence_turns, {"2": ["t1"]})
+        self.assertEqual(result.decisions[0].review_verdicts, {"2": {"t0": "rejected", "t1": "confirmed"}})
+        self.assertEqual(self.alerts()[0]["descripcion"], "He pensado en quitarme la vida.")
+
+    def test_long_block_keeps_candidates_beyond_the_individual_question_budget(self):
+        turns = [f"t{index}" for index in range(MAX_INDIVIDUAL_REVIEW_QUESTIONS + 2)]
+        questions = block_questions(review_turns={2: turns})
+        individual = [key for key in questions if key.startswith("verificar_")]
+        self.assertEqual(len(individual), MAX_INDIVIDUAL_REVIEW_QUESTIONS)
+        self.assertEqual(
+            set(questions["revision_2_0"]["criteria"]), {"ninguno", *turns[MAX_INDIVIDUAL_REVIEW_QUESTIONS:]}
+        )
 
     def test_mixed_clinical_block_requires_local_evidence_for_the_confirmed_patient(self):
         self.transcript_results = [
@@ -208,13 +249,13 @@ class IntegrationTests(SimpleTestCase):
                 (2, "Me voy a matar.", "UU"),
             )
         ]
-        for selected in ({"revision_4_0": "t1"}, {"evidencia_4_0": "t0"},
-                         {"evidencia_4_0": "t0", "revision_4_0": "t1"}):
+        for selected in ({"verificar_4_t1": "afirma"}, {"evidencia_4_0": "t0"},
+                         {"evidencia_4_0": "t0", "verificar_4_t1": "afirma"}):
             with self.subTest(selected=selected):
                 def jev(request):
                     questions = json.loads(request.content)["questions"]
                     self.assertEqual(set(questions["evidencia_4_0"]["criteria"]), {"ninguno", "t0"})
-                    self.assertEqual(set(questions["revision_4_0"]["criteria"]), {"ninguno", "t1"})
+                    self.assertEqual(set(questions["verificar_4_t1"]["criteria"]), {"afirma", "descartar"})
                     return httpx.Response(200, json=evidence_answer(questions, 4, selected))
 
                 worker = self.worker()

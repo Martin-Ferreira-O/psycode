@@ -9,6 +9,8 @@ from django.conf import settings
 from django.db import DatabaseError, transaction
 from django.utils import timezone
 
+from backend.apps.analysis.domain import EVIDENCE_ABSTENTION_CODES
+
 from .cleanup import MANAGED_FILE
 from .filesystem import lock_file, open_private
 from .provider_cleanup import cleanup_provider_jobs
@@ -175,6 +177,13 @@ def purge_checkpoints(now):
                                            job.checkpoint.get("block_result", {}).get("error_codes", ()))
                 if codes:
                     keep["test_error_codes"] = codes
+            if (session.origin != AUDIO_TEST_ORIGIN and job.state == FragmentJob.State.COMPLETED
+                    and job.result == FragmentJob.Result.INDETERMINATE):
+                codes = job.checkpoint.get("analysis_error_codes",
+                                           job.checkpoint.get("block_result", {}).get("error_codes", ()))
+                reasons = sorted(set(EVIDENCE_ABSTENTION_CODES.values()).intersection(codes))
+                if reasons:
+                    keep["analysis_error_codes"] = reasons
             if job.checkpoint != keep:
                 job.checkpoint = keep
                 job.save(update_fields=["checkpoint"])

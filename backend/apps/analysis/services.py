@@ -10,7 +10,10 @@ from backend.apps.alerts.domain import DESCRIPCION_MAX, ORIGEN_HABLANTE_NO_CONFI
 from backend.apps.alerts.exceptions import AlertAlreadyExists
 from backend.common.errors import PersistenceUnavailable
 from backend.common.processing_models import JEV_DEFAULT_THRESHOLD
-from .domain import AnalysisContextLost, AnalysisResult, AnalysisState, Fragment, FragmentRejected, JevDecision, Signal
+from .domain import (
+    AnalysisContextLost, AnalysisResult, AnalysisState, EVIDENCE_ABSTENTION_CODES,
+    Fragment, FragmentRejected, JevDecision, Signal,
+)
 from .errors import AnalysisRetry, JevContextLimit, ProviderError, SubmissionUncertain
 from .ports import AnalizadorDeSenales, FragmentLedger, TechnicalAudit, Transcriptor
 from .privacy import redact
@@ -18,7 +21,9 @@ from .rules import (
     align_words, context_flags, evidence_dimensions, jev_candidates, literal_candidates,
     requests_non_literal_speech, unattributed_levels,
 )
-from .providers.jev_contract import BLOCK_QUESTIONS_VERSION, LEGACY_BLOCK_QUESTIONS_VERSION
+from .providers.jev_contract import (
+    BLOCK_QUESTIONS_VERSION, CLINICAL_REVIEW_QUESTIONS_VERSIONS, LEGACY_BLOCK_QUESTIONS_VERSION,
+)
 
 MATRIX = json.loads(Path(__file__).with_name("matrix.json").read_text(encoding="utf-8"))
 BLOCK_SENTENCE_END = re.compile(r"[.!?…][\s\"»”]*$")
@@ -213,6 +218,7 @@ class AnalysisService:
     def _block_signals(self, fragment, utterances, roles, model_roles, decision, threshold, review_turns=None):
         review_turns = review_turns or {}
         verified = []
+        evidence_errors = set()
         eligible = False
         for index, item in enumerate(utterances):
             turn_id = f"t{index}"
@@ -225,11 +231,16 @@ class AnalysisService:
             text = item["text"]
             if review_levels:
                 for level in review_levels:
-                    if (decision.values[level] >= threshold
-                            and turn_id in decision.evidence_turns.get(str(level), ())):
+                    if decision.values[level] < threshold:
+                        continue
+                    if turn_id in decision.evidence_turns.get(str(level), ()):
                         severity = 1 if level <= 2 else 2 if level <= 4 else 3
                         verified.append(Signal(MATRIX["categories"][level]["id"], level, severity, text,
                                                item["start"], item["end"], None))
+                    else:
+                        verdict = decision.review_verdicts.get(str(level), {}).get(turn_id)
+                        if verdict in EVIDENCE_ABSTENTION_CODES:
+                            evidence_errors.add(EVIDENCE_ABSTENTION_CODES[verdict])
                 continue
             literal = literal_candidates(text)
             dimensions = evidence_dimensions(text)
@@ -252,6 +263,8 @@ class AnalysisService:
         errors = []
         if not eligible or decision.context != "afirmacion_propia":
             errors.append("CONTEXT_NOT_EVALUABLE")
+        elif best is None and evidence_errors:
+            errors.extend(sorted(evidence_errors))
         elif best is None and (any(v >= threshold for v in decision.values[1:])
                               or any(self._confirmed_role(item["speaker"], roles) == "unknown"
                                      or item["attribution"] != "assigned" for item in utterances)):
@@ -281,8 +294,10 @@ class AnalysisService:
             errors.append("TEXT_NOT_EVALUABLE")
         else:
             try:
-                review_turns = (self._block_review_turns(fragment, utterances, roles)
-                                if not fragment.audio_test and questions_version == BLOCK_QUESTIONS_VERSION else {})
+                review_turns = (
+                    self._block_review_turns(fragment, utterances, roles)
+                    if not fragment.audio_test and questions_version in CLINICAL_REVIEW_QUESTIONS_VERSIONS else {}
+                )
                 if checkpoint is not None and "jev_response" in checkpoint.data:
                     decision = JevDecision(**checkpoint.data["jev_response"])
                 else:

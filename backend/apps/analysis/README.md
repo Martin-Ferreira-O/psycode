@@ -28,13 +28,21 @@ indirectas que se entienden por el diálogo. El trabajador comprueba la atribuci
 del turno y conserva los puntajes en `FragmentJob.checkpoint.block_result`.
 En los clips de diagnóstico con varias voces, JEV identifica al paciente
 simulado antes de aceptar el turno seleccionado como evidencia. Para los
-bloques clínicos, `bloque-signals-4` admite además turnos con hablante sin
+bloques clínicos, `bloque-signals-4` incorporó turnos con hablante sin
 confirmar. El texto debe expresar explícitamente la señal en primera persona en
 un solo turno. Las peticiones de cita o simulación en el turno previo excluyen
 esa respuesta como evidencia. Se requiere que JEV seleccione el turno con soporte de al menos
 `.75`, confirme el contexto afirmativo y alcance el umbral operativo de la señal.
 La alerta resultante queda pendiente de revisión y señala la incertidumbre del
 hablante en su trazabilidad.
+
+`bloque-signals-5` verifica individualmente hasta 12 pares de turno y nivel en
+la misma solicitud. Los candidatos restantes se evalúan en grupos. La
+aplicación conserva el contexto afirmativo y los dos umbrales para registrar
+la alerta. Si falta evidencia verificada, `JEV_EVIDENCE_REJECTED` indica que
+JEV la descartó con suficiente confianza y `JEV_EVIDENCE_UNCERTAIN` indica que
+la elección no alcanzó el soporte requerido. Al cerrar la sesión se conservan
+solo esos códigos en `FragmentJob.checkpoint.analysis_error_codes`.
 
 La cola durable puede procesar un bloque mientras otro queda en revisión. Los
 trabajos por intervención conservan su dependencia del contexto anterior. Se

@@ -5,14 +5,14 @@ Tipos ejecutables: [`domain.py`](../../backend/apps/analysis/domain.py). No es u
 | Campo | Tipo y significado |
 | --- | --- |
 | `contract_version` | Literal `1.0`. |
-| `questions_version` | `habla-signals-1` por intervención, `bloque-signals-1` y `bloque-signals-2` en bloques históricos, `bloque-signals-3` con evidencia por turno y `bloque-signals-4` para revisión clínica con hablante sin confirmar. Todas usan una pregunta Choice de contexto y ocho Noul. |
+| `questions_version` | `habla-signals-1` por intervención, `bloque-signals-1` y `bloque-signals-2` en bloques históricos, `bloque-signals-3` con evidencia por turno, `bloque-signals-4` para revisión clínica con hablante sin confirmar y `bloque-signals-5` con verificación individual de candidatos. Todas usan una pregunta Choice de contexto y ocho Noul. |
 | `session_id`, `sequence` | UUID canónico y secuencia entera desde 0. Solo uso interno. |
 | `state` | `senal`, `sin_riesgo` o `indeterminado`. |
 | `transcription` | `null` si falló Speechmatics; en otro caso `{text, words, cleanup}`. |
 | `transcription.words[]` | `{text, start, end, speaker}`. Tiempos en segundos absolutos dentro de la sesión. `speaker` puede ser `null`. |
 | `transcription.cleanup` | `deleted` o `delete_pending`. El segundo vuelve el resultado indeterminado. |
 | `signals[]` | `{category_id, matrix_level, severity, excerpt, start, end, speaker}`. Solo `severity` 1–3 entra a alertas. `excerpt` es el texto redactado relacionado. `speaker` es `null` cuando el hablante clínico queda sin confirmar. |
-| `decisions[]` | `{model, context, values, input_tokens, output_tokens, evidence_turns?}`. Ocho valores Noul validados. `evidence_turns` contiene IDs locales de los turnos seleccionados para niveles 1 y 2 en `bloque-signals-3` y para niveles 1 a 7 en `bloque-signals-4`. |
+| `decisions[]` | `{model, context, values, input_tokens, output_tokens, evidence_turns?, review_verdicts?}`. Ocho valores Noul validados. `evidence_turns` contiene IDs de turnos aceptados por nivel. `review_verdicts` guarda solo `confirmed`, `rejected` o `uncertain` por nivel e ID local. |
 | `error_codes[]` | Códigos técnicos o de abstención; nunca excepciones libres ni cuerpos HTTP. |
 
 `sin_riesgo` significa únicamente que un fragmento evaluable no produjo señales según estas reglas experimentales. `senal` requiere borrado remoto confirmado, audio sin solapamiento ambiguo y contexto propio afirmativo. Por intervención se requiere un rol `patient` confirmado. En bloques clínicos también se admite evidencia explícita en primera persona con hablante sin confirmar si JEV localiza el mismo turno y nivel con soporte de al menos `.75` y el puntaje Noul supera el umbral operativo.
