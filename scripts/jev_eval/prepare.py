@@ -34,7 +34,7 @@ def transcribe(entry, audio_dir, settings):
         frames = wav.getnframes()
     offset = round(entry["offset"] * RATE)
     fragment = Fragment(str(uuid4()), 0, "diagnostico", datetime.now(timezone.utc), path, end=frames,
-                        audio_test=True, analysis_unit="fragment", session_origin_sample=offset,
+                        audio_test=True, analysis_unit="utterance", session_origin_sample=offset,
                         new_audio_start_sample=offset)
     started = monotonic()
     with TemporaryDirectory() as tmp:

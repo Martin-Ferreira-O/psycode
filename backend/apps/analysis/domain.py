@@ -40,7 +40,7 @@ class Fragment:
     session_origin_sample: int = 0
     new_audio_start_sample: int | None = None
     audio_test: bool = False
-    analysis_unit: str = "utterance"
+    analysis_unit: str = "fragment"
 
     def __post_init__(self):
         if self.analysis_unit not in {"utterance", "fragment"}:
@@ -96,6 +96,8 @@ class Signal:
 
     score: float | None = None
     threshold: float | None = None
+    context_before: str = ""
+    context_after: str = ""
 
     def __post_init__(self):
         if type(self.severity) is not int or self.severity not in (1, 2, 3):
@@ -111,6 +113,15 @@ class JevDecision:
     output_tokens: int
     evidence_turns: dict[str, list[str]] = field(default_factory=dict)
     review_verdicts: dict[str, dict[str, str]] = field(default_factory=dict)
+    text_evidence: dict[str, dict] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class EvidenceIssue:
+    code: str
+    start: float
+    end: float
+    matrix_level: int | None = None
 
 
 @dataclass(frozen=True)
@@ -124,6 +135,7 @@ class AnalysisResult:
     error_codes: tuple[str, ...] = ()
     contract_version: str = CONTRACT_VERSION
     questions_version: str = "habla-signals-1"
+    review_issues: tuple[EvidenceIssue, ...] = ()
 
     def to_dict(self):
         return asdict(self)

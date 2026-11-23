@@ -66,7 +66,7 @@ def parse_transcript(data, chunk, job_id):
             continue
         previous_owned = chunk.start / RATE <= (start + end) / 2 < chunk.end / RATE
         if previous_owned:
-            label = alt.get("speaker")
+            label = None if getattr(chunk, "analysis_unit", None) == "fragment" else alt.get("speaker")
             if label is not None and (not isinstance(label, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", label)):
                 raise ProviderError("Hablante inválido")
             # Batch speaker IDs only have meaning inside this job.
@@ -143,6 +143,7 @@ class BatchClient:
             raise SubmissionUncertain("Fragmento ya enviado o incierto; no se reenviará automáticamente")
         base = f"https://{settings.region}.asr.api.speechmatics.com/v2"
         started = time.monotonic()
+        diarization = "none" if getattr(chunk, "analysis_unit", None) == "fragment" else "speaker"
         deadline = started + settings.timeout
         own_client = self.client is None
         client = self.client or httpx.Client(timeout=30, headers={
@@ -190,9 +191,12 @@ class BatchClient:
                 transcription_config = {
                     "language": settings.transcription_language,
                     "model": settings.model,
-                    "diarization": "speaker",
-                    "speaker_diarization_config": {"speaker_sensitivity": 0.5, "prefer_current_speaker": False},
+                    "diarization": diarization,
                 }
+                if diarization == "speaker":
+                    transcription_config["speaker_diarization_config"] = {
+                        "speaker_sensitivity": 0.5, "prefer_current_speaker": False,
+                    }
                 if settings.transcription_language == "multi":
                     transcription_config["language_hints"] = ["es"]
                 else:
@@ -277,5 +281,5 @@ class BatchClient:
                 "provider": "speechmatics", "provider_job_id": job_id,
                 "provider_cleanup": cleanup, "timings": timings,
                 "submitted_audio_seconds": submitted_bytes / (RATE * 2),
-                "configuration": settings.public()}
+                "configuration": settings.public() | {"diarization": diarization}}
 

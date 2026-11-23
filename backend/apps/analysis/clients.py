@@ -6,7 +6,10 @@ import httpx
 from .errors import JevContextLimit, ProviderError, SubmissionUncertain
 from .domain import JevDecision, Transcription, Word
 from .providers.http import json_body, request
-from .providers.jev_contract import localized_evidence, questions, validate_response
+from .plain_text import PLAIN_TEXT_VERSION
+from .providers.jev_contract import (
+    TEXT_CATEGORY_DEFINITIONS, localized_evidence, questions, text_questions, validate_response, validate_text_response,
+)
 from .providers.speechmatics import BatchClient
 
 
@@ -33,7 +36,10 @@ class JevAnalizador:
         settings = self.settings_loader() if self.settings_loader else self.settings
         settings.validate("jev")
         unit = current.get("analysis_unit", "utterance")
+        plain = current.get("evidence_scope") == PLAIN_TEXT_VERSION
         state = {"current": current, "history": history}
+        if plain:
+            state["categories"] = TEXT_CATEGORY_DEFINITIONS
         if (unit == "fragment"
                 and len(json.dumps(state, ensure_ascii=False, separators=(",", ":"))) > settings.jev_block_max_chars):
             raise JevContextLimit("JEV_CONTEXT_LIMIT")
@@ -52,7 +58,11 @@ class JevAnalizador:
             for turn in current.get("turns", ()):
                 for level in turn.get("review_levels", ()):
                     review_turns.setdefault(level, []).append(turn["review_id"])
-            requested = questions(unit, evidence_turns, unknown_speakers, review_turns)
+            evidence_texts = None
+            if current.get("evidence_scope") == "current_turn":
+                evidence_texts = {turn["id"]: turn["text"] for turn in current["turns"] if "id" in turn}
+            requested = (text_questions(len(current["text"].splitlines())) if plain else
+                         questions(unit, evidence_turns, unknown_speakers, review_turns, evidence_texts=evidence_texts))
             payload = {"model": settings.analysis_model, "state": state, "questions": requested}
 
             def send():
@@ -72,6 +82,12 @@ class JevAnalizador:
                 raise ProviderError(f"Proveedor respondió HTTP {response.status_code}")
             try:
                 data = json_body(response)
+                if plain:
+                    values, localized, evidence, usage = validate_text_response(
+                        data, settings.analysis_model, settings.analysis_provider, requested)
+                    return JevDecision(data["model"], "afirmacion_propia" if localized else "incierto", values,
+                                       usage["input_tokens"], usage["output_tokens"],
+                                       evidence_turns=localized, text_evidence=evidence)
                 values, context, usage = validate_response(data, settings.analysis_model,
                                                            settings.analysis_provider, requested)
             except ProviderError:

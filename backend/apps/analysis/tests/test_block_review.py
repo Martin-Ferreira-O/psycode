@@ -1,4 +1,4 @@
-from dataclasses import replace
+from dataclasses import asdict, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest import TestCase
@@ -6,6 +6,7 @@ from unittest.mock import Mock
 from uuid import uuid4
 
 from backend.apps.analysis.domain import AnalysisState, Fragment, JevDecision, Transcription, Word
+from backend.apps.analysis.providers.jev_contract import BLOCK_QUESTIONS_VERSION, DIAGNOSTIC_QUESTIONS_VERSION, block_questions
 from backend.apps.analysis.rules import unattributed_levels
 from backend.apps.analysis.services import AnalysisService
 
@@ -23,7 +24,12 @@ class ClinicalReviewTests(TestCase):
         self.jev.evaluate.return_value = decision or self.decision
         service = AnalysisService(self.transcriber, self.jev, Mock(), self.alerts, Mock(),
                                   threshold_loader=lambda: threshold if threshold is not None else .55)
-        return service.process(self.fragment, roles=roles)
+        # Los predicados por voz siguen disponibles para recuperar solicitudes históricas.
+        transcription = self.transcriber.transcribe.return_value
+        turns = service._prepare_block(self.fragment, [asdict(word) for word in words])
+        version = DIAGNOSTIC_QUESTIONS_VERSION if self.fragment.audio_test else BLOCK_QUESTIONS_VERSION
+        return service._process_block(self.fragment, turns, roles or {}, transcription, [], None,
+                                      threshold if threshold is not None else .55, version, ())
 
     def test_explicit_affirmative_language_limited_to_the_expressed_level(self):
         for text, levels in (
@@ -33,12 +39,19 @@ class ClinicalReviewTests(TestCase):
             ("No dejo de pensar en suicidarme.", (2,)),
             ("Sí, me quiero matar.", (2,)),
             ("He pensado en quitarme la vida.", (2,)),
+            ("He pensado que debería matarme.", (2,)),
+            ("Mi hermana me acompañó porque tengo intención de suicidarme.", (4,)),
+            ("Nunca he pensado en matarme, pero ojalá no despertara.", (1,)),
             ("He pensado en una forma de suicidarme.", (3,)),
             ("Me voy a matar.", (4,)),
             ("Tengo un plan para suicidarme.", ()),
             ("Tengo un plan para suicidarme y voy a hacerlo.", (5,)),
             ("Hice preparativos para suicidarme.", (6,)),
             ("Acabo de intentar suicidarme.", (7,)),
+            ("Esta mañana intenté quitarme la vida.", (7,)),
+            ("Hoy intenté quitarme la vida y mi hermana me acompañó.", (7,)),
+            ("Sí, intenté quitarme la vida ayer, pero paré y pedí ayuda.", (7,)),
+            ("Intenté quitarme la vida y no resultó.", (7,)),
         ):
             with self.subTest(text=text):
                 self.assertEqual(unattributed_levels(text), levels)
@@ -46,6 +59,8 @@ class ClinicalReviewTests(TestCase):
     def test_context_and_insufficient_text_never_offered_as_review_evidence(self):
         for text in (
             "¿Me quiero matar?", "Por ejemplo, me quiero matar.", "«Me quiero matar».",
+            "Mi hermana dijo ‘Qué vergüenza. Me quiero matar. No quiero volver allá’.",
+            "Mi hermana dijo: Qué vergüenza. Me quiero matar. No quiero volver allá.",
             "No me quiero matar.", "Nunca he pensado en suicidarme.", "Mi amiga dijo que me quiero matar.",
             "Si me quiero matar, te aviso.", "Me quiero matar de risa.", "Antes me quiero matar.",
             "En 2020 he pensado en suicidarme.", "No puedo más.", "Sí.", "  ",
@@ -127,3 +142,63 @@ class ClinicalReviewTests(TestCase):
                 self.assertEqual([r["plazo"] for r in records], [None, "mañana"])
                 self.assertEqual([(r["inicio"], r["puntaje"], r["umbral"]) for r in records],
                                  [(0., .85, .4), (2., .91, .4)])
+
+    def test_attempt_reports_in_one_block_with_or_without_confirmed_role(self):
+        texts = ("Hoy intenté quitarme la vida.", "Empecé a suicidarme, pero me detuve.",
+                 "Intenté quitarme la vida y alorien me interrumpió.")
+        words = tuple(Word(text, i * 1.5, i * 1.5 + 1., "S1") for i, text in enumerate(texts))
+        decision = replace(self.decision, values=(0.,) * 7 + (.9,), evidence_turns={"7": ["t0", "t1", "t2"]})
+        for roles in ({}, {"S1": "patient"}):
+            with self.subTest(roles=roles):
+                self.alerts.reset_mock()
+                result = self.process(*words, roles=roles, decision=decision, threshold=.4)
+                self.assertEqual([(s.excerpt, s.matrix_level, s.severity) for s in result.signals],
+                                 [(text, 7, 3) for text in texts])
+                self.assertEqual(self.alerts.register_alert.call_count, 3)
+
+    def test_attempt_review_requires_a_personal_affirmation(self):
+        for text in ("No intenté quitarme la vida.", "¿Hoy intenté quitarme la vida?",
+                     "Ella quiere que intente quitarme la vida.", "Intenté quitarme la vida hace años.",
+                     "Intenté quitarme la vida, pero eso fue hace más de diez años.",
+                     "Por ejemplo, empecé a suicidarme, pero me detuve.", "Intenté llamar y alguien me interrumpió.",
+                     "Mi hermana dijo que yo intenté quitarme la vida.", "Mi primo cree que me quiero matar.",
+                     "Intenté matarme de vergüenza.",
+                     "Intenté quitarme la vida en mi sueño.", "Quiero morir de risa."):
+            with self.subTest(text=text):
+                self.assertEqual(unattributed_levels(text), ())
+
+    def test_confirmed_patient_denial_cannot_inherit_positive_score_or_evidence(self):
+        words = (
+            Word("Hoy intenté quitarme la vida.", 0., 1., "S1"),
+            Word("No he intentado suicidarme.", 2., 3., "S1"),
+            Word("Tomé la micro y vine para acá. No tengo intención de volver a intentarlo ahora.", 4., 5., "S1"),
+        )
+        decision = replace(self.decision, evidence_turns={"2": ["t2"], "7": ["t0", "t1"]})
+        result = self.process(*words, roles={"S1": "patient"}, decision=decision, threshold=.4)
+        self.assertEqual([(s.start, s.matrix_level, s.severity) for s in result.signals], [(0., 7, 3)])
+        options = self.jev.evaluate.call_args.args[0]["turns"]
+        self.assertEqual([turn.get("id") for turn in options], ["t0", None, None])
+        self.alerts.register_alert.assert_called_once()
+
+    def test_confirmed_patient_requires_matching_turn_even_for_an_explicit_attempt(self):
+        words = (
+            Word("Esta mañana intenté quitarme la vida.", 0., 1., "S1"),
+            Word("Dime un poco más.", 2., 3., "S2"),
+        )
+        for evidence in ({}, {"7": ["t1"]}, {"2": ["t0"]}):
+            with self.subTest(evidence=evidence):
+                decision = replace(self.decision, evidence_turns=evidence)
+                result = self.process(*words, roles={"S1": "patient", "S2": "professional"},
+                                      decision=decision, threshold=.4)
+                self.assertEqual(result.signals, ())
+        self.alerts.register_alert.assert_not_called()
+
+    def test_confirmed_patient_direct_evidence_has_separate_choices_for_each_turn(self):
+        questions = block_questions(evidence_texts={
+            "t0": "Esta mañana intenté quitarme la vida.",
+            "t1": "Ayer intenté quitarme la vida.",
+            "t2": "Vine para acá en micro.",
+        })
+        self.assertEqual(set(questions["evidencia_7_0"]["criteria"]), {"ninguno", "t0"})
+        self.assertEqual(set(questions["evidencia_7_1"]["criteria"]), {"ninguno", "t1"})
+        self.assertNotIn("evidencia_7_2", questions)

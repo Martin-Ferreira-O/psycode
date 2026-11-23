@@ -611,7 +611,7 @@ SCRUM-32, 33, 34, 37, 39 y 40. Todas requieren autenticación. No hay creación,
 | `evaluacion` | Evaluation o null | Listado y detalle; null si pendiente |
 | `sesion_id` | UUID | Solo detalle; referencia de sesión de captura o prueba de audio |
 | `descripcion` | string o null | Solo detalle; fragmento relevante de transcripción asociado a la alerta; máximo 500 caracteres; se normalizan espacios y Unicode; ausente o vacío se normaliza a null | 
-| `analisis` | objeto o null | Solo detalle. Las alertas nuevas incluyen categoría, nivel de matriz, intervalo de sesión en segundos, puntaje de categoría, umbral efectivo, versión de preguntas y plazo explícito cuando se reconoce. Los registros históricos pueden carecer de estos datos. |
+| `analisis` | objeto o null | Solo detalle. Incluye categoría principal, nivel de matriz, intervalo de sesión en segundos, puntaje, umbral efectivo, versión de preguntas y plazo explícito cuando se reconoce. `bloque-texto-1` agrega `evidencias` con las citas redactadas, el contexto cercano y los datos de cada pasaje, y `evidencias_pendientes` con intervalos y motivos técnicos. Los registros históricos pueden carecer de esos campos. |
 | `trazabilidad` | objeto | Solo detalle: registrada_en, actualizada_en (UTC), origen (string 1–100) |
 
 Evaluation tiene la misma forma en GET/POST y dentro de alertas:
@@ -719,7 +719,7 @@ Sin parámetros ni cuerpo. Ejemplo pendiente, respuesta 200:
 
 Si evaluada, evaluacion contiene Evaluation y estado correspondiente. Error específico: `404 ALERTA_NO_ENCONTRADA`.
 `descripcion` representa únicamente el fragmento relevante de transcripción que originó la posible alerta. No corresponde a la transcripción completa de la sesión ni al audio original. El campo se entrega solo en el endpoint de detalle y no forma parte del listado general de alertas.
-`hablante_no_confirmado` es `true` en alertas derivadas de evidencia textual sin rol confirmado. El detalle y el correo solicitan revisar la atribución de la afirmación.
+`hablante_no_confirmado` se conserva en la API para identificar alertas de versiones históricas. Las alertas de texto plano usan la prioridad de revisión en el detalle y en el correo.
 
 ### POST /api/v1/alerts/{alerta_id}/evaluacion
 

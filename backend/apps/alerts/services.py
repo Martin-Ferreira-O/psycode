@@ -55,7 +55,7 @@ class AlertsService:
             try:
                 notification = self.notifier.notify_alert(stored.alerta_id, NotificationPayload(
                     str(stored.semaforo), "riesgo_suicida", stored.box, stored.fecha_hora.isoformat(),
-                    es_prueba=stored.es_prueba, hablante_no_confirmado=stored.hablante_no_confirmado))
+                    es_prueba=stored.es_prueba))
             except Exception:
                 if before_notify is not None:
                     raise

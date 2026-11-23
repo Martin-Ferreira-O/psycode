@@ -13,7 +13,6 @@ from uuid import uuid4
 from django.test import SimpleTestCase
 import httpx
 
-from backend.apps.alerts.domain import ORIGEN_HABLANTE_NO_CONFIRMADO
 from backend.apps.alerts.repositories import AlertsRepository
 from backend.apps.alerts.services import AlertsService
 from backend.apps.alerts.tests.test_persistence import FakeDatabase
@@ -39,22 +38,15 @@ def answer(level=None, context="afirmacion_propia", model="jev-1.14.0"):
     return {"model": model, "answers": answers, "usage": {"input_tokens": 30, "output_tokens": 15}}
 
 
-def evidence_answer(questions, level, selected=None, score=.96):
-    result = answer(level)
+def plain_answer(questions, choices=None):
+    answers = {}
     for key, question in questions.items():
-        if key in result["answers"]:
-            continue
-        options = question["criteria"]
-        negative = "descartar" if "descartar" in options else "ninguno"
-        choice = (selected or {}).get(key, negative)
-        confidence = 1. if choice == negative else score
-        probabilities = dict.fromkeys(options, 0.)
-        probabilities[choice] = confidence
-        if choice != negative:
-            probabilities[negative] = 1 - confidence
-        result["answers"][key] = {"type": "choice", "choice": choice,
-                                  "confidence": confidence, "probabilities": probabilities}
-    return result
+        choice, score = (choices or {}).get(key, ("ninguna", 1.))
+        criteria = question["criteria"]
+        answers[key] = {"type": "choice", "choice": choice, "confidence": score,
+                        "probabilities": {label: score if label == choice else (1 - score) / (len(criteria) - 1)
+                                          for label in criteria}}
+    return {"model": "jev-1.14.0", "answers": answers, "usage": {"input_tokens": 30, "output_tokens": 15}}
 
 
 class IntegrationTests(SimpleTestCase):
@@ -65,7 +57,7 @@ class IntegrationTests(SimpleTestCase):
         self.audio = self.root / "fragment.pcm"
         self.audio.write_bytes(b"\0\0" * 64000)
         self.fragment = Fragment(str(uuid4()), 0, "box-1", datetime.now(timezone.utc),
-                                 self.audio, end=64000)
+                                 self.audio, end=64000, analysis_unit="utterance")
         self.settings = Settings(speechmatics_key="fake-speech-key", jev_key="fake-jev-key",
                                  external_enabled=True)
         self.db = FakeDatabase()
@@ -123,145 +115,96 @@ class IntegrationTests(SimpleTestCase):
     def alerts(self):
         return self.db["alerts"].docs
 
-    def test_psychology_block_transcribes_and_classifies_both_roles(self):
+    def test_block_requests_plain_speechmatics_and_sends_only_redacted_text(self):
         self.transcript_results = [
-            {"type": "word", "start_time": start, "end_time": start + 1,
-             "alternatives": [{"content": text, "speaker": speaker}]}
-            for start, text, speaker in (
-                (0, "¿Cómo se ha sentido?", "S1"),
-                (2, "Ojalá no despertar. Soy Nombre Prueba.", "S2"),
-            )
-        ]
-        def jev(req):
-            self.jev_requests.append(req)
-            return httpx.Response(200, json=evidence_answer(json.loads(req.content)["questions"], 1))
-
-        worker = self.worker()
-        worker.analyzer = JevAnalizador(self.settings, self.http_client(jev))
-        result = self.process(worker, replace(self.fragment, analysis_unit="fragment"), roles=False)
-        request = self.requests[0]
-        content_type = request.headers["Content-Type"]
-        multipart = BytesParser(policy=policy.default).parsebytes(
-            f"Content-Type: {content_type}\r\n\r\n".encode() + request.read()
-        )
-        config_part = next(part for part in multipart.iter_parts()
-                           if part.get_param("name", header="Content-Disposition") == "config")
-        config = json.loads(config_part.get_payload(decode=True))["transcription_config"]
-        self.assertEqual(config["language"], "es")
-        self.assertEqual(config["domain"], "medical")
-        self.assertEqual(config["diarization"], "speaker")
-        self.assertEqual(config["speaker_diarization_config"]["speaker_sensitivity"], 0.5)
-        self.assertIn({"content": "ideación suicida"}, config["additional_vocab"])
-
-        self.assertEqual(len(self.jev_requests), 1)
-        body = json.loads(self.jev_requests[0].content)
-        self.assertEqual(body["state"]["current"]["speaker_roles"], {"voz1": "unknown", "voz2": "unknown"})
-        self.assertEqual([turn["speaker"] for turn in body["state"]["current"]["turns"]], ["voz1", "voz2"])
-        self.assertNotIn("Nombre Prueba", json.dumps(body))
-        self.assertNotIn("batch-0-S1", json.dumps(body))
-        self.assertIn("entrevista psicológica", body["questions"]["signal_1"]["instructions"])
-        self.assertEqual(result.decisions[0].values[1], .9)
-        self.assertEqual(result.state, AnalysisState.INDETERMINATE)
-        self.assertFalse(self.alerts())
-
-    def test_clinical_block_selects_explicit_evidence_without_a_role_or_a_speaker_label(self):
-        for label, selected, score, code in (
-            ("S1", "afirma", .96, None), ("UU", "afirma", .96, None), (None, "afirma", .75, None),
-            (None, "afirma", .74, "JEV_EVIDENCE_UNCERTAIN"),
-            (None, "descartar", .96, "JEV_EVIDENCE_REJECTED"),
-            (None, "t9", .96, "JEV_SUBMISSION_UNCERTAIN"),
-        ):
-            with self.subTest(label=label, score=score, selected=selected):
-                expected = code is None
-                self.transcript_results = [{
-                    "type": "word", "start_time": 0., "end_time": 1.,
-                    "alternatives": [{"content": "Me quiero matar.", **({"speaker": label} if label else {})}],
-                }]
-
-                def jev(request):
-                    body = json.loads(request.content)
-                    current = body["state"]["current"]
-                    self.assertEqual(current["speaker_roles"], {"voz1": "unknown"} if label == "S1" else {})
-                    turn = current["turns"][0]
-                    self.assertIsNone(turn.get("id"))
-                    self.assertEqual(turn.get("speaker"), "voz1" if label == "S1" else None)
-                    self.assertEqual(turn["review_id"], "t0")
-                    self.assertEqual(turn["review_levels"], [2])
-                    question_key = "verificar_2_t0"
-                    self.assertEqual(set(body["questions"]), {"context", question_key, *(f"signal_{i}" for i in range(8))})
-                    self.assertEqual(set(body["questions"][question_key]["criteria"]), {"afirma", "descartar"})
-                    return httpx.Response(200, json=evidence_answer(body["questions"], 2, {question_key: selected}, score))
-
-                worker = self.worker()
-                worker.analyzer = JevAnalizador(self.settings, self.http_client(jev))
-                fragment = replace(self.fragment, session_id=str(uuid4()), analysis_unit="fragment")
-                result = self.process(worker, fragment, roles=False)
-                self.assertEqual(result.state, AnalysisState.SIGNAL if expected else AnalysisState.INDETERMINATE)
-                self.assertEqual(result.error_codes, () if expected else (code,))
-                if selected == "t9":
-                    self.assertFalse(result.decisions)
-                else:
-                    self.assertEqual(result.decisions[0].evidence_turns["2"], ["t0"] if expected else [])
-                if expected:
-                    self.assertIsNone(result.signals[0].speaker)
-                    self.assertEqual(result.signals[0].matrix_level, 2)
-                    self.assertEqual(self.alerts()[-1]["trazabilidad"]["origen"], ORIGEN_HABLANTE_NO_CONFIRMADO)
-        self.assertEqual(len(self.alerts()), 3)
-
-    def test_two_candidate_turns_are_verified_independently_in_one_request(self):
-        self.transcript_results = [
-            {"type": "word", "start_time": start, "end_time": start + .5,
-             "alternatives": [{"content": text}]}
-            for start, text in ((0, "Me quiero matar."), (2, "He pensado en quitarme la vida."))
+            {"type": "word", "start_time": 0., "end_time": .4,
+             "alternatives": [{"content": "Nombre Prueba", "speaker": "S1"}]},
+            {"type": "word", "start_time": .41, "end_time": .8,
+             "alternatives": [{"content": "hablamos hoy.", "speaker": "S2"}]},
         ]
 
         def jev(request):
             self.jev_requests.append(request)
-            questions = json.loads(request.content)["questions"]
-            for turn in ("t0", "t1"):
-                self.assertIn(f"review_id {turn} como evidencia", questions[f"verificar_2_{turn}"]["instructions"])
-            return httpx.Response(200, json=evidence_answer(questions, 2, {"verificar_2_t1": "afirma"}))
+            return httpx.Response(200, json=plain_answer(json.loads(request.content)["questions"]))
 
         worker = self.worker()
         worker.analyzer = JevAnalizador(self.settings, self.http_client(jev))
-        result = self.process(worker, replace(self.fragment, analysis_unit="fragment"), roles=False)
-        self.assertEqual(len(self.jev_requests), 1)
+        result = self.process(worker, replace(self.fragment, analysis_unit="fragment"))
+        config = json.loads(self.requests[0].content.split(b'name="config"')[1].split(b"\r\n")[2])
+        self.assertEqual(config["transcription_config"]["diarization"], "none")
+        self.assertNotIn("speaker_diarization_config", config["transcription_config"])
+        self.assertIn({"content": "ideación suicida"}, config["transcription_config"]["additional_vocab"])
+        body = json.loads(self.jev_requests[0].content)
+        self.assertEqual(body["state"]["current"], {"analysis_unit": "fragment", "evidence_scope": "bloque-texto-1",
+                                                   "text": "[t0] [IDENTIFICADOR] hablamos hoy."})
+        self.assertEqual(list(body["questions"]), ["t0"])
+        self.assertIsNone(result.transcription.words[0].speaker)
+        self.assertEqual(result.state, AnalysisState.NO_SIGNAL)
+        self.assertFalse(self.alerts())
+
+    def test_same_words_are_evaluated_independently_of_speechmatics_speaker_labels(self):
+        for labels in (("S1", "S2"), ("UU", "UU"), (None, None)):
+            with self.subTest(labels=labels):
+                self.transcript_results = [
+                    {"type": "word", "start_time": start, "end_time": start + .4,
+                     "alternatives": [{"content": text, **({"speaker": label} if label else {})}]}
+                    for start, text, label in zip((0., .41), ("He pensado en", "quitarme la vida."), labels, strict=True)
+                ]
+
+                def jev(request):
+                    body = json.loads(request.content)
+                    self.assertEqual(body["state"]["current"]["text"], "[t0] He pensado en quitarme la vida.")
+                    self.assertEqual(list(body["questions"]), ["t0"])
+                    return httpx.Response(200, json=plain_answer(body["questions"], {"t0": ("nivel_2", .96)}))
+
+                worker = self.worker()
+                worker.analyzer = JevAnalizador(self.settings, self.http_client(jev))
+                result = self.process(worker, replace(self.fragment, session_id=str(uuid4()), analysis_unit="fragment"))
+                self.assertEqual(result.state, AnalysisState.SIGNAL)
+                self.assertEqual(result.decisions[0].text_evidence["t0"], {"choice": "nivel_2", "score": .96})
+                signal, = result.signals
+                self.assertIsNone(signal.speaker)
+                self.assertEqual((signal.start, signal.end), (0., .81))
+                self.assertEqual(self.alerts()[-1]["trazabilidad"]["origen"], "analysis.speechmatics-jev/1.0")
+        self.assertEqual(len(self.alerts()), 3)
+
+    def test_grouped_alert_keeps_repeated_distinct_and_unconfirmed_evidence(self):
+        self.transcript_results = [
+            {"type": "word", "start_time": start, "end_time": start + .5, "alternatives": [{"content": text}]}
+            for start, text in ((0., "Ojalá no despertar y pienso en suicidarme."),
+                                (1.5, "Ojalá no despertar."), (3., "Me voy a quitar la vida."))
+        ]
+
+        def jev(request):
+            questions = json.loads(request.content)["questions"]
+            self.assertEqual(list(questions), ["t0", "t1", "t2", "t3"])
+            return httpx.Response(200, json=plain_answer(questions, {
+                "t0": ("nivel_1", .91), "t1": ("nivel_2", .85),
+                "t2": ("nivel_1", .89), "t3": ("nivel_4", .54),
+            }))
+
+        worker = self.worker()
+        worker.analyzer = JevAnalizador(self.settings, self.http_client(jev))
+        result = self.process(worker, replace(self.fragment, analysis_unit="fragment"))
         self.assertEqual(result.state, AnalysisState.SIGNAL)
-        self.assertEqual(result.decisions[0].evidence_turns, {"2": ["t1"]})
-        self.assertEqual(result.decisions[0].review_verdicts, {"2": {"t0": "rejected", "t1": "confirmed"}})
-        self.assertEqual(self.alerts()[0]["descripcion"], "He pensado en quitarme la vida.")
+        self.assertEqual([item.matrix_level for item in result.signals], [1, 2, 1])
+        self.assertEqual(len(self.alerts()), 1)
+        alert = self.alerts()[0]
+        self.assertEqual(alert["nivel_severidad"], 2)
+        self.assertEqual(alert["analisis"]["evidencias_pendientes"], [
+            {"code": "JEV_BELOW_THRESHOLD", "start": 3., "end": 3.5, "matrix_level": 4},
+        ])
+        items = alert["analisis"]["evidencias"]
+        self.assertEqual([item["texto"] for item in items],
+                         ["Ojalá no despertar", "y pienso en suicidarme.", "Ojalá no despertar."])
+        self.assertEqual([item["inicio"] for item in items], [0., 0., 1.5])
+        self.assertEqual(items[1]["contexto_anterior"], "Ojalá no despertar")
 
     def test_long_block_keeps_candidates_beyond_the_individual_question_budget(self):
         turns = [f"t{index}" for index in range(14)]
         questions = block_questions(review_turns={2: turns})
         self.assertEqual({key for key in questions if key.startswith("verificar_")},
                          {f"verificar_2_{turn}" for turn in turns})
-
-    def test_mixed_clinical_block_requires_local_evidence_for_the_confirmed_patient(self):
-        self.transcript_results = [
-            {"type": "word", "start_time": start, "end_time": start + .5,
-             "alternatives": [{"content": text, "speaker": speaker}]}
-            for start, text, speaker in (
-                (0, "Tengo intención de suicidarme.", "S1"),
-                (2, "Me voy a matar.", "UU"),
-            )
-        ]
-        for selected in ({"verificar_4_t1": "afirma"}, {"evidencia_4_0": "t0"},
-                         {"evidencia_4_0": "t0", "verificar_4_t1": "afirma"}):
-            with self.subTest(selected=selected):
-                def jev(request):
-                    questions = json.loads(request.content)["questions"]
-                    self.assertEqual(set(questions["evidencia_4_0"]["criteria"]), {"ninguno", "t0"})
-                    self.assertEqual(set(questions["verificar_4_t1"]["criteria"]), {"afirma", "descartar"})
-                    return httpx.Response(200, json=evidence_answer(questions, 4, selected))
-
-                worker = self.worker()
-                worker.analyzer = JevAnalizador(self.settings, self.http_client(jev))
-                result = self.process(worker, replace(self.fragment, session_id=str(uuid4()), analysis_unit="fragment"))
-                self.assertEqual(result.state, AnalysisState.SIGNAL)
-                self.assertEqual(result.signals[0].speaker, "batch-0-S1" if "evidencia_4_0" in selected else None)
-                self.assertEqual(len(result.signals), len(selected))
-        self.assertEqual(len(self.alerts()), 4)
 
     def test_typesafe_retries_only_a_confirmed_context_rejection_with_long_context(self):
         current = {"analysis_unit": "fragment", "turns": [{"text": "Diálogo sintético."}]}
@@ -289,54 +232,45 @@ class IntegrationTests(SimpleTestCase):
                     self.assertEqual(len(requests), 1)
                 self.assertNotIn("TypeSafe-Danger-Zone-Long-Context", requests[0].headers)
 
-    def test_block_verifies_contextual_evidence_against_the_patient_voice(self):
+    def test_local_context_supports_an_unambiguous_short_response(self):
         self.transcript_results = [
-            {"type": "word", "start_time": start, "end_time": start + .5,
-             "alternatives": [{"content": text, "speaker": speaker}]}
-            for start, text, speaker in (
-                (0, "¿Te has sentido así?", "S1"),
-                (1, "Como ejemplo, yo preferiría no despertar.", "S1"),
-                (2, "Hay días en que me gustaría no levantarme.", "S2"),
-            )
+            {"type": "word", "start_time": start, "end_time": start + .5, "alternatives": [{"content": text}]}
+            for start, text in ((0., "¿Has pensado en quitarte la vida?"), (2., "Sí."))
         ]
-        for selected, score, expected in (
-            ("t2", .96, AnalysisState.SIGNAL),
-            ("t1", .96, AnalysisState.INDETERMINATE),
-            ("t2", .51, AnalysisState.INDETERMINATE),
-        ):
-            with self.subTest(selected=selected, score=score):
-                def jev(request):
-                    self.jev_requests.append(request)
-                    body = json.loads(request.content)
-                    self.assertEqual(body["state"]["current"]["speaker_roles"],
-                                     {"voz1": "unknown", "voz2": "unknown"})
-                    self.assertEqual(set(body["questions"]["evidencia_1_0"]["criteria"]),
-                                     {"ninguno", "t1", "t2"})
-                    result = answer(1)
-                    for key, choice, confidence in (
-                        ("evidencia_1_0", selected, score), ("evidencia_2_0", "ninguno", 1),
-                        ("voz_paciente", "voz2", 1),
-                    ):
-                        options = body["questions"][key]["criteria"]
-                        probabilities = dict.fromkeys(options, 0.)
-                        probabilities[choice] = confidence
-                        if choice != "ninguno":
-                            probabilities["ninguno"] = 1 - confidence
-                        result["answers"][key] = {"type": "choice", "choice": choice, "confidence": confidence,
-                                                  "probabilities": probabilities}
-                    return httpx.Response(200, json=result)
 
-                worker = self.worker()
-                worker.analyzer = JevAnalizador(self.settings, self.http_client(jev))
-                fragment = replace(self.fragment, session_id=str(uuid4()), audio_test=True, analysis_unit="fragment")
-                result = self.process(worker, fragment, roles=False)
-                self.assertEqual(result.state, expected)
-                self.assertEqual(result.decisions[0].evidence_turns["1"], ["t2"] if expected == AnalysisState.SIGNAL else [])
-                if expected == AnalysisState.SIGNAL:
-                    self.assertEqual(result.signals[0].start, 2.)
-                    self.assertEqual(result.signals[0].speaker, "batch-0-S2")
-        self.assertEqual(len(self.jev_requests), 3)
-        self.assertEqual(len(self.alerts()), 1)
+        def jev(request):
+            body = json.loads(request.content)
+            self.assertEqual(body["state"]["current"]["text"], "[t0] ¿Has pensado en quitarte la vida?\n[t1] Sí.")
+            return httpx.Response(200, json=plain_answer(body["questions"], {
+                "t0": ("nivel_2", .96), "t1": ("nivel_2", .96),
+            }))
+
+        worker = self.worker()
+        worker.analyzer = JevAnalizador(self.settings, self.http_client(jev))
+        result = self.process(worker, replace(self.fragment, analysis_unit="fragment"))
+        self.assertEqual(result.state, AnalysisState.SIGNAL)
+        signal, = result.signals
+        self.assertEqual(signal.excerpt, "Sí.")
+        self.assertEqual(signal.context_before, "¿Has pensado en quitarte la vida?")
+        self.assertEqual(signal.start, 2.)
+
+    def test_long_passage_displays_verified_words_past_the_legacy_description_limit(self):
+        text = "Estaba mirando por la ventana " * 20 + "y he pensado en quitarme la vida."
+        self.transcript_results = [
+            {"type": "word", "start_time": 0., "end_time": 1., "alternatives": [{"content": text}]},
+        ]
+
+        def jev(request):
+            questions = json.loads(request.content)["questions"]
+            return httpx.Response(200, json=plain_answer(questions, {"t1": ("nivel_2", .9)}))
+
+        worker = self.worker()
+        worker.analyzer = JevAnalizador(self.settings, self.http_client(jev))
+        self.process(worker, replace(self.fragment, analysis_unit="fragment"))
+        alert, = self.alerts()
+        evidence, = alert["analisis"]["evidencias"]
+        self.assertEqual(evidence["texto"], "y he pensado en quitarme la vida.")
+        self.assertLessEqual(len(evidence["contexto_anterior"]), 300)
 
     def test_end_to_end_signal_typed_alert_and_delete(self):
         worker = self.worker()
@@ -577,6 +511,19 @@ class ContractTests(SimpleTestCase):
                 mutation(payload)
                 with self.assertRaises(ProviderError):
                     validate_response(payload, "jev-1.14.0")
+
+    def test_openrouter_evidence_falls_back_to_selected_choice_confidence(self):
+        from backend.apps.analysis.providers.jev_contract import localized_evidence
+
+        current = {"turns": [{"review_id": "t0", "review_levels": [7]}]}
+        key = "verificar_7_t0"
+        questions = {key: {"criteria": {"afirma": "", "descartar": ""}}}
+        for metrics, expected in (({"confidence": .9}, "confirmed"), ({}, "uncertain"),
+                                  ({"confidence": .99, "probabilities": {"afirma": .6, "descartar": .4}}, "uncertain")):
+            answers = {key: {"choice": "afirma", **metrics}}
+            turns, verdicts = localized_evidence(answers, questions, current)
+            self.assertEqual(verdicts["7"]["t0"], expected)
+            self.assertEqual(turns["7"], ["t0"] if expected == "confirmed" else [])
 
     def test_openrouter_dated_alias_and_optional_metrics(self):
         payload = answer(model="typesafe/jev-1.13-20260917")

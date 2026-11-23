@@ -31,6 +31,77 @@ function dateTime(value) {
     return value ? `${formatearFecha(value)} · ${formatearHora(value)}` : "No disponible";
 }
 
+function EvidenceMetadata({ evidence }) {
+    return (
+        <>
+            <p>Nivel {evidence.nivel_matriz} de la matriz · Intervalo {evidence.inicio}–{evidence.fin} s</p>
+            {evidence.plazo && <p>Plazo expresado en la frase: {evidence.plazo}</p>}
+            {evidence.puntaje != null && (
+                <p>Puntaje de la categoría {evidence.puntaje.toLocaleString("es-CL")} · Umbral {evidence.umbral?.toLocaleString("es-CL")}</p>
+            )}
+        </>
+    );
+}
+
+function FragmentEvidence({ analysis, alertIsTest, transcriptOpen, toggleTranscript, transcript }) {
+    const evidence = Array.isArray(analysis?.evidencias) ? analysis.evidencias : [];
+    const pending = Array.isArray(analysis?.evidencias_pendientes) ? analysis.evidencias_pendientes : [];
+    return (
+        <>
+            {analysis && evidence.length === 0 && (
+                <section className="alert-detail-section" aria-label="Evidencia de la señal">
+                    <h3>{analysis.categoria}</h3>
+                    <EvidenceMetadata evidence={analysis} />
+                    <p>Versión de las preguntas {analysis.version}</p>
+                </section>
+            )}
+            <section id="seccionTranscripcion" className="alert-detail-section" aria-labelledby="tituloTranscripcion">
+                <h3 id="tituloTranscripcion">{evidence.length ? "Evidencias del fragmento" : "Fragmento de transcripción"}</h3>
+                {alertIsTest && (
+                    <Button aria-expanded={transcriptOpen} aria-controls="detalleTranscripcion" onClick={toggleTranscript}>
+                        {transcriptOpen ? "Ocultar transcripción" : "Ver transcripción"}
+                    </Button>
+                )}
+                {evidence.length ? (
+                    <ol id="detalleTranscripcion" className="alert-evidence-list" hidden={alertIsTest && !transcriptOpen}>
+                        {evidence.map((item, index) => (
+                            <li key={`${item.inicio}-${item.fin}-${item.nivel_matriz}-${index}`}>
+                                <h4>{item.categoria}</h4>
+                                <EvidenceMetadata evidence={item} />
+                                <blockquote className="alert-detail-transcript">{item.texto}</blockquote>
+                                {(item.contexto_anterior || item.contexto_posterior) && (
+                                    <details className="alert-evidence-context">
+                                        <summary>Contexto cercano</summary>
+                                        {item.contexto_anterior && <p><strong>Antes:</strong> {item.contexto_anterior}</p>}
+                                        {item.contexto_posterior && <p><strong>Después:</strong> {item.contexto_posterior}</p>}
+                                    </details>
+                                )}
+                            </li>
+                        ))}
+                    </ol>
+                ) : (
+                    <p id="detalleTranscripcion" className="alert-detail-transcript" hidden={alertIsTest && !transcriptOpen}>
+                        {transcript.trim() ? transcript : "Esta alerta no tiene un fragmento de transcripción disponible."}
+                    </p>
+                )}
+                {pending.length > 0 && (
+                    <details className="alert-evidence-context">
+                        <summary>Tramos pendientes de verificar ({pending.length})</summary>
+                        <ul>
+                            {pending.map((item, index) => (
+                                <li key={`${item.start}-${item.end}-${index}`}>
+                                    {item.start}–{item.end} s · {item.code === "JEV_BELOW_THRESHOLD" ? "Bajo el umbral" : "Evidencia incierta"}
+                                </li>
+                            ))}
+                        </ul>
+                    </details>
+                )}
+                {evidence.length > 0 && <p>Versión de las preguntas {analysis.version}</p>}
+            </section>
+        </>
+    );
+}
+
 export default function AlertDetail({ id, onClose, returnFocusRef, evaluation, saving, onEvaluate }) {
     const closeRef = useRef(null);
     const [option, setOption] = useState("");
@@ -104,11 +175,6 @@ export default function AlertDetail({ id, onClose, returnFocusRef, evaluation, s
                     )}
                     {alert && (
                         <>
-                            {alert.hablante_no_confirmado === true && (
-                                <p className="alert-detail-note">
-                                    Hablante sin confirmar. Verifica quién hizo la afirmación al evaluar la alerta.
-                                </p>
-                            )}
                             <div className="alert-detail-grid">
                                 <DetailValue label="Box" id="detalleBox">{formatearBox(alert.box)}</DetailValue>
                                 <DetailValue label="Tipo de riesgo" id="detalleTipo">{formatearTipoRiesgo(alert.tipo_riesgo)}</DetailValue>
@@ -117,29 +183,8 @@ export default function AlertDetail({ id, onClose, returnFocusRef, evaluation, s
                                 <DetailValue label="Estado" id="detalleEstado">{pending ? "Pendiente" : obtenerEtiquetaEvaluacion(alert.estado_evaluacion)}</DetailValue>
                                 <DetailValue label="Sesión" id="detalleSesion">{alert.sesion_id || "—"}</DetailValue>
                             </div>
-                            {alert.analisis && (
-                                <section className="alert-detail-section" aria-label="Evidencia de la señal">
-                                    <h3>{alert.analisis.categoria}</h3>
-                                    <p>Nivel {alert.analisis.nivel_matriz} de la matriz · Intervalo {alert.analisis.inicio}–{alert.analisis.fin} s</p>
-                                    {alert.analisis.plazo && <p>Plazo expresado en la frase: {alert.analisis.plazo}</p>}
-                                    {alert.analisis.puntaje != null && (
-                                        <p>Puntaje de la categoría {alert.analisis.puntaje.toLocaleString("es-CL")} · Umbral {alert.analisis.umbral?.toLocaleString("es-CL")}</p>
-                                    )}
-                                    <p>Versión de las preguntas {alert.analisis.version}</p>
-                                </section>
-                            )}
-                            <section id="seccionTranscripcion" className="alert-detail-section" aria-labelledby="tituloTranscripcion">
-                                <h3 id="tituloTranscripcion">Fragmento de transcripción</h3>
-                                {alert.es_prueba && (
-                                    <Button aria-expanded={transcriptOpen} aria-controls="detalleTranscripcion"
-                                        onClick={() => setTranscriptOpen(open => !open)}>
-                                        {transcriptOpen ? "Ocultar transcripción" : "Ver transcripción"}
-                                    </Button>
-                                )}
-                                <p id="detalleTranscripcion" className="alert-detail-transcript" hidden={alert.es_prueba && !transcriptOpen}>
-                                    {transcript.trim() ? transcript : "Esta alerta no tiene un fragmento de transcripción disponible."}
-                                </p>
-                            </section>
+                            <FragmentEvidence analysis={alert.analisis} alertIsTest={alert.es_prueba} transcript={transcript}
+                                transcriptOpen={transcriptOpen} toggleTranscript={() => setTranscriptOpen(open => !open)} />
                             {canEvaluate && (
                                 <form id="formularioEvaluacion" className="alert-detail-section" onSubmit={submit}>
                                     <fieldset>

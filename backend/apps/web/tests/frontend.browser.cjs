@@ -346,7 +346,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         await page.waitForURL(`${base}/`);
         assert.equal(await page.evaluate(() => localStorage.getItem('access_token')), null);
 
-        const alerta = { ...cuerpo.data.items[0], estado_evaluacion: 'pendiente', evaluacion: null };
+        const alerta = { ...cuerpo.data.items[0], nivel_severidad: 3, semaforo: 'ALTO', estado_evaluacion: 'pendiente', evaluacion: null };
         let evaluacion = null;
         let estadoEvaluacion = 503;
         let estadoDetalle = 503;
@@ -363,7 +363,16 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
                 data = evaluacion;
             } else if (url.pathname.endsWith('/' + alerta.alerta_id)) {
                 if (estadoDetalle !== 200) return route.fulfill({ status: estadoDetalle });
-                data = { ...alerta, hablante_no_confirmado: true, descripcion: 'Afirmación de prueba.' };
+                data = { ...alerta, hablante_no_confirmado: true, descripcion: 'Resumen previo.', analisis: {
+                    version: 'bloque-texto-1',
+                    evidencias: [
+                        { categoria: 'Deseo pasivo de muerte', nivel_matriz: 1, inicio: 2, fin: 3, puntaje: .84, umbral: .55,
+                            texto: 'Primera afirmación de prueba.', contexto_anterior: 'Pregunta previa redactada.' },
+                        { categoria: 'Ideación con alguna intención', nivel_matriz: 4, inicio: 11, fin: 16, puntaje: .91, umbral: .55,
+                            texto: `${'texto '.repeat(102)}Segunda afirmación de prueba.`, plazo: 'mañana' },
+                    ],
+                    evidencias_pendientes: [{ start: 22, end: 24, code: 'JEV_BELOW_THRESHOLD' }],
+                } };
                 if (evaluacion) Object.assign(data, { evaluacion, estado_evaluacion: 'correcta' });
             } else {
                 if (url.searchParams.get('limit') === '10') consultasHistorial.push(url.searchParams);
@@ -419,14 +428,28 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         assert.equal(await avisoHablante.count(), 0);
         estadoDetalle = 200;
         await detalle.getByRole('button', { name: 'Reintentar', exact: true }).press('Enter');
-        await avisoHablante.waitFor();
-        assert.equal(await detalle.locator('#detalleTranscripcion').innerText(), 'Afirmación de prueba.');
+        const evidencias = detalle.getByRole('heading', { name: 'Evidencias del fragmento' });
+        await evidencias.waitFor();
+        assert.equal(await avisoHablante.count(), 0);
+        const citas = detalle.locator('#detalleTranscripcion blockquote');
+        assert.equal(await citas.count(), 2);
+        assert.equal(await citas.first().innerText(), 'Primera afirmación de prueba.');
+        assert.match(await citas.last().innerText(), /Segunda afirmación de prueba\.$/);
+        const contexto = detalle.getByText('Contexto cercano', { exact: true });
+        await contexto.press('Enter');
+        await detalle.getByText('Pregunta previa redactada.', { exact: false }).waitFor();
+        await contexto.press('Enter');
+        const tramosPendientes = detalle.getByText('Tramos pendientes de verificar (1)', { exact: true });
+        await tramosPendientes.press('Enter');
+        await detalle.getByText('22–24 s · Bajo el umbral', { exact: true }).waitFor();
+        await tramosPendientes.press('Enter');
         for (const width of [375, 1280]) {
             await page.setViewportSize({ width, height: 720 });
             assert.equal(await detalle.evaluate(dialog => dialog.scrollWidth === dialog.clientWidth), true);
-            assert.equal(await avisoHablante.isVisible(), true);
+            assert.equal(await citas.last().evaluate(element => element.scrollWidth === element.clientWidth), true);
             if (process.env.FRONTEND_SCREENSHOT_DIR) {
-                await detalle.screenshot({ path: join(process.env.FRONTEND_SCREENSHOT_DIR, `hablante-sin-confirmar-${width}.png`) });
+                await evidencias.scrollIntoViewIfNeeded();
+                await detalle.screenshot({ path: join(process.env.FRONTEND_SCREENSHOT_DIR, `evidencias-${width}.png`) });
             }
         }
         const guardar = page.locator('#guardarEvaluacion');
@@ -434,8 +457,15 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 
         const radioConFoco = page.locator('input[name="evaluacion"]:focus');
         const cerrar = page.getByRole('dialog').getByRole('button', { name: 'Cerrar', exact: true });
-        await cerrar.focus();
-        await page.keyboard.press('Tab');
+        async function enfocarOpciones() {
+            await cerrar.focus();
+            for (const control of [contexto, tramosPendientes]) {
+                await page.keyboard.press('Tab');
+                assert.equal(await control.evaluate(element => element === document.activeElement), true);
+            }
+            await page.keyboard.press('Tab');
+        }
+        await enfocarOpciones();
         assert.equal(await radioConFoco.inputValue(), 'correcta');
         await page.keyboard.press('Tab');
         assert.equal(await guardar.evaluate(boton => boton === document.activeElement), true);
@@ -445,8 +475,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         await page.locator('input[name="evaluacion"][value="correcta"]').check();
         await page.keyboard.press('ArrowRight');
         assert.equal(await page.locator('input[name="evaluacion"][value="falso_positivo"]').isChecked(), true);
-        await cerrar.focus();
-        await page.keyboard.press('Tab');
+        await enfocarOpciones();
         assert.equal(await radioConFoco.inputValue(), 'falso_positivo');
         await page.keyboard.press('ArrowLeft');
         await guardar.click();
