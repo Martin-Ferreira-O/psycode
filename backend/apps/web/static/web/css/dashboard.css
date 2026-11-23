@@ -1,140 +1,3 @@
-.tarjetas-resumen {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 20px;
-    margin-bottom: 34px;
-}
-
-.tarjeta-resumen {
-    min-height: 132px;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    padding: 25px 27px;
-    border: 1px solid #dce3eb;
-    border-radius: 16px;
-    background: #ffffff;
-    color: #172033;
-    text-decoration: none;
-    box-shadow: 0 5px 16px rgba(15, 35, 60, 0.05);
-    transition:
-        border-color 0.18s ease,
-        box-shadow 0.18s ease,
-        transform 0.18s ease;
-}
-
-.tarjeta-resumen:hover {
-    transform: translateY(-2px);
-    border-color: #c6d3e0;
-    box-shadow: 0 9px 24px rgba(15, 35, 60, 0.09);
-}
-
-.resumen-etiqueta {
-    display: block;
-    color: #53687d;
-    font-family: "Segoe UI", Arial, sans-serif;
-    font-size: 16px;
-    font-weight: 600;
-}
-
-.resumen-numero {
-    display: block;
-    margin-top: 11px;
-    color: #102641;
-    font-family: "Segoe UI", Arial, sans-serif;
-    font-size: 40px;
-    font-weight: 700;
-    line-height: 1;
-}
-
-.tarjeta-resumen {
-    position: relative;
-    overflow: hidden;
-}
-
-.tarjeta-total {
-    background: linear-gradient(
-        135deg,
-        #ffffff 55%,
-        #edf5ff 100%
-    );
-    border-color: #c7dbf3;
-}
-
-.tarjeta-pendientes {
-    background: linear-gradient(
-        135deg,
-        #ffffff 55%,
-        #fff8eb 100%
-    );
-    border-color: #ead8b5;
-}
-
-.tarjeta-revisadas {
-    background: linear-gradient(
-        135deg,
-        #ffffff 55%,
-        #eef9f3 100%
-    );
-    border-color: #c2dece;
-}
-
-.tarjeta-total::before,
-.tarjeta-pendientes::before,
-.tarjeta-revisadas::before {
-    content: "";
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 4px;
-    height: 100%;
-}
-
-.tarjeta-total::before {
-    background: #4b86bd;
-}
-
-.tarjeta-pendientes::before {
-    background: #d5a04b;
-}
-
-.tarjeta-revisadas::before {
-    background: #5da77c;
-}
-
-.tarjeta-total:hover {
-    border-color: #9ebfdf;
-}
-
-.tarjeta-pendientes:hover {
-    border-color: #d8bc83;
-}
-
-.tarjeta-revisadas:hover {
-    border-color: #94c5a9;
-}
-
-@media (max-width: 1200px) {
-
-    .tarjetas-resumen {
-        gap: 16px;
-    }
-}
-
-@media (max-width: 700px) {
-    .tarjetas-resumen {
-        grid-template-columns: 1fr;
-    }
-
-    .tarjeta-resumen {
-        min-height: 110px;
-    }
-
-    .resumen-numero {
-        font-size: 36px;
-    }
-}
-
 .resumen-dashboard {
     display: grid;
     grid-template-columns: minmax(300px, 0.85fr) minmax(480px, 1.65fr);
@@ -209,114 +72,134 @@
     line-height: 1.4;
 }
 
-.panel-indicadores .tarjetas-resumen {
+.resumen-alertas {
     display: grid;
-    grid-template-columns: 1fr;
-    gap: 13px;
-    margin: 0;
-}
-
-.panel-indicadores .tarjeta-resumen {
-    position: relative;
-    min-height: 102px;
-    overflow: visible;
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    justify-content: flex-start;
+    justify-items: center;
     gap: 16px;
-    box-sizing: border-box;
-    padding: 17px 19px;
-    border-radius: 13px;
-    box-shadow: none;
-    cursor: default;
-    transform: none;
 }
 
-.panel-indicadores .tarjeta-resumen:hover {
-    transform: none;
-    box-shadow: 0 2px 7px rgba(15, 35, 60, 0.04);
+.resumen-alertas-anillo {
+    position: relative;
+    width: min(100%, 220px);
+    container-type: inline-size;
 }
 
-.tarjeta-icono {
-    display: grid;
-    width: 47px;
-    height: 47px;
-    flex: 0 0 47px;
-    place-items: center;
-    border-radius: 12px;
+.resumen-alertas-anillo svg {
+    display: block;
+    width: 100%;
+    height: auto;
 }
 
-.tarjeta-icono svg {
-    width: 24px;
-    height: 24px;
+.resumen-alertas-fondo,
+.resumen-alertas-segmento {
     fill: none;
-    stroke: currentColor;
-    stroke-width: 1.8;
-    stroke-linecap: round;
-    stroke-linejoin: round;
+    stroke-width: 18;
 }
 
-.tarjeta-icono-total {
-    background: #e5f0fa;
-    color: #3975a9;
+.resumen-alertas-fondo {
+    stroke: #edf2f6;
 }
 
-.tarjeta-icono-pendientes {
-    background: #fff2d9;
-    color: #b77c21;
+.resumen-alertas-pendientes {
+    --segmento: #f8cc64;
+    --segmento-activo: #c78917;
+    --leyenda-fondo: #fffbf3;
+    --leyenda-borde: #eadfc8;
 }
 
-.tarjeta-icono-revisadas {
-    background: #e5f4eb;
-    color: #438764;
+.resumen-alertas-revisadas {
+    --segmento: #58c396;
+    --segmento-activo: #318260;
+    --leyenda-fondo: #f6fbf8;
+    --leyenda-borde: #d3e7dc;
 }
 
-.tarjeta-resumen-datos {
-    min-width: 0;
-    flex: 1;
+.resumen-alertas-segmento {
+    stroke: var(--segmento);
+    pointer-events: visibleStroke;
+    cursor: pointer;
 }
 
-.panel-indicadores .resumen-etiqueta {
+.resumen-alertas-segmento[data-active="true"] {
+    stroke: var(--segmento-activo);
+}
+
+.resumen-alertas-centro {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    align-content: center;
+    justify-items: center;
+    gap: 5px;
+    padding-inline: 17%;
+    text-align: center;
+    pointer-events: none;
+}
+
+.resumen-alertas-centro strong {
+    max-width: 100%;
+    color: #102641;
+    font-size: clamp(1.5rem, 19cqi, 2.625rem);
+    line-height: 1;
+    overflow-wrap: anywhere;
+}
+
+.resumen-alertas-centro > span,
+.resumen-alertas-error {
     color: #52677c;
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 600;
 }
 
-.panel-indicadores .resumen-numero {
-    margin-top: 5px;
-    font-size: 31px;
-    line-height: 1;
+.resumen-alertas-error {
+    margin: 0;
+    text-align: center;
 }
 
-.resumen-descripcion {
-    display: block;
-    margin-top: 5px;
-    color: #8291a1;
-    font-family: "Segoe UI", Arial, sans-serif;
-    font-size: 12px;
+.resumen-alertas-leyenda {
+    display: grid;
+    width: min(100%, 340px);
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 115px), 1fr));
+    gap: 8px;
 }
 
-.panel-indicadores .tarjeta-total {
-    background: #f7fbff;
-    border-color: #d4e4f2;
+.resumen-alertas-leyenda button {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 44px;
+    padding: 7px 9px;
+    border: 1px solid var(--leyenda-borde);
+    border-radius: 10px;
+    background: var(--leyenda-fondo);
+    color: #334b62;
+    font: 600 12px "Segoe UI", Arial, sans-serif;
+    text-align: left;
+    cursor: pointer;
 }
 
-.panel-indicadores .tarjeta-pendientes {
-    background: #fffbf3;
-    border-color: #eadfc8;
+.resumen-alertas-leyenda button[data-active="true"] {
+    border-color: var(--segmento-activo);
 }
 
-.panel-indicadores .tarjeta-revisadas {
-    background: #f6fbf8;
-    border-color: #d3e7dc;
+.resumen-alertas-leyenda button:focus-visible {
+    outline: 2px solid #326793;
+    outline-offset: 2px;
 }
 
-.panel-indicadores .tarjeta-total::before,
-.panel-indicadores .tarjeta-pendientes::before,
-.panel-indicadores .tarjeta-revisadas::before {
-    width: 3px;
-    border-radius: 16px 0 0 16px;
+.resumen-alertas-muestra {
+    width: 9px;
+    height: 9px;
+    flex: 0 0 9px;
+    border-radius: 50%;
+    background: var(--segmento);
+}
+
+.resumen-alertas-leyenda strong {
+    margin-left: auto;
+    color: #102641;
+    font-size: 15px;
+    overflow-wrap: anywhere;
 }
 
 .panel-grafico-dashboard {
@@ -515,38 +398,9 @@
         grid-template-columns: 1fr;
     }
 
-    .panel-indicadores .tarjetas-resumen {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
-
-    .panel-indicadores .tarjeta-resumen {
-        min-height: 115px;
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 10px;
-    }
-
-    .tarjeta-icono {
-        width: 40px;
-        height: 40px;
-        flex-basis: 40px;
-    }
-
-    .tarjeta-icono svg {
-        width: 21px;
-        height: 21px;
-    }
 }
 
 @media (max-width: 800px) {
-    .panel-indicadores .tarjetas-resumen {
-        grid-template-columns: 1fr;
-    }
-
-    .panel-indicadores .tarjeta-resumen {
-        flex-direction: row;
-        align-items: center;
-    }
 
     .cabecera-grafico-dashboard {
         flex-direction: column;
@@ -630,19 +484,6 @@
     .cabecera-grafico-dashboard h2 {
         font-size: 18px;
         line-height: 1.25;
-    }
-
-    .tarjetas-resumen {
-        grid-template-columns: 1fr;
-
-        gap: 12px;
-    }
-
-    .tarjeta-resumen {
-        width: 100%;
-        min-width: 0;
-
-        box-sizing: border-box;
     }
 
     .grafico-dashboard {
