@@ -114,7 +114,41 @@
                 "fin": {"bsonType": ["double", "int", "long"], "minimum": 0},
                 "puntaje": {"bsonType": ["double", "int", "null"], "minimum": 0, "maximum": 1},
                 "umbral": {"bsonType": ["double", "int", "null"], "minimum": 0, "maximum": 1},
-                "version": {"bsonType": "string", "maxLength": 64}
+                "version": {"bsonType": "string", "maxLength": 64},
+                "evidencias": {
+                  "bsonType": "array",
+                  "items": {
+                    "bsonType": "object",
+                    "additionalProperties": false,
+                    "required": ["categoria", "nivel_matriz", "inicio", "fin", "puntaje", "umbral", "texto", "contexto_anterior", "contexto_posterior"],
+                    "properties": {
+                      "categoria": {"bsonType": "string", "maxLength": 100},
+                      "plazo": {"enum": [null, "ahora", "ahora mismo", "hoy", "mañana", "esta noche"]},
+                      "nivel_matriz": {"bsonType": "int", "minimum": 1, "maximum": 7},
+                      "inicio": {"bsonType": ["double", "int", "long"], "minimum": 0},
+                      "fin": {"bsonType": ["double", "int", "long"], "minimum": 0},
+                      "puntaje": {"bsonType": ["double", "int", "null"], "minimum": 0, "maximum": 1},
+                      "umbral": {"bsonType": ["double", "int", "null"], "minimum": 0, "maximum": 1},
+                      "texto": {"bsonType": "string"},
+                      "contexto_anterior": {"bsonType": "string"},
+                      "contexto_posterior": {"bsonType": "string"}
+                    }
+                  }
+                },
+                "evidencias_pendientes": {
+                  "bsonType": "array",
+                  "items": {
+                    "bsonType": "object",
+                    "additionalProperties": false,
+                    "required": ["code", "start", "end", "matrix_level"],
+                    "properties": {
+                      "code": {"bsonType": "string", "maxLength": 64},
+                      "start": {"bsonType": ["double", "int", "long"], "minimum": 0},
+                      "end": {"bsonType": ["double", "int", "long"], "minimum": 0},
+                      "matrix_level": {"bsonType": ["int", "null"], "minimum": 1, "maximum": 7}
+                    }
+                  }
+                }
               }
             },
             "descripcion": {
