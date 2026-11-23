@@ -704,6 +704,7 @@ Sin parámetros ni cuerpo. Ejemplo pendiente, respuesta 200:
     "evaluacion": null,
     "sesion_id": "33333333-3333-4333-8333-333333333333",
     "descripcion": null,
+    "hablante_no_confirmado": false,
     "trazabilidad": {
       "registrada_en": "2026-09-12T14:05:23Z",
       "actualizada_en": "2026-09-12T14:05:23Z",
@@ -717,6 +718,7 @@ Sin parámetros ni cuerpo. Ejemplo pendiente, respuesta 200:
 
 Si evaluada, evaluacion contiene Evaluation y estado correspondiente. Error específico: `404 ALERTA_NO_ENCONTRADA`.
 `descripcion` representa únicamente el fragmento relevante de transcripción que originó la posible alerta. No corresponde a la transcripción completa de la sesión ni al audio original. El campo se entrega solo en el endpoint de detalle y no forma parte del listado general de alertas.
+`hablante_no_confirmado` es `true` en alertas derivadas de evidencia textual sin rol confirmado. El detalle y el correo solicitan revisar la atribución de la afirmación.
 
 ### POST /api/v1/alerts/{alerta_id}/evaluacion
 

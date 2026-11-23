@@ -52,6 +52,70 @@ def literal_candidates(text):
     return found
 
 
+_SELF_HARM_ACTION = r"(?:suicidarme|matarme|quitarme la vida|(?:acabar|terminar) con mi vida)"
+_PASSIVE_WISH = re.compile(
+    r"\b(?:ojala (?:que )?no (?:despertar|despierte|existir|exista|estar viv[oa])|"
+    r"(?:preferiria|quisiera|desearia|me gustaria) (?:no (?:despertar|existir|estar viv[oa]|seguir viv[oa])|"
+    r"(?:estar|seguir) muert[oa]|morir(?:me)?)|(?:quiero|quisiera) dejar de (?:existir|vivir)|"
+    r"(?:quiero|deseo) (?:morir(?:me)?|estar muert[oa])|no (?:quiero|deseo) (?:seguir )?viv(?:ir|iendo))\b"
+)
+_ACTIVE_THOUGHT = r"(?:pienso|he pensado|estoy pensando|sigo pensando) (?:en )?"
+_ACTIVE_INTENT = r"(?:voy a|he decidido|estoy decidid[oa] a|tengo (?:la )?intencion de) "
+_REVIEW_PATTERNS = {
+    2: re.compile(rf"\b(?:{_ACTIVE_THOUGHT}|(?:tengo (?:ganas|pensamientos) de|quiero|quisiera|deseo|me gustaria) ){_SELF_HARM_ACTION}\b|"
+                  r"\b(?:me (?:quiero|deseo) (?:matar|suicidar|quitar la vida)|tengo pensamientos suicidas)\b"),
+    3: re.compile(rf"\b(?:{_ACTIVE_THOUGHT}|(?:se|ya se|he decidido) )"
+                  rf"(?:como|(?:una manera|una forma|la forma) de|el metodo para) {_SELF_HARM_ACTION}\b"),
+    4: re.compile(rf"\b{_ACTIVE_INTENT}{_SELF_HARM_ACTION}\b|\bme voy a (?:matar|suicidar|quitar la vida)\b"),
+    5: re.compile(rf"\btengo (?:un |el |mi )?plan (?:para|de) {_SELF_HARM_ACTION}\b"),
+    6: re.compile(rf"\b(?:he preparado|estoy preparando|prepare|hice (?:los )?preparativos|"
+                  rf"he hecho (?:los )?preparativos)\b[^.!?]{{0,60}}\bpara {_SELF_HARM_ACTION}\b"),
+    7: re.compile(rf"\b(?:acabo de intentar|hoy he intentado|hoy empece a) {_SELF_HARM_ACTION}\b|"
+                  rf"\b(?:he intentado|empece a) {_SELF_HARM_ACTION} hoy\b"),
+}
+_REVIEW_EXCLUDED_CONTEXT = re.compile(
+    r"['‘’‹›]|\b(?:ejemplos?|supongamos|imaginemos|imagina(?:te)?|digamos que|hipoteticamente|"
+    r"en un caso hipotetico|(?:dice|dijo|decia|dije|diria|dijera|conto|cito|repito|niego)|"
+    r"ayer|hace (?:tiempo|\w+ (?:dias|semanas|meses|anos)|semanas|meses|anos)|"
+    r"la semana pasada|en (?:19|20)\d{2}|en aquel (?:entonces|momento)|"
+    r"cuando (?:era|tenia|estaba)|ya no|sin (?:ganas|deseo|intencion|pensar)|"
+    r"matar(?:me)? (?:de risa|trabajando|estudiando|de hambre))\b"
+)
+_REVIEW_QUOTE_REQUEST = re.compile(
+    r"\b(?:supongamos|imaginemos|simulemos|"
+    r"(?:en|durante) (?:una|la|esta) simulacion|"
+    r"(?:hagamos|practiquemos|ensayemos) (?:un |una )?(?:simulacion|juego de roles|role[ -]?play)|"
+    r"(?:repite|repita|repeti) (?:esta frase|la frase|lo siguiente|despues de mi|conmigo|mis palabras)|"
+    r"(?:lee|lea) (?:esta frase|la frase|lo siguiente|en voz alta)|"
+    r"(?:actua|actue) como|como si fueras|"
+    r"(?:lo|algo) que (?:diria|dijera) (?:otra persona|una persona|alguien))\b"
+)
+
+
+def requests_non_literal_speech(text):
+    """Recognize an explicit request to quote, repeat, or simulate speech."""
+    return bool(_REVIEW_QUOTE_REQUEST.search(normalize(text)))
+
+
+def unattributed_levels(text):
+    """High-specificity self-statements that can be checked without a role."""
+    if set(context_flags(text)).intersection({"pregunta", "cita", "referencia_a_terceros", "antecedente_temporal"}):
+        return ()
+    normalized = normalize(text)
+    if (_REVIEW_EXCLUDED_CONTEXT.search(normalized) or _REVIEW_QUOTE_REQUEST.search(normalized)
+            or re.search(r"\bsi\b|:", text, re.IGNORECASE)):
+        return ()
+    passive = bool(_PASSIVE_WISH.search(normalized))
+    # A negation inside an affirmative passive wish is part of the evidence.
+    if re.search(r"\b(?:no|nunca|jamas|tampoco|ni)\b", _PASSIVE_WISH.sub(" ", normalized)):
+        return ()
+    levels = [1] if passive else []
+    for level, pattern in _REVIEW_PATTERNS.items():
+        if pattern.search(normalized) and (level != 5 or 4 in levels or re.search(r"\bvoy a hacerlo\b", normalized)):
+            levels.append(level)
+    return tuple(levels)
+
+
 def explicit_denial(text):
     t = normalize(text)
     return bool(re.search(r"\b(?:no|nunca|jamas) (?:he |estoy |tengo |quiero |pienso |pensado |en |pensando |pensamientos |de |ganas |intencion |deseo ){0,7}(?:suicidar|suicidio|matarme|quitarme la vida)", t))

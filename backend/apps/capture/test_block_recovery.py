@@ -1,11 +1,13 @@
 """Una decisión conjunta no se repite al recuperar su entrega."""
+from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import Mock
 from uuid import uuid4
 
 from django.test import SimpleTestCase
-from backend.apps.analysis.domain import Fragment, JevDecision
+from backend.apps.alerts.domain import ORIGEN_HABLANTE_NO_CONFIRMADO
+from backend.apps.analysis.domain import AnalysisState, Fragment, JevDecision
 from backend.apps.analysis.errors import AnalysisRetry, SubmissionUncertain
 from backend.apps.analysis.services import AnalysisService
 from backend.common.errors import PersistenceUnavailable
@@ -84,3 +86,35 @@ class BlockRecoveryTests(SimpleTestCase):
         synthetic, context = self.resume()
         self.assertEqual(len(synthetic.signals), 1)
         self.assertEqual(len(context["test_alerts"]), 1)
+
+    def test_saved_review_response_resumes_without_resubmission_or_duplicate_alert(self):
+        self.checkpoint.data["roles"] = {}
+        self.checkpoint.data["utterances"] = [
+            {"text": "Me quiero matar.", "start": 1., "end": 2., "speaker": None, "attribution": "unknown"},
+        ]
+        self.analyzer.evaluate.return_value = JevDecision(
+            "simulated", "afirmacion_propia", (.1, .1, .9, .1, .1, .1, .1, .1), 10, 1, {"2": ["t0"]},
+        )
+        self.checkpoint.interrupt = True
+        with self.assertRaises(RuntimeError):
+            self.resume()
+        recovered, _ = self.resume()
+        delivered, _ = self.resume()
+        self.assertEqual(recovered.state, AnalysisState.SIGNAL)
+        self.assertEqual(recovered.signals, delivered.signals)
+        self.assertIsNone(recovered.signals[0].speaker)
+        self.analyzer.evaluate.assert_called_once()
+        self.alerts.register_alert.assert_called_once()
+        self.assertEqual(self.alerts.register_alert.call_args.kwargs["origen"], ORIGEN_HABLANTE_NO_CONFIRMADO)
+
+    def test_saved_legacy_response_does_not_create_unattributed_evidence(self):
+        self.checkpoint.data["roles"] = {}
+        self.checkpoint.data["jev_pending"] = {
+            "request_id": "legacy-request", "questions_version": "bloque-signals-3",
+        }
+        self.checkpoint.data["jev_response"] = asdict(self.analyzer.evaluate.return_value)
+        result, context = self.resume()
+        self.assertEqual(result.state, AnalysisState.INDETERMINATE)
+        self.assertEqual(context["block_result"]["questions_version"], "bloque-signals-3")
+        self.analyzer.evaluate.assert_not_called()
+        self.alerts.register_alert.assert_not_called()

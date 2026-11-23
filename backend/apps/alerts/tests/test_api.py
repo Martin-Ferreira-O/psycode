@@ -10,14 +10,14 @@ from django.test import SimpleTestCase
 from rest_framework.test import APIClient
 
 from backend.apps.alerts.documents import alerta_a_documento
-from backend.apps.alerts.domain import ORIGEN_PRUEBA_AUDIO, alerta_con_evaluacion, evaluacion_nueva
+from backend.apps.alerts.domain import ORIGEN_HABLANTE_NO_CONFIRMADO, ORIGEN_PRUEBA_AUDIO, alerta_con_evaluacion, evaluacion_nueva
 from backend.apps.alerts.exceptions import EvaluationAlreadyRegistered
 from backend.apps.alerts.ports import AlertQueryFilters
 from backend.apps.alerts.repositories import AlertsRepository
 from backend.apps.alerts.serializers import AlertQueryFilterSerializer, AlertaDetailSerializer, AlertaListItemSerializer
 from backend.apps.alerts.services import AlertsService
 
-from .test_persistence import alta_pendiente
+from .test_persistence import FakeDatabase, alta_pendiente
 
 
 class AlertDateTests(SimpleTestCase):
@@ -228,6 +228,21 @@ class AlertEvaluationApiTests(SimpleTestCase):
                 username="psicologo",
             )
         )
+
+    def test_detalle_identifica_incertidumbre_desde_la_alerta_almacenada(self):
+        for origin, expected in ((ORIGEN_HABLANTE_NO_CONFIRMADO, True), (ORIGEN_PRUEBA_AUDIO, False)):
+            with self.subTest(origin=origin):
+                store = AlertsRepository(FakeDatabase())
+                alert = alta_pendiente(origen=origin, descripcion="Texto redactado de la afirmación.")
+                store.insert_alert(alert)
+                with patch("backend.apps.alerts.views.get_service", return_value=AlertsService(store)):
+                    response = self.client.get(f"/api/v1/alerts/{alert.alerta_id}")
+
+                self.assertEqual(response.status_code, 200, response.content)
+                detail = response.data["data"]
+                self.assertIs(detail["hablante_no_confirmado"], expected)
+                self.assertIs(detail["es_prueba"], not expected)
+                self.assertEqual(detail["descripcion"], alert.descripcion)
 
     def test_post_registra_evaluacion_con_usuario_autenticado(self):
         momento = datetime(2026, 9, 12, 15, 10, tzinfo=timezone.utc)

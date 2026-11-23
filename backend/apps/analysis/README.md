@@ -26,13 +26,20 @@ de voz. Los tiempos se conservan en el trabajador para verificar evidencia.
 los niveles 1 y 2 en la misma solicitud. Esto permite verificar afirmaciones
 indirectas que se entienden por el diálogo. El trabajador comprueba la atribución
 del turno y conserva los puntajes en `FragmentJob.checkpoint.block_result`.
-Las alertas clínicas requieren un rol de paciente confirmado. En los clips de
-diagnóstico con varias voces, JEV identifica al paciente simulado antes de
-aceptar el turno seleccionado como evidencia.
+En los clips de diagnóstico con varias voces, JEV identifica al paciente
+simulado antes de aceptar el turno seleccionado como evidencia. Para los
+bloques clínicos, `bloque-signals-4` admite además turnos con hablante sin
+confirmar. El texto debe expresar explícitamente la señal en primera persona en
+un solo turno. Las peticiones de cita o simulación en el turno previo excluyen
+esa respuesta como evidencia. Se requiere que JEV seleccione el turno con soporte de al menos
+`.75`, confirme el contexto afirmativo y alcance el umbral operativo de la señal.
+La alerta resultante queda pendiente de revisión y señala la incertidumbre del
+hablante en su trazabilidad.
 
 La cola durable puede procesar un bloque mientras otro queda en revisión. Los
 trabajos por intervención conservan su dependencia del contexto anterior. Se
-reutilizan las respuestas JEV guardadas y los envíos inciertos requieren revisión.
+reutilizan las respuestas JEV guardadas con las reglas de su versión y los
+envíos inciertos requieren revisión. Los trabajos completados conservan su resultado.
 
 `JEV_BLOCK_MAX_CHARS` limita el estado enviado a 262144 caracteres por defecto.
 Ante un rechazo explícito por contexto, el cliente directo de Typesafe prueba

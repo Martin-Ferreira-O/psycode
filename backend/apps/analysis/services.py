@@ -6,7 +6,7 @@ import re
 from threading import Lock
 from uuid import NAMESPACE_URL, uuid4, uuid5
 
-from backend.apps.alerts.domain import DESCRIPCION_MAX, ORIGEN_PRUEBA_AUDIO
+from backend.apps.alerts.domain import DESCRIPCION_MAX, ORIGEN_HABLANTE_NO_CONFIRMADO, ORIGEN_PRUEBA_AUDIO
 from backend.apps.alerts.exceptions import AlertAlreadyExists
 from backend.common.errors import PersistenceUnavailable
 from backend.common.processing_models import JEV_DEFAULT_THRESHOLD
@@ -14,10 +14,15 @@ from .domain import AnalysisContextLost, AnalysisResult, AnalysisState, Fragment
 from .errors import AnalysisRetry, JevContextLimit, ProviderError, SubmissionUncertain
 from .ports import AnalizadorDeSenales, FragmentLedger, TechnicalAudit, Transcriptor
 from .privacy import redact
-from .rules import align_words, context_flags, evidence_dimensions, jev_candidates, literal_candidates
-from .providers.jev_contract import BLOCK_QUESTIONS_VERSION
+from .rules import (
+    align_words, context_flags, evidence_dimensions, jev_candidates, literal_candidates,
+    requests_non_literal_speech, unattributed_levels,
+)
+from .providers.jev_contract import BLOCK_QUESTIONS_VERSION, LEGACY_BLOCK_QUESTIONS_VERSION
 
 MATRIX = json.loads(Path(__file__).with_name("matrix.json").read_text(encoding="utf-8"))
+BLOCK_SENTENCE_END = re.compile(r"[.!?…][\s\"»”]*$")
+BLOCK_TURN_GAP = 1.2
 
 
 def redact_for_jev(text, fragment, secrets=(), terms=()):
@@ -128,8 +133,8 @@ class AnalysisService:
             start, end = word["start"] + origin, word["end"] + origin
             if (items and items[-1]["speaker"] == word["speaker"]
                     and items[-1]["attribution"] == attribution
-                    and not re.search(r"[.!?…][\s\"»”]*$", items[-1]["text"])
-                    and start - items[-1]["end"] < 1.2):
+                    and not BLOCK_SENTENCE_END.search(items[-1]["text"])
+                    and start - items[-1]["end"] < BLOCK_TURN_GAP):
                 items[-1]["text"] += word["text"]
                 items[-1]["end"] = max(items[-1]["end"], end)
             else:
@@ -144,61 +149,106 @@ class AnalysisService:
         role = roles.get(speaker, "unknown") if speaker is not None else "unknown"
         return role if role in {"patient", "professional", "unknown"} else "unknown"
 
-    def _block_current(self, fragment, utterances, roles, model_roles):
+    def _block_current(self, fragment, utterances, roles, model_roles, review_turns=None):
         turns, aliases, speaker_roles = [], {}, {}
+        review_turns = review_turns or {}
         for index, item in enumerate(utterances):
             speaker = item["speaker"]
+            turn_id = f"t{index}"
             turn = {"text": item["text"]}
             if item["attribution"] == "assigned" and speaker is not None:
                 alias = aliases.setdefault(speaker, f"voz{len(aliases) + 1}")
                 speaker_roles[alias] = self._confirmed_role(speaker, model_roles)
                 turn["speaker"] = alias
                 if self._eligible_block_turn(fragment, item, roles):
-                    turn["id"] = f"t{index}"
+                    turn["id"] = turn_id
             else:
                 turn["attribution"] = item["attribution"]
+            if turn_id in review_turns:
+                turn.update(review_id=turn_id, review_levels=review_turns[turn_id])
             turns.append(turn)
         return {"analysis_unit": "fragment", "speaker_roles": speaker_roles, "turns": turns}
 
+    @staticmethod
+    def _owns_block_turn(fragment, item):
+        return (fragment.new_audio_start_sample is None
+                or (item["start"] + item["end"]) / 2 >= fragment.new_audio_start_sample / 16000)
+
     def _eligible_block_turn(self, fragment, item, roles):
         if (self._confirmed_role(item["speaker"], roles) != "patient"
-                or item["attribution"] != "assigned"):
-            return False
-        if (fragment.new_audio_start_sample is not None
-                and (item["start"] + item["end"]) / 2 < fragment.new_audio_start_sample / 16000):
+                or item["attribution"] != "assigned" or not self._owns_block_turn(fragment, item)):
             return False
         text = item["text"]
         return bool(text and not set(context_flags(text)).intersection({
             "pregunta", "cita", "referencia_a_terceros", "antecedente_temporal",
         }))
 
-    def _block_signals(self, fragment, utterances, roles, model_roles, decision, threshold):
+    def _block_review_turns(self, fragment, utterances, roles):
+        turns = {}
+        for index, item in enumerate(utterances):
+            if (self._confirmed_role(item["speaker"], roles) != "unknown"
+                    or item["attribution"] not in {"assigned", "unknown"}
+                    or not self._owns_block_turn(fragment, item)):
+                continue
+            levels = unattributed_levels(item["text"])
+            if not levels:
+                continue
+            # Una voz que cambia a mitad de la frase puede separar una negación
+            # de lo que sigue. Las fronteras dudosas se conservan como contexto.
+            if index:
+                previous = utterances[index - 1]
+                if requests_non_literal_speech(previous["text"]):
+                    continue
+                if (item["start"] - previous["end"] < BLOCK_TURN_GAP
+                        and (previous["attribution"] == "overlap" or not BLOCK_SENTENCE_END.search(previous["text"]))):
+                    continue
+            if index + 1 < len(utterances):
+                following = utterances[index + 1]
+                if (following["start"] - item["end"] < BLOCK_TURN_GAP
+                        and (following["attribution"] == "overlap" or not BLOCK_SENTENCE_END.search(item["text"]))):
+                    continue
+            turns[f"t{index}"] = levels
+        return turns
+
+    def _block_signals(self, fragment, utterances, roles, model_roles, decision, threshold, review_turns=None):
+        review_turns = review_turns or {}
         verified = []
         eligible = False
         for index, item in enumerate(utterances):
-            if not self._eligible_block_turn(fragment, item, roles):
+            turn_id = f"t{index}"
+            review_levels = review_turns.get(turn_id)
+            if not review_levels and not self._eligible_block_turn(fragment, item, roles):
                 continue
             eligible = True
             if decision.context != "afirmacion_propia":
                 continue
             text = item["text"]
+            if review_levels:
+                for level in review_levels:
+                    if (decision.values[level] >= threshold
+                            and turn_id in decision.evidence_turns.get(str(level), ())):
+                        severity = 1 if level <= 2 else 2 if level <= 4 else 3
+                        verified.append(Signal(MATRIX["categories"][level]["id"], level, severity, text,
+                                               item["start"], item["end"], None))
+                continue
             literal = literal_candidates(text)
             dimensions = evidence_dimensions(text)
             for candidate in jev_candidates(text, decision.values, MATRIX, threshold=threshold):
                 level = candidate["matrix_level"]
                 turn_ids = decision.evidence_turns.get(str(level))
-                localized = turn_ids is not None and f"t{index}" in turn_ids
+                localized = turn_ids is not None and turn_id in turn_ids
                 literal_verified = level in literal and (
                     turn_ids is None or self._confirmed_role(item["speaker"], model_roles) == "patient")
-                if (decision.values[level] < threshold
+                if (decision.values[level] < threshold or (review_turns and not localized)
                         or (level < 3 and not (literal_verified or localized))
                         or (level >= 3 and not dimensions[level])):
                     continue
                 severity = 1 if level <= 2 else 2 if level <= 4 else 3
                 verified.append(Signal(candidate["category_id"], level, severity, text,
                                        item["start"], item["end"], item["speaker"]))
-        # Desempate estable: mayor nivel verificado, luego primera evidencia cronológica.
-        best = max(verified, key=lambda signal: (signal.severity, signal.matrix_level, -signal.start), default=None)
+        # A igual nivel se prefiere el turno atribuido y luego el primero en el tiempo.
+        best = max(verified, key=lambda signal: (signal.severity, signal.matrix_level,
+                                                 signal.speaker is not None, -signal.start), default=None)
         errors = []
         if not eligible or decision.context != "afirmacion_propia":
             errors.append("CONTEXT_NOT_EVALUABLE")
@@ -222,16 +272,19 @@ class AnalysisService:
                 model_roles = roles
         decision = None
         signals = ()
-        questions_version = BLOCK_QUESTIONS_VERSION
+        questions_version = LEGACY_BLOCK_QUESTIONS_VERSION if fragment.audio_test else BLOCK_QUESTIONS_VERSION
+        if checkpoint is not None and "jev_response" in checkpoint.data:
+            questions_version = checkpoint.data.get("jev_pending", {}).get("questions_version", "bloque-signals-1")
         if checkpoint is not None and checkpoint.data.get("review_code") == "JEV_CONTEXT_LIMIT":
             raise AnalysisRetry("JEV_CONTEXT_LIMIT")
         if not utterances or not any(item["text"].strip() for item in utterances):
             errors.append("TEXT_NOT_EVALUABLE")
         else:
             try:
+                review_turns = (self._block_review_turns(fragment, utterances, roles)
+                                if not fragment.audio_test and questions_version == BLOCK_QUESTIONS_VERSION else {})
                 if checkpoint is not None and "jev_response" in checkpoint.data:
                     decision = JevDecision(**checkpoint.data["jev_response"])
-                    questions_version = checkpoint.data.get("jev_pending", {}).get("questions_version", "bloque-signals-1")
                 else:
                     if checkpoint is not None and "jev_pending" in checkpoint.data:
                         raise AnalysisRetry("JEV_SUBMISSION_UNCERTAIN")
@@ -242,12 +295,13 @@ class AnalysisService:
                             "questions_version": questions_version,
                         }
                         checkpoint.save()
-                    current = self._block_current(fragment, utterances, roles, model_roles)
+                    current = self._block_current(fragment, utterances, roles, model_roles, review_turns)
                     decision = self.analyzer.evaluate(current, [], request_id=request_id)
                     if checkpoint is not None:
                         checkpoint.data["jev_response"] = asdict(decision)
                         checkpoint.save()
-                signals, block_errors = self._block_signals(fragment, utterances, roles, model_roles, decision, threshold)
+                signals, block_errors = self._block_signals(fragment, utterances, roles, model_roles,
+                                                            decision, threshold, review_turns)
                 errors.extend(block_errors)
             except JevContextLimit as exc:
                 if checkpoint is not None:
@@ -478,13 +532,18 @@ class AnalysisService:
                 return True
 
             options = {"before_notify": before_notify} if checkpoint is not None else {}
+            origin = "analysis.speechmatics-jev/1.0"
+            if fragment.audio_test:
+                origin = ORIGEN_PRUEBA_AUDIO
+            elif fragment.analysis_unit == "fragment" and signal.speaker is None:
+                origin = ORIGEN_HABLANTE_NO_CONFIRMADO
             try:
                 if delivery.get(ident) != "done":
                     self.alerts.register_alert(
                         alerta_id=ident, box=fragment.box, tipo_riesgo="riesgo_suicida",
                         nivel_severidad=signal.severity, fecha_hora=fragment.captured_at,
                         sesion_id=fragment.session_id,
-                        origen=ORIGEN_PRUEBA_AUDIO if fragment.audio_test else "analysis.speechmatics-jev/1.0",
+                        origen=origin,
                         descripcion=" ".join(signal.excerpt.split())[:DESCRIPCION_MAX],
                         **options)
                     if checkpoint is not None:

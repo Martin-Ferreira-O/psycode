@@ -5,6 +5,7 @@ from unittest.mock import Mock
 
 from django.core.management import call_command
 from django.test import TestCase
+from backend.apps.alerts.domain import ORIGEN_HABLANTE_NO_CONFIRMADO
 from backend.apps.analysis.domain import Transcription, Word, JevDecision
 from backend.apps.analysis.services import AnalysisService
 from .models import CaptureSession, FragmentJob
@@ -65,6 +66,31 @@ class BlockAnalysisPipelineTests(IngestionFixtures, TestCase):
 
     def test_entire_hour_has_one_jev_analysis(self):
         self.exercise(3600)
+
+    def test_clinical_job_without_roles_completes_with_a_review_alert(self):
+        self.receive()
+        transcriber, analyzer, alerts = Mock(), Mock(), Mock()
+        words = (Word("Me quiero matar.", 0., .01, None),)
+        transcriber.transcribe.side_effect = lambda fragment, **kw: self.transcribe(words, **kw)
+        analyzer.evaluate.return_value = JevDecision("simulated", "afirmacion_propia", (.1, .1, .9, .1, .1, .1, .1, .1),
+                                                     10, 1, {"2": ["t0"]})
+        processor = FragmentJobProcessor(self.storage, AnalysisService(
+            transcriber, analyzer, QueueFragmentLedger(), alerts, Mock()))
+
+        self.assertEqual(processor.process_next(now=NOW + timedelta(hours=2)), FragmentJob.State.COMPLETED)
+        job = FragmentJob.objects.get()
+        self.assertEqual(job.result, FragmentJob.Result.RISK_DETECTED)
+        self.assertEqual(job.checkpoint["block_result"]["questions_version"], "bloque-signals-4")
+        self.assertEqual(job.checkpoint["block_result"]["decisions"][0]["evidence_turns"], {"2": ["t0"]})
+        self.assertNotIn("utterances", job.checkpoint)
+        self.assertNotIn("test_alerts", job.checkpoint)
+        current = analyzer.evaluate.call_args.args[0]
+        self.assertEqual(current["speaker_roles"], {})
+        self.assertNotIn("speaker", current["turns"][0])
+        self.assertEqual(current["turns"][0]["review_id"], "t0")
+        alerts.register_alert.assert_called_once()
+        self.assertEqual(alerts.register_alert.call_args.kwargs["origen"], ORIGEN_HABLANTE_NO_CONFIRMADO)
+        self.assertEqual(alerts.register_alert.call_args.kwargs["descripcion"], "Me quiero matar.")
 
     def test_context_limit_requires_review_and_preserves_audio(self):
         from backend.apps.analysis.errors import JevContextLimit

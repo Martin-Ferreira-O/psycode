@@ -73,7 +73,7 @@ Las pruebas de integración usan `httpx.MockTransport`, PCM de ceros y persisten
 
 1. Crear una única instancia de `backend.config.composition.analysis_worker()` dentro del trabajador del monolito. El constructor no realiza llamadas a proveedores. No instanciarlo por petición ni iniciar procesamiento desde `AppConfig` o una vista HTTP.
 2. Entregar un `Fragment` por cada fragmento PCM mono 16 kHz, firmado de 16 bits little endian. Debe incluir sesión UUID canónica, secuencia entera desde 0, box, fecha con zona horaria y ruta del archivo. `start`, `end` y `context_start` son índices de muestras dentro del archivo/sesión, no segundos. La captura y conversión del audio no forman parte de esta entrega.
-3. Invocar `worker.process(fragment, roles=roles_confirmados)` de forma secuencial. El rol debe confirmarlo el llamador; no se infiere de la diarización.
+3. Invocar `worker.process(fragment, roles=roles_confirmados)` de forma secuencial. El llamador puede aportar los roles que haya confirmado. Para sesiones clínicas nuevas, el trabajador analiza por fragmento.
 4. Consumir el `AnalysisResult` en memoria. No imprimir ni guardar la salida como historial porque puede incluir transcripción sensible. El trabajador registra las señales válidas mediante `AlertsService`.
 5. Al finalizar, llamar `worker.close_session(session_id)` y aplicar la política del productor para eliminar sus temporales PCM. Cerrar el contexto no elimina las reservas contra duplicados.
 
@@ -95,11 +95,12 @@ def procesar_fragmento(worker, *, sesion_id, secuencia, box, fecha,
         start=inicio,
         end=fin,
         context_start=inicio_contexto,
+        analysis_unit="fragment",
     )
     return worker.process(fragmento, roles=roles_confirmados)
 ```
 
-Por ejemplo, `{"batch-0-S1": "patient"}` solo es válido si se confirmó ese rol para el fragmento 0. Los roles permitidos son `patient`, `professional` y `unknown`. Sin atribución confirmada al paciente, el resultado permanece indeterminado y no genera alertas.
+Por ejemplo, `{"batch-0-S1": "patient"}` solo es válido si se confirmó ese rol para el fragmento 0. Los roles permitidos son `patient`, `professional` y `unknown`. Desde `bloque-signals-4`, una afirmación directa y localizada puede generar una alerta para revisión con el hablante sin confirmar, incluso si falta la etiqueta de diarización.
 
 ## Configuración de un eventual uso externo
 
@@ -128,7 +129,7 @@ Solo se requiere la clave de la cuenta elegida para JEV. Los destinos están fij
 
 Solo un resultado `senal` completo, evaluable y sin errores registra alertas. La severidad usa 1–3, según la agrupación existente en [MONGODB.md](MONGODB.md). El fragmento redactado se almacena en `descripcion`, normalizado y limitado a sus 500 caracteres permitidos. `sin_riesgo` no genera alertas; fallos y resultados parciales/no evaluables permanecen como `indeterminado`.
 
-Los UUID de alerta son deterministas por sesión, secuencia, intervalo y categoría. El índice único de MongoDB evita duplicados al repetir la entrega interna. No se invoca el servicio de notificaciones.
+Los UUID de alerta son deterministas por sesión, secuencia, intervalo y categoría. El índice único de MongoDB evita duplicados al repetir la entrega interna. Con las notificaciones activadas, el correo de revisión indica cuándo falta confirmar el hablante. El fragmento de transcripción se consulta en el detalle autenticado.
 
 `AnalysisAudit` registra los fallos técnicos en `AuditWriter` y en `audit_events`, con acciones `analysis.speechmatics`/`analysis.jev` y códigos permitidos. El validador permite `alerta_id=null` solo para esos eventos anteriores a una alerta. No se guardan transcripciones, respuestas completas, rutas ni claves. Si falla la propia bitácora, se emite un evento sanitizado en el logger `psycode.audit`.
 
