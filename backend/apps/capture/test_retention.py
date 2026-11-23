@@ -88,6 +88,21 @@ class RetentionTests(IngestionFixtures, TestCase):
         self.assertEqual(CaptureEvent.objects.count(), count)
         self.assertEqual(CaptureSession.objects.count(), 1)
 
+    def test_closed_session_keeps_only_known_evidence_abstention_reasons(self):
+        self.close()
+        FragmentJob.objects.update(
+            state=FragmentJob.State.COMPLETED, result=FragmentJob.Result.INDETERMINATE,
+            checkpoint={"block_result": {
+                "error_codes": ["JEV_EVIDENCE_UNCERTAIN", "texto no permitido"],
+                "decisions": [{"review_verdicts": {"2": {"t0": "uncertain"}}}],
+            }},
+        )
+        for _ in range(2):
+            cleanup(self.storage, now=self.received + timedelta(minutes=1))
+            self.assertEqual(FragmentJob.objects.get().checkpoint, {
+                "analysis_error_codes": ["JEV_EVIDENCE_UNCERTAIN"],
+            })
+
     def test_late_recoverable_fragment_preserves_completed_context(self):
         self.finish()
         CaptureSession.objects.update(actual_end=self.received, final_sequence=1)

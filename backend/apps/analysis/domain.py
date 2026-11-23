@@ -7,6 +7,10 @@ from pathlib import Path
 from uuid import UUID
 
 CONTRACT_VERSION = "1.0"
+EVIDENCE_ABSTENTION_CODES = {
+    "rejected": "JEV_EVIDENCE_REJECTED",
+    "uncertain": "JEV_EVIDENCE_UNCERTAIN",
+}
 
 
 class AnalysisState(StrEnum):
@@ -103,6 +107,7 @@ class JevDecision:
     input_tokens: int
     output_tokens: int
     evidence_turns: dict[str, list[str]] = field(default_factory=dict)
+    review_verdicts: dict[str, dict[str, str]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

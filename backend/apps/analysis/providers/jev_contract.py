@@ -8,8 +8,10 @@ from .http import ProviderError
 
 QUESTIONS_VERSION = "habla-signals-1"
 LEGACY_BLOCK_QUESTIONS_VERSION = "bloque-signals-3"
-BLOCK_QUESTIONS_VERSION = "bloque-signals-4"
+BLOCK_QUESTIONS_VERSION = "bloque-signals-5"
+CLINICAL_REVIEW_QUESTIONS_VERSIONS = frozenset({"bloque-signals-4", BLOCK_QUESTIONS_VERSION})
 MAX_EVIDENCE_TURNS_PER_QUESTION = 254
+MAX_INDIVIDUAL_REVIEW_QUESTIONS = 12
 REVIEW_TURN_MIN_CONFIDENCE = .75
 EVIDENCE_CRITERIA = {
     1: "Incluye expresiones indirectas de deseo de morir si el contexto las aclara.",
@@ -24,6 +26,10 @@ CONTEXT_CHOICES = {
     "negacion": "El hablante niega la experiencia descrita.",
     "referencia_a_terceros": "El hablante describe a otra persona.",
     "incierto": "Mezcla de contextos o evidencia insuficiente.",
+}
+REVIEW_CHOICES = {
+    "afirma": "El turno expresa de forma directa la señal indicada como experiencia real y propia.",
+    "descartar": "El turno carece de esa afirmación propia o el sentido queda ambiguo por su contexto.",
 }
 
 
@@ -113,18 +119,7 @@ def block_questions(evidence_turns=(), unknown_speakers=(), review_turns=None):
                 "deseos de morir no bastan. Si la atribución o el sentido son ambiguos, elige ninguno.",
                 "criteria": options,
             }
-    for level, turn_ids in sorted((review_turns or {}).items()):
-        for start in range(0, len(turn_ids), MAX_EVIDENCE_TURNS_PER_QUESTION):
-            options = {"ninguno": "Ningún turno seleccionable aporta evidencia propia inequívoca."}
-            options.update({turn_id: f"Turno con review_id {turn_id}"
-                            for turn_id in turn_ids[start:start + MAX_EVIDENCE_TURNS_PER_QUESTION]})
-            output[f"revision_{level}_{start}"] = {
-                "type": "choice",
-                "instructions": review_scope + HYPOTHESES[level] + " " + (EVIDENCE_CRITERIA[2] if level == 2 else "") +
-                " Selecciona el review_id de un único turno que sostenga esta señal por sí solo. "
-                "Si falta evidencia directa o el sentido es ambiguo, elige ninguno.",
-                "criteria": options,
-            }
+    output.update(review_questions(review_turns or {}, review_scope))
     if evidence_turns and 1 < len(unknown_speakers) <= MAX_EVIDENCE_TURNS_PER_QUESTION:
         output["voz_paciente"] = {
             "type": "choice",
@@ -136,6 +131,38 @@ def block_questions(evidence_turns=(), unknown_speakers=(), review_turns=None):
             ),
             "criteria": {"ninguno": "Rol no identificable", **{voice: voice for voice in unknown_speakers}},
         }
+    return output
+
+
+def review_questions(review_turns, scope):
+    output = {}
+    remaining = MAX_INDIVIDUAL_REVIEW_QUESTIONS
+    for level, turn_ids in sorted(review_turns.items(), reverse=True):
+        signal = HYPOTHESES[level] + (" " + EVIDENCE_CRITERIA[2] if level == 2 else "")
+        for turn_id in turn_ids[:remaining]:
+            output[f"verificar_{level}_{turn_id}"] = {
+                "type": "choice",
+                "instructions": scope +
+                f"Evalúa únicamente el turno con review_id {turn_id} como evidencia para esta señal. " +
+                signal + " Usa el resto del diálogo como contexto del turno evaluado. "
+                "Elige afirma si ese turno expresa la señal como declaración propia. "
+                "Elige descartar si es una cita, ejemplo, simulación, negación, pregunta o si queda ambigüedad.",
+                "criteria": REVIEW_CHOICES,
+            }
+        # Acota las solicitudes largas y permite que los candidatos restantes sigan siendo evaluables.
+        grouped = turn_ids[remaining:]
+        remaining = max(0, remaining - len(turn_ids))
+        for start in range(0, len(grouped), MAX_EVIDENCE_TURNS_PER_QUESTION):
+            options = {"ninguno": "Ningún turno seleccionable aporta evidencia propia inequívoca."}
+            options.update({turn_id: f"Turno con review_id {turn_id}"
+                            for turn_id in grouped[start:start + MAX_EVIDENCE_TURNS_PER_QUESTION]})
+            output[f"revision_{level}_{start}"] = {
+                "type": "choice",
+                "instructions": scope + signal +
+                " Selecciona el review_id de un turno que sostenga esta señal por sí solo. "
+                "Si falta evidencia directa o el sentido es ambiguo, elige ninguno.",
+                "criteria": options,
+            }
     return output
 
 
@@ -184,8 +211,8 @@ def localized_evidence(answers, requested, current):
                      for turn in current.get("turns", ()) if "review_id" in turn}
     patient = supported_choice(answers["voz_paciente"]) if "voz_paciente" in answers else None
     confirmed = current.get("speaker_roles", {})
-    turns = {}
-    for key in requested:
+    turns, verdicts = {}, {}
+    for key, question in requested.items():
         if key.startswith("evidencia_"):
             level = key.split("_")[1]
             selected = turns.setdefault(level, [])
@@ -193,13 +220,26 @@ def localized_evidence(answers, requested, current):
             speaker = speakers.get(choice)
             if speaker is not None and (confirmed.get(speaker) == "patient" or speaker == patient):
                 selected.append(choice)
-        elif key.startswith("revision_"):
-            level = key.split("_")[1]
+        elif key.startswith(("verificar_", "revision_")):
+            _, level, reference = key.split("_")
             selected = turns.setdefault(level, [])
-            choice = supported_choice(answers[key], REVIEW_TURN_MIN_CONFIDENCE)
-            if int(level) in review_levels.get(choice, ()):
-                selected.append(choice)
-    return turns
+            answer = answers[key]
+            choice = answer["choice"]
+            supported = answer.get("probabilities", {}).get(choice, 0) >= REVIEW_TURN_MIN_CONFIDENCE
+            individual = key.startswith("verificar_")
+            candidates = (reference,) if individual else (turn for turn in question["criteria"] if turn != "ninguno")
+            for turn_id in candidates:
+                if int(level) not in review_levels.get(turn_id, ()):
+                    continue
+                if supported and choice == ("afirma" if individual else turn_id):
+                    verdict = "confirmed"
+                    selected.append(turn_id)
+                elif supported and choice == ("descartar" if individual else "ninguno"):
+                    verdict = "rejected"
+                else:
+                    verdict = "uncertain"
+                verdicts.setdefault(level, {})[turn_id] = verdict
+    return turns, verdicts
 
 
 def validate_response(data, model, gateway="typesafe", requested=None):
@@ -211,7 +251,8 @@ def validate_response(data, model, gateway="typesafe", requested=None):
         context = answers["context"]
         for key, question in requested.items():
             if question["type"] == "choice":
-                validate_choice(answers[key], question["criteria"], gateway, check_sum=key == "context")
+                validate_choice(answers[key], question["criteria"], gateway,
+                                check_sum=key == "context" or key.startswith("verificar_"))
         values = []
         for level in range(len(HYPOTHESES)):
             answer = answers[f"signal_{level}"]
