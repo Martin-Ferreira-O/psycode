@@ -2,6 +2,16 @@ import { ErrorSolicitud, apiGetDatos, apiRequest, solicitarJson } from "../api.j
 
 export const ALERTS_URL = "/api/v1/alerts";
 export const ALERT_PAGE_SIZE = 10;
+
+export async function getAlertCount(query, signal) {
+    const params = new URLSearchParams(query);
+    params.set("limit", "1");
+    params.set("offset", "0");
+    const data = await apiGetDatos(`${ALERTS_URL}?${params}`, { cache: "no-store", signal });
+    if (!Number.isInteger(data?.total) || data.total < 0) throw new ErrorSolicitud();
+    return data.total;
+}
+
 export const evaluationChoices = {
     correcta: "La detección corresponde a una alerta real.",
     falso_positivo: "La detección corresponde a un error del modelo.",

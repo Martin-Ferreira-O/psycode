@@ -185,6 +185,7 @@ export function Dialog({ open, onClose, title, className = "", children, busy = 
 const iconPaths = {
     arrow_back: "M19 12H5m7-7-7 7 7 7",
     arrow_forward: "M5 12h14m-7-7 7 7-7 7",
+    bar_chart: "M4 19V9m5 10V5m5 14v-7m5 7V3",
     bell: "M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9m-8 12a2 2 0 0 0 4 0",
     calendar: "M3 5h18v16H3zm0 5h18M8 3v4m8-4v4m-8 7h2m4 0h2m-8 3h2",
     chevron_down: "m6 9 6 6 6-6",
@@ -211,6 +212,8 @@ const iconPaths = {
     monitor: "M3 4h18v12H3zm9 12v4m-5 0h10",
     person: "M20 21a8 8 0 0 0-16 0m12-14a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z",
     add: "M12 5v14M5 12h14",
+    pause: "M9 5v14m6-14v14",
+    play: "m8 5 12 7-12 7z",
     refresh: "M20 7v5h-5m5 0a8 8 0 1 0-2 6",
     remove: "M5 12h14",
     search: "M15 15l5 5m-3-10a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z",

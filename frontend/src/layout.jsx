@@ -43,7 +43,7 @@ export function PageHeader({ title, description, children }) {
 }
 
 const loadingSections = {
-    dashboard: ["Indicadores principales", "Comportamiento mensual", "Historial de alertas"],
+    dashboard: ["Indicadores principales", "Actividad de alertas", "Historial de alertas"],
     evaluaciones: ["Evaluaciones registradas"],
     usuarios: ["Usuarios registrados"],
     pcs: ["Equipos de la clínica"],
