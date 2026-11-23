@@ -4,6 +4,8 @@ from io import StringIO
 from threading import Barrier
 from unittest.mock import patch
 
+from django.conf import global_settings
+from django.contrib.auth.hashers import identify_hasher
 from django.core.management import call_command
 from django.db import OperationalError, close_old_connections
 from django.test import TestCase, TransactionTestCase, override_settings
@@ -20,6 +22,7 @@ PREFIX = "/api/v1/auth/"
 PASSWORD = "Synthetic-security-test-2026!"
 
 
+@override_settings(PASSWORD_HASHERS=global_settings.PASSWORD_HASHERS)
 class LoginSecurityTests(TestCase):
     @classmethod
     def setUpTestData(cls):
@@ -94,6 +97,7 @@ class LoginSecurityTests(TestCase):
             self.assertRegex(counter.key, r"^[a-f0-9]{64}$")
 
     def test_password_changed_while_checking_does_not_issue_a_session(self):
+        self.assertEqual(identify_hasher(self.user.password).algorithm, "pbkdf2_sha256")
         original = User.check_password
 
         def changed(user, password):

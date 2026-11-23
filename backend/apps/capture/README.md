@@ -2,7 +2,7 @@
 
 > La política actual de desconexiones, recepción de siete días y cierre físico independiente está en [Continuidad de captura](../../../docs/CONTINUIDAD-CAPTURA.md). Sustituye los plazos de cierre definitivo históricos descritos más abajo.
 
-> Actualización de separación: [operación vigente](../../../docs/OPERACION-SEPARADA.md). Agente en el repositorio independiente `psycode-agent`; control WS autenticado, audio v1/v2 y agenda durable. Las instrucciones históricas incompatibles quedan sustituidas por ese runbook.
+> Actualización de separación: [operación vigente](../../../docs/OPERACION-SEPARADA.md). Agente en el repositorio independiente `psycode-agent`; control WS autenticado, audio v2 y agenda durable. Las instrucciones históricas incompatibles quedan sustituidas por ese runbook.
 
 
 Persistencia SQL de la autorización de SCRUM-70 hasta el cierre (SCRUM-71) e
@@ -63,7 +63,7 @@ del cierre; no se solapan ventanas durante la finalización.
 `CaptureSessionService`. Todos los métodos validan el box y la pertenencia del
 identificador recibido. El transporte de órdenes/confirmaciones debe autenticar
 al agente y fijar el box desde esa identidad; no se agregan rutas HTTP para esas
-operaciones. Para archivos ya existe `POST /api/v1/internal/fragments`, con
+operaciones. Para archivos ya existe `POST /api/v2/internal/fragments`, con
 credencial `Agent` vinculada al box; no admite JWT de profesionales. Su contrato
 completo está en [API_CONTRACTS.md, sección 5](../../../API_CONTRACTS.md#5-ingesta-interna-de-fragmentos).
 
@@ -79,7 +79,7 @@ for order in control.commands("box-3"):
         control.acknowledge("box-3", order.command_id, occurred_at=started_at)
 
 control.heartbeat("box-3", session.session_id)
-# El agente envía el archivo a POST /api/v1/internal/fragments.
+# El agente envía el archivo a POST /api/v2/internal/fragments.
 # La API registra la secuencia y el trabajo juntos; no llamar además a
 # accept_sequence() para ese mismo fragmento.
 
@@ -144,9 +144,10 @@ sesiones completadas o fallidas. No se invoca ningún analizador al aceptarlas.
 
 ## Ingesta HTTP y cola persistente
 
-`POST /api/v1/internal/fragments` recibe multipart con `archivo`, `box`,
-`session_id`, `secuencia`, `formato`, `checksum` y `captured_at`. Todos son
-obligatorios. `captured_at` permite comprobar la ventana real de captura incluso
+`POST /api/v2/internal/fragments` recibe multipart con `archivo`, `box`,
+`session_id`, `secuencia`, `formato`, `checksum`, `captured_at` y los seis campos
+temporales de [`audio-v2.schema.json`](../../../contracts/audio-v2.schema.json).
+Todos son obligatorios. `captured_at` permite comprobar la ventana real de captura incluso
 si el fragmento llega durante la finalización. Solo se admite WAV RIFF PCM mono
 a 16 kHz y 16 bits, alineado con Speechmatics; se valida su estructura real,
 tamaño y SHA-256. El nombre original y el MIME no se usan como evidencia.
@@ -306,7 +307,7 @@ de las capacidades requeridas, el servidor rechaza su entrega con
 borra la negociación persistida. Las detenciones siguen entregándose sin el
 campo a conexiones legacy. Las sesiones sin negociación conservan compatibilidad.
 
-Para sesiones negociadas se exige temporal v2, exactamente los samples de la
+Cada carga incluye los metadatos temporales v2. Las sesiones negociadas exigen los samples de la
 duración solicitada y el solapamiento negociado: 0 en
 `audio.chunk-config.v2`, 16000 samples (1 s) en v1. El perfil recibido
 queda estable. Se admiten duraciones superiores a 600 s y archivos mayores de
@@ -330,8 +331,7 @@ al fallar. Una carga usa archivo temporal de parser más copia de staging.
 `deployment/nginx-capture.conf` y `deployment/vps/nginx.conf` mantienen `26m`
 para el resto del servidor. La excepción exacta `/api/v2/internal/fragments`
 usa `client_max_body_size 3g` y `proxy_request_buffering off`; las cotas de capture
-se aplican durante parseo y almacenamiento. El alias v1 `/fragments/v2` mantiene
-el límite del proxy; para sesiones grandes usar la ruta canónica v2.
+se aplican durante parseo y almacenamiento.
 No se despliega automáticamente ninguna plantilla.
 
 **ASGI de Django primero recibe el cuerpo completo en un spool, antes de ejecutar

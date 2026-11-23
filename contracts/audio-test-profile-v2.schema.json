@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Perfil negociado de diagn\u00f3stico de audio v2",
-  "description": "PUT /api/v1/internal/audio-tests/<uuid>?fragment_profile_version=2. Body scenario/samples sin cambios. PUT, GET y DELETE devuelven versi\u00f3n 2 y audio_chunk_overlap=0. Perfil inmutable, sin solapamiento: 600 s / 60 s = 10 WAV; 600 s / 600 s = 1 WAV. El \u00faltimo parcial contiene solo audio nuevo.",
+  "description": "PUT /api/v2/internal/audio-tests/<uuid>?fragment_profile_version=2. Body scenario/samples sin cambios. PUT, GET y DELETE devuelven versi\u00f3n 2 y audio_chunk_overlap=0. Perfil inmutable, sin solapamiento: 600 s / 60 s = 10 WAV; 600 s / 600 s = 1 WAV. El \u00faltimo parcial contiene solo audio nuevo.",
   "oneOf": [
     {
       "$ref": "#/$defs/query"

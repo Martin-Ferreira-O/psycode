@@ -11,7 +11,7 @@ Un solo proyecto Django (`psycode-api`) que atiende a dos clientes distintos:
 - El navegador de la clínica. Profesionales y administradores consultan alertas, evalúan, administran cuentas, PCs y almacenamiento.
 - El programa `psycode-agent`, que vive en otro repositorio. Se instala en los PCs de los box, abre un WebSocket de control y sube audio y agenda.
 
-La API pública es `/api/v1/`, sin barra final. `APPEND_SLASH` está apagado. Hay una ruta extra de audio en `/api/v2/internal/fragments` y el control del agente en `/ws/v1/agents`.
+La web usa `/api/v1/` y el agente usa `/api/v2/internal/`, sin barra final. `APPEND_SLASH` está apagado. El control del agente usa `/ws/v1/agents`.
 
 Django 5.2 y Python 3.12 o 3.13. El punto de entrada es `manage.py`, con `DJANGO_SETTINGS_MODULE=backend.config.settings`. Detrás de Nginx, el VPS usa `backend.config.vps_settings`, que hereda esa configuración y confía en `X-Forwarded-Proto` solo porque Uvicorn escucha en `127.0.0.1`.
 
@@ -48,7 +48,7 @@ backend.config.asgi.application
         │
         └─ HTTP ──► Django + DRF
                     MIDDLEWARE: Security, BrowserSecurity (CSP, no-store),
-                    CORS solo sobre /api/v1/, Common, CSRF, X-Frame DENY
+                    CORS sobre /api/v1/ y /api/v2/internal/, Common, CSRF, X-Frame DENY
                     │
                     ▼
               backend.config.urls
@@ -63,7 +63,7 @@ backend.config.asgi.application
 | `/api/v1/dashboard/` | `dashboard` | Lista vacía. Esas rutas caen en el 404 final |
 | `/api/v1/configuracion-operativa` y `/api/v1/pcs` | `operational` | Administrador activo |
 | `/api/v1/almacenamiento` | `capture.storage_views`, montadas desde `operational` y `web` | Administrador activo |
-| `/api/v1/internal/` | `capture` y `agenda` | Agente del box, cabecera `Agent` |
+| `/api/v2/internal/` | `capture` y `agenda` | Agente del box, cabecera `Agent` |
 | `/api/v2/internal/fragments` | `capture` | El mismo agente, con metadatos temporales del audio v2 |
 | HTML (`/`, `/dashboard`, `/usuarios`, …) | `web` | El HTML se entrega sin sesión. Los datos salen de la API |
 
@@ -202,7 +202,7 @@ También cuelga aquí el CRUD de PCs (`/api/v1/pcs`): alta, revocación, renovac
 
 ### `agenda`
 
-El colector designado pide una recolección en `POST /api/v1/internal/agenda-collections` y devuelve el Excel en `POST /api/v1/internal/agenda-reports`. Las dos rutas exigen identidad de agente. El reporte original se guarda en `AgendaCollection.report`. La ocupación usable queda en `AgendaBoxRevision`, una fila por box.
+El colector designado pide una recolección en `POST /api/v2/internal/agenda-collections` y devuelve el Excel en `POST /api/v2/internal/agenda-reports`. Las dos rutas exigen identidad de agente. El reporte original se guarda en `AgendaCollection.report`. La ocupación usable queda en `AgendaBoxRevision`, una fila por box.
 
 `composition.durable_agenda()` recarga eso en un `AgendaService` en memoria. El coordinador de captura lee esa copia. Una carga nueva reemplaza la revisión del box. La autorización de captura no abre el Excel por su cuenta.
 
@@ -214,7 +214,7 @@ El coordinador, por cada box, llama a `evaluate_box` y `CaptureSessionService.ap
 
 La ingesta:
 
-1. `POST /api/v1/internal/fragments` o la v2 con muestras y solapamiento.
+1. `POST /api/v2/internal/fragments` con índices de muestras y solapamiento.
 2. El box del multipart tiene que ser el box del agente.
 3. El WAV se valida sin decodificar audio: PCM, mono, 16 kHz, 16 bits, y un tope de tamaño.
 4. El archivo se publica en disco y después la transacción SQL inserta `AcceptedSequence` y `FragmentJob`. La respuesta HTTP sale después del commit.

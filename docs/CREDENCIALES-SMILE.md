@@ -9,10 +9,13 @@ No copiar los valores a `.env.example`, al código, al instalador ni a los logs.
 Actualizar el entorno y reiniciar el servicio web por el procedimiento de
 operación del VPS para cargar cambios. La configuración operativa de la web
 sigue administrando colector, fuente y URL; nunca devuelve los secretos.
+Una instalación nueva puede inicializar la URL mediante `SMILE_DEFAULT_URL`
+en el mismo archivo privado. Una URL guardada se conserva y se puede editar
+en el panel operativo.
 
 Después de confirmar la vinculación recuperable, el servidor anuncia
 `smile_credentials_version: "1"`. El agente consulta por HTTPS
-`GET /api/v1/internal/smile-credentials` con su credencial `Agent` ya activada.
+`GET /api/v2/internal/smile-credentials` con su credencial `Agent` ya activada.
 Solo el colector vigente recibe usuario y contraseña. Un PC sin designación
 recibe `data: null`: puede completar su vinculación sin tener la cuenta Smile.
 Si se lo designa después, el runtime la obtiene automáticamente al consultar

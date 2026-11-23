@@ -230,88 +230,8 @@ class AgentRegistrationAPITests(APITestCase):
             AgentRegistration.objects.count(),
             0,
         )
-    def test_admin_puede_revocar_pc(self):
-        self.client.force_authenticate(user=self.admin)
 
-        create_response = self.client.post(
-            self.url,
-            {
-                "name": "PC Box 6",
-                "box": "box-6",
-            },
-            format="json",
-        )
-
-        agent_id = create_response.data["data"]["agent_id"]
-
-        response = self.client.post(f"/api/v1/pcs/{agent_id}/revocar")
-
-        self.assertEqual(response.status_code,status.HTTP_200_OK,)
-
-        agent = AgentRegistration.objects.get(agent_id=agent_id)
-
-        self.assertFalse(agent.is_active)
-        self.assertIsNotNone(agent.revoked_at)
-
-        # La identidad del PC se conserva.
-        self.assertEqual(
-            str(agent.agent_id),agent_id,)
-
-
-    def test_admin_puede_renovar_credencial(self):
-        self.client.force_authenticate(user=self.admin)
-
-        create_response = self.client.post(self.url,{"name": "PC Box 7","box": "box-7",},format="json",)
-
-        agent_id = create_response.data["data"]["agent_id"]
-        old_api_key = create_response.data["data"]["api_key"]
-
-        old_hash = AgentRegistration.objects.get(
-            agent_id=agent_id
-        ).token_sha256
-
-        response = self.client.post(
-            f"/api/v1/pcs/{agent_id}/renovar"
-        )
-
-        self.assertEqual(
-            response.status_code,
-            status.HTTP_200_OK,
-        )
-
-        data = response.data["data"]
-
-        self.assertEqual(
-            data["agent_id"],
-            agent_id,
-        )
-
-        self.assertIn(
-            "api_key",
-            data,
-        )
-
-        new_api_key = data["api_key"]
-
-        # La nueva credencial debe ser distinta.
-        self.assertNotEqual(
-            old_api_key,
-            new_api_key,
-        )
-
-        agent = AgentRegistration.objects.get(
-            agent_id=agent_id
-        )
-
-        self.assertNotEqual(
-            agent.token_sha256,
-            old_hash,
-        )
-
-        self.assertTrue(agent.is_active)
-        self.assertIsNone(agent.revoked_at)
-
-    def test_credencial_revocada_deja_de_autenticar(self):
+    def test_revocacion_conserva_el_pc_e_invalida_su_credencial(self):
         self.client.force_authenticate(user=self.admin)
 
         create_response = self.client.post(
@@ -351,12 +271,14 @@ class AgentRegistrationAPITests(APITestCase):
             status.HTTP_200_OK,
         )
 
-        # La misma credencial ya no puede autenticar.
+        agent = AgentRegistration.objects.get(agent_id=agent_id)
+        self.assertFalse(agent.is_active)
+        self.assertIsNotNone(agent.revoked_at)
+
         with self.assertRaises(AuthenticationFailed):
             authenticate_agent_header(header)
 
-
-    def test_renovacion_invalida_clave_anterior_y_acepta_nueva(self):
+    def test_renovacion_conserva_el_pc_y_reemplaza_su_credencial(self):
         self.client.force_authenticate(user=self.admin)
 
         create_response = self.client.post(
@@ -370,6 +292,8 @@ class AgentRegistrationAPITests(APITestCase):
 
         agent_id = create_response.data["data"]["agent_id"]
         old_api_key = create_response.data["data"]["api_key"]
+        agent = AgentRegistration.objects.get(agent_id=agent_id)
+        old_hash = agent.token_sha256
 
         old_header = f"Agent {old_api_key}".encode("ascii")
 
@@ -393,12 +317,17 @@ class AgentRegistrationAPITests(APITestCase):
             status.HTTP_200_OK,
         )
 
+        self.assertEqual(response.data["data"]["agent_id"], agent_id)
         new_api_key = response.data["data"]["api_key"]
 
         self.assertNotEqual(
             old_api_key,
             new_api_key,
         )
+        agent.refresh_from_db()
+        self.assertNotEqual(agent.token_sha256, old_hash)
+        self.assertTrue(agent.is_active)
+        self.assertIsNone(agent.revoked_at)
 
         # La clave anterior deja de funcionar.
         with self.assertRaises(AuthenticationFailed):
@@ -413,6 +342,7 @@ class AgentRegistrationAPITests(APITestCase):
             new_header
         )
 
+        self.assertEqual(new_identity.registry_id, str(agent.pk))
         self.assertEqual(
             new_identity.agent_id,
             agent_id,

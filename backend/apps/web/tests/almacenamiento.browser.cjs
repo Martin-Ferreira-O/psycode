@@ -1,12 +1,16 @@
 // Prueba sobre servidor local con fixtures sintéticos, aislado de datos reales.
 // Ver docs/CONSERVACION-Y-ALMACENAMIENTO.md. Requiere Playwright y Chromium.
 const assert = require('node:assert/strict');
+const { tmpdir } = require('node:os');
+const { join } = require('node:path');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 
 (async () => {
     const browser = await chromium.launch({ headless: true, executablePath: process.env.CHROMIUM_PATH });
     const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
     const base = process.env.FRONTEND_TEST_URL || 'http://127.0.0.1:8766';
+    const screenshots = process.env.FRONTEND_SCREENSHOT_DIR || tmpdir();
+    const screenshot = name => page.screenshot({ path: join(screenshots, `psycode-storage-${name}.png`), fullPage: true });
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     try {
@@ -50,13 +54,13 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 
         await liberar.click();
         await dialogo.waitFor();
-        await page.screenshot({ path: '/tmp/psycode-storage-preview.png', fullPage: true });
+        await screenshot('preview');
         await dialogo.getByRole('button', { name: 'Confirmar limpieza', exact: true }).click();
         await page.getByRole('status').filter({ hasText: /1 archivo eliminado/ }).waitFor();
         await dialogo.waitFor({ state: 'hidden' });
         assert.match(await liberables.innerText(), /^0 B$/);
         assert.match(await protegidos.innerText(), /1 archivo/);
-        await page.screenshot({ path: '/tmp/psycode-storage-desktop.png', fullPage: true });
+        await screenshot('desktop');
 
         // Un fallo de transporte impide confirmar sin una vista previa válida.
         await page.route('**/api/v1/almacenamiento/vista-previa', route => route.fulfill({ status: 503, body: 'PRIVATE' }));
@@ -70,7 +74,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
             await liberar.scrollIntoViewIfNeeded();
             assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, `Desbordamiento a ${width}px`);
             assert.equal(await liberar.isVisible(), true);
-            if (width === 390) await page.screenshot({ path: '/tmp/psycode-storage-mobile.png', fullPage: true });
+            if (width === 390) await screenshot('mobile');
         }
 
         assert.deepEqual(errors, []);

@@ -16,11 +16,11 @@
     "pc-installation-v2.schema.json": "ec21dd584f08dafb0690feb05631e1b2d5d9931ffd2e77d3bb16e2040e4d8e96",
     "smile-collector-check-v1.schema.json": "de0d6462bf71adb4e1b545540a110efc4b1a2691e15a9b59f400eaf3677927d6",
     "smile-collector-check-valid.json": "bec1de9dae76b9c685f19288c02e07ccfe96e9759c98a00b2c20dd80dc28e32f",
-    "audio-test-profile-v1.schema.json": "a31e93ab417ff97b16789b7cb29ed453c9b598740fcb89a1d8e8347eda32c82b",
-    "audio-test-profile-v2.schema.json": "069bd2d6669da62a816fc3e05676cf710b5763b5a825fd9bd7cfd1f4aa21e587",
-    "audio-test-fragment-details-v1.schema.json": "0a7e9dd45d2a79fc54a6d44b526d6ed3e87316a88afc3d12d1b573329d623a8b",
+    "audio-test-profile-v1.schema.json": "8d8e91a9681ace018dfd6ee30ae192a86970ab334b919b75b94ab0006ea4f27c",
+    "audio-test-profile-v2.schema.json": "a3dc057cbee06ede642e6c0ec15d0d7b2e575b4a946233ce33cdf6b7adcc5839",
+    "audio-test-fragment-details-v1.schema.json": "159886564138f8e100b99cb346d4c827f6de196e157fd90327b58ac1f026185b",
     "smile-configuration-v1.schema.json": "84e1a1b0c8e45c98096628e2f9b7572a60f130a2f33f35054486b34122fd7bdf",
-    "smile-credentials-v1.schema.json": "6d0b82ce17d237b92d2298d28790a0eeeee2d6011dc3eaa136346b8d425afbaa"
+    "smile-credentials-v1.schema.json": "a95490a8ba28f496845b45290df561770ae717624825ff426e33fbd36d9e6a9b"
   },
   "extensions": [
     "agent.config.v1",

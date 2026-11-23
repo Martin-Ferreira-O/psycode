@@ -639,7 +639,6 @@ async def agent_websocket(scope, receive, send):
         )
         await db(control.register_hello, p["agent_version"], smile_check, smile_config)
         capabilities = [
-            "audio.v1",
             "audio.v2",
             "agenda.excel.v1",
             "agenda.smile-json.v1",

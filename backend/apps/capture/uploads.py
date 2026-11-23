@@ -55,11 +55,8 @@ class FragmentMultiPartParser(MultiPartParser):
         # Antes de parsear no se conoce session_id (el multipart no exige orden).
         # Acotar por sesiones negociadas DEL box autenticado, luego revalidar
         # contra la sesión exacta antes de almacenar/aceptar el WAV.
-        from .serializers import FragmentV2Serializer
-        view = parser_context.get("view")
-        if getattr(view, "serializer_class", None) is FragmentV2Serializer:
-            for session in CaptureSession.objects.filter(box=request.user.box, capture_chunk_negotiated=True):
-                limit = max(limit, byte_limit(session, storage.max_bytes))
+        for session in CaptureSession.objects.filter(box=request.user.box, capture_chunk_negotiated=True):
+            limit = max(limit, byte_limit(session, storage.max_bytes))
         handler = FragmentUploadHandler(request._request, storage, limit)
         request._request.upload_handlers = [handler]
         try:

@@ -11,7 +11,7 @@ from .models import AgentConnectivityEvent
 
 TOKEN = "events-3." + "s" * 43
 AGENTS = {"events-3": {"box": "box-3", "token_sha256": hashlib.sha256(TOKEN.encode()).hexdigest()}}
-URL = "/api/v1/internal/agent-events"
+URL = "/api/v2/internal/agent-events"
 
 
 @override_settings(CAPTURE_AGENTS=AGENTS)

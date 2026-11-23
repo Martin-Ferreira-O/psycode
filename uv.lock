@@ -44,16 +44,16 @@ wheels = [
 
 [[package]]
 name = "django"
-version = "5.2.18"
+version = "5.2.19"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "asgiref" },
     { name = "sqlparse" },
     { name = "tzdata", marker = "sys_platform == 'win32'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/85/fe/79e692b430c7721bf4b812c328bfe687e73e3f28f56611a6a18a97e887cc/django-5.2.18.tar.gz", hash = "sha256:461c5dd06d2ea16bd5ca37d3f46e4def1d6b0fe7588c6f4e2119517bb0af8b2d", size = 10910238, upload-time = "2026-10-06T13:01:09.371Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/02/29/a487a108caa76430c8b616aa90a6d09cf431306112c14093e6f0a7454e17/django-5.2.19.tar.gz", hash = "sha256:ad03d8abc51dbff95ebf34b27123cf0c26a3b62db7ba0cd520783686362533d1", size = 10969285, upload-time = "2026-11-03T15:22:09.468Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d6/01/6568ec52b26548ca1b83d33249f7274db3bf74698f42c0da42ec9db1a24a/django-5.2.18-py3-none-any.whl", hash = "sha256:92ed81d500be6408ecd704d7bd1366c534f30427bffcc63c5fefb129561aec7c", size = 8316071, upload-time = "2026-10-06T13:01:04.413Z" },
+    { url = "https://files.pythonhosted.org/packages/3c/fb/65b4e897d1268288a46457493d9aec6541be8be08e0093a93cc101c03ab2/django-5.2.19-py3-none-any.whl", hash = "sha256:5965d974a5218a2b68a11dd1276434707f23886525c23f0598eccedaf4f4ca00", size = 8319631, upload-time = "2026-11-03T15:22:03.670Z" },
 ]
 
 [[package]]
@@ -188,9 +188,14 @@ dependencies = [
     { name = "websockets" },
 ]
 
+[package.dev-dependencies]
+test = [
+    { name = "tblib" },
+]
+
 [package.metadata]
 requires-dist = [
-    { name = "django", specifier = ">=5.2.18,<5.3" },
+    { name = "django", specifier = ">=5.2.19,<5.3" },
     { name = "django-cors-headers", specifier = ">=4.9,<5" },
     { name = "djangorestframework", specifier = ">=3.16,<3.18" },
     { name = "djangorestframework-simplejwt", specifier = ">=5.5,<6" },
@@ -201,6 +206,9 @@ requires-dist = [
     { name = "uvicorn", specifier = ">=0.38,<1" },
     { name = "websockets", specifier = ">=16,<17" },
 ]
+
+[package.metadata.requires-dev]
+test = [{ name = "tblib", specifier = ">=3,<4" }]
 
 [[package]]
 name = "pyjwt"
@@ -258,6 +266,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/5f/d3/3f06a1006f2261d1342aefb3c71eed02f5d4ca5bdbecd86ebc12ad38306e/sqlparse-0.6.0.tar.gz", hash = "sha256:113c35c75365ab9cc9c7231d68c6428fb11c085fc8e9eb1ad659b7ddbf6cd2b9", size = 178477, upload-time = "2026-08-13T19:16:06.396Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/d9/50/f00935da0ec7cbf325f8dc4f772ae46fbc7b672dd62876e73f0a94adda57/sqlparse-0.6.0-py3-none-any.whl", hash = "sha256:b861c0288ce2fa56209a9a6412d2e066ac664b3873b89c26c9d8415e8e32996f", size = 50070, upload-time = "2026-08-13T19:16:04.062Z" },
+]
+
+[[package]]
+name = "tblib"
+version = "3.2.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/f4/8a/14c15ae154895cc131174f858c707790d416c444fc69f93918adfd8c4c0b/tblib-3.2.2.tar.gz", hash = "sha256:e9a652692d91bf4f743d4a15bc174c0b76afc750fe8c7b6d195cc1c1d6d2ccec", size = 35046, upload-time = "2025-11-12T12:21:16.572Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/02/be/5d2d47b1fb58943194fb59dcf222f7c4e35122ec0ffe8c36e18b5d728f0b/tblib-3.2.2-py3-none-any.whl", hash = "sha256:26bdccf339bcce6a88b2b5432c988b266ebbe63a4e593f6b578b1d2e723d2b76", size = 12893, upload-time = "2025-11-12T12:21:14.407Z" },
 ]
 
 [[package]]

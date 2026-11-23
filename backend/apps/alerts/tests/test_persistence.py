@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.test import SimpleTestCase, override_settings
+from django.test import SimpleTestCase, override_settings, tag
 from pymongo.errors import DuplicateKeyError
 from rest_framework.test import APIClient
 
@@ -223,7 +223,8 @@ class ConnectionTests(SimpleTestCase):
                 call_command("seed_demo_alerts", stdout=io.StringIO())
 
 
-@unittest.skipUnless(os.getenv("PSYCODE_TEST_MONGODB_URI"), "requiere MongoDB real")
+@tag("mongo")
+@unittest.skipUnless(os.getenv("PSYCODE_TEST_MONGODB_URI", "").strip(), "requiere MongoDB real")
 class MongoIntegrationTests(SimpleTestCase):
     def setUp(self):
         close_client()

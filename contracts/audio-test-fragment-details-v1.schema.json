@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Detalle por fragmento de diagnóstico de audio v1",
-  "description": "Valor opcional de data.fragments en PUT, GET y DELETE /api/v1/internal/audio-tests/<uuid>?fragment_details=1. Las muestras son relativas al inicio de la prueba. Solo incluye fragmentos aceptados, en orden de secuencia.",
+  "description": "Valor opcional de data.fragments en PUT, GET y DELETE /api/v2/internal/audio-tests/<uuid>?fragment_details=1. Las muestras son relativas al inicio de la prueba. Solo incluye fragmentos aceptados, en orden de secuencia.",
   "type": "array",
   "items": {
     "type": "object",

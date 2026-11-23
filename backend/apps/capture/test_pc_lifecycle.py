@@ -35,14 +35,14 @@ class PermanentPCTests(APITestCase):
 
     def prepare(self, code, installation=None, secret='x' * 43):
         installation = installation or uuid4()
-        response = self.machine.post('/api/v1/internal/pcs/vincular', {
+        response = self.machine.post('/api/v2/internal/pcs/vincular', {
             'code': code, 'installation_id': str(installation), 'secret': secret,
         }, format='json', secure=True)
         self.assertEqual(response.status_code, 200, response.data)
         return response.data['data']
 
     def confirm(self, data):
-        return self.machine.post('/api/v1/internal/pcs/confirmar', {'installation_id': data['installation_id']},
+        return self.machine.post('/api/v2/internal/pcs/confirmar', {'installation_id': data['installation_id']},
                                  format='json', secure=True, HTTP_AUTHORIZATION='Agent ' + data['api_key'])
 
     def test_existing_installation_is_visible_without_catalogue_or_reconfiguration(self):
@@ -102,7 +102,7 @@ class PermanentPCTests(APITestCase):
         identity = authenticate_agent_header(('Agent ' + OLD).encode())
         agent, code, _ = issue_pairing_code(identity.registry_id)
         data = self.prepare(code)
-        rejected = self.machine.post('/api/v1/internal/pcs/vincular', {
+        rejected = self.machine.post('/api/v2/internal/pcs/vincular', {
             'code': code, 'installation_id': str(uuid4()), 'secret': 'z' * 43,
         }, format='json', secure=True)
         self.assertEqual(rejected.status_code, 400)

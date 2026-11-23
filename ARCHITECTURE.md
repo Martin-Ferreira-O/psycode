@@ -96,7 +96,7 @@ SCRUM-71 almacena además `CaptureSession`, `AgentCommand`, `AcceptedSequence` y
 La bitácora técnica de captura se mantiene en SQL y el logger compartido; la
 consulta MongoDB de bitácora de alertas conserva su contrato. El agente consume
 una interfaz interna con DTO; su transporte y ejecución pertenecen al adaptador
-del box. La ingesta implementa `POST /api/v1/internal/fragments` con credenciales
+del box. La ingesta implementa `POST /api/v2/internal/fragments` con credenciales
 de agente vinculadas al box, separadas del JWT profesional. Guarda archivos
 temporales en un volumen local privado (Windows, macOS o Linux) y `FragmentJob` en SQL, relacionado uno
 a uno con la secuencia aceptada. La clave única sesión/secuencia y el bloqueo

@@ -20,9 +20,9 @@ click==8.5.0 \
     --hash=sha256:255bc9599cf7748b4b1a446ccc735421bd08a2ae529a8b88597d3de5664ee360 \
     --hash=sha256:ba0d2089de75ea0310e2dde03160e6ca10009947fb95a182f9b54021bb272e34
     # via uvicorn
-django==5.2.18 \
-    --hash=sha256:461c5dd06d2ea16bd5ca37d3f46e4def1d6b0fe7588c6f4e2119517bb0af8b2d \
-    --hash=sha256:92ed81d500be6408ecd704d7bd1366c534f30427bffcc63c5fefb129561aec7c
+django==5.2.19 \
+    --hash=sha256:5965d974a5218a2b68a11dd1276434707f23886525c23f0598eccedaf4f4ca00 \
+    --hash=sha256:ad03d8abc51dbff95ebf34b27123cf0c26a3b62db7ba0cd520783686362533d1
     # via
     #   django-cors-headers
     #   djangorestframework

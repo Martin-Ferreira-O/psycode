@@ -20,6 +20,7 @@ const ok = data => ({ status: 200, contentType: 'application/json', body: JSON.s
     if (scrum97) await context.route('**/*', route => new URL(route.request().url()).origin === new URL(base).origin
         ? route.continue() : route.abort('blockedbyclient'));
     const page = await context.newPage();
+    await page.clock.install();
     const errors = [];
     page.on('pageerror', e => errors.push(e.message));
     const configurationRequests=[];
@@ -97,7 +98,7 @@ const ok = data => ({ status: 200, contentType: 'application/json', body: JSON.s
             await login(page,'pcs-supervisor');
             assert.equal((await page.goto(`${base}/api/v1/pcs/panel`)).status(),403);
             assert.equal(await page.evaluate(async url=>(await fetch(url)).status,
-                `/api/v1/internal/pcs/${agentId}/config`),403);
+                `/api/v2/internal/pcs/${agentId}/config`),403);
             assert.deepEqual(errors,[]);
             console.log('SCRUM97_UI_NO_MANUAL_CONFIG_OK: no button/modal/heartbeat/version/recovery controls, no config API requests on PC page, desktop/mobile/reload, rename/focus/history preserved, automatic WSS heartbeat15, global fixed/session controls, supervisor403; no screenshots.');
             return;
@@ -170,8 +171,8 @@ const ok = data => ({ status: 200, contentType: 'application/json', body: JSON.s
         // Catálogo real recibido por la API del colector; no se inventan IDs desde el nombre.
         await page.evaluate(async () => {
             const headers={'Content-Type':'application/json',Authorization:'Agent collector-test.'+'S'.repeat(43)};
-            const issued=await (await fetch('/api/v1/internal/agenda-collections',{method:'POST',headers,body:JSON.stringify({source:'smile'})})).json();
-            const response=await fetch('/api/v1/internal/smile-room-catalogues',{method:'POST',headers,body:JSON.stringify({version:'1.0',source:'smile',collection_id:issued.data.collection_id,rooms:[
+            const issued=await (await fetch('/api/v2/internal/agenda-collections',{method:'POST',headers,body:JSON.stringify({source:'smile'})})).json();
+            const response=await fetch('/api/v2/internal/smile-room-catalogues',{method:'POST',headers,body:JSON.stringify({version:'1.0',source:'smile',collection_id:issued.data.collection_id,rooms:[
                 {box:'box-3',name:'BOX DE ATENCIÓN 3',smile_box_id:'77'},
                 {box:'box-18',name:'BOX DE ATENCIÓN 18',smile_box_id:'91'}]})});
             if(response.status!==200)throw Error('catalogue rejected');
@@ -402,9 +403,14 @@ finally: c.close()
         pcs[0].pending = 23;
         pcs[2].connection = 'offline';
         pcs[3].connection = 'online';
-        await page.waitForTimeout(16500);
+        const refresh = page.waitForResponse(response => new URL(response.url()).pathname === '/api/v1/pcs' &&
+            response.request().method() === 'GET' && response.ok());
+        await page.clock.fastForward(16500);
+        await refresh;
+        const pending = page.locator('.pc-tarjeta[data-box="box-3"]')
+            .getByText('Pendientes del PC', { exact: true }).locator('..').locator('dd');
+        await pending.filter({ hasText: /^23$/ }).waitFor();
         assert.equal(await historyButton.evaluate(x => x === document.activeElement), true);
-        assert.match(await page.locator('[data-agent-id]').first().innerText(), /23/);
         assert.deepEqual(await ordenBoxes(), ['box-3', 'box-6', 'box-5', 'box-4', 'box-7']);
         await historyButton.focus(); await page.keyboard.press('Enter');
         await page.locator('#dialogoHistorialPC[open]').waitFor(); await page.keyboard.press('Escape');

@@ -13,7 +13,7 @@ los DTO de control y los recibos de ingesta existentes conservan sus nombres.
 `completada` sigue indicando que se conoce el fin y se recibieron todas las
 secuencias declaradas; no acredita que hayan terminado los análisis.
 
-La proyección aditiva de `GET /api/v1/internal/sessions/<session_id>` autentica
+La proyección aditiva de `GET /api/v2/internal/sessions/<session_id>` autentica
 al agente y restringe la consulta a su box. Expone:
 
 | Campo | Valores y significado |
@@ -66,7 +66,7 @@ El servidor anuncia las capacidades aditivas `agent.events.v1` y
 `sessions.capture-ended.v1` en `ready`. Los agentes nuevos pueden usar:
 
 ```text
-POST /api/v1/internal/sessions/<session_id>/capture-ended
+POST /api/v2/internal/sessions/<session_id>/capture-ended
 Authorization: Agent <identidad>.<secreto>
 ```
 
@@ -141,7 +141,7 @@ pendientes.
 
 ## Eventos y diagnóstico
 
-`POST /api/v1/internal/agent-events` recibe lotes técnicos producidos localmente.
+`POST /api/v2/internal/agent-events` recibe lotes técnicos producidos localmente.
 El servidor fija PC/box desde la identidad autenticada y deduplica por
 `(agent_id, event_id)`. Reenviar el mismo evento conserva `received_at`; cambiar
 el contenido de esa identidad produce conflicto y revierte el lote. Se guardan

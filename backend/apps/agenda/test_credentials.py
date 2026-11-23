@@ -13,7 +13,7 @@ from backend.apps.operational.models import OperationalConfiguration
 
 @override_settings(SMILE_USERNAME="synthetic-user", SMILE_PASSWORD="synthetic-${literal}")
 class SmileCredentialsTests(APITestCase):
-    url = "/api/v1/internal/smile-credentials"
+    url = "/api/v2/internal/smile-credentials"
 
     def setUp(self):
         self.first, self.key = create_agent(name="Colector sintético", box="box-3")
@@ -66,7 +66,7 @@ class SmileCredentialsTests(APITestCase):
         browser.credentials(HTTP_AUTHORIZATION="Bearer " + str(RefreshToken.for_user(admin).access_token))
         self.assertEqual(browser.get(self.url, secure=True).status_code, 401)
         for result in (self.client.get("/api/v1/configuracion-operativa"),
-                       self.first_client.get("/api/v1/internal/smile-configuration", secure=True)):
+                       self.first_client.get("/api/v2/internal/smile-configuration", secure=True)):
             self.assertNotIn("synthetic-user", str(result.data))
             self.assertNotIn("synthetic-${literal}", str(result.data))
 
@@ -74,7 +74,7 @@ class SmileCredentialsTests(APITestCase):
         _, code, _ = issue_pairing_code(self.first.pk)
         installation = str(uuid4())
         public = APIClient()
-        prepared = public.post("/api/v1/internal/pcs/vincular", {
+        prepared = public.post("/api/v2/internal/pcs/vincular", {
             "code": code, "installation_id": installation, "secret": "s" * 43,
         }, format="json", secure=True)
         self.assertEqual(prepared.status_code, 200, prepared.data)
@@ -84,7 +84,7 @@ class SmileCredentialsTests(APITestCase):
         machine.credentials(HTTP_AUTHORIZATION="Agent " + token)
         self.assertEqual(machine.get(self.url, secure=True).status_code, 401)
         for _ in range(2):
-            confirmed = machine.post("/api/v1/internal/pcs/confirmar", {"installation_id": installation},
+            confirmed = machine.post("/api/v2/internal/pcs/confirmar", {"installation_id": installation},
                                      format="json", secure=True)
             self.assertEqual(confirmed.status_code, 200, confirmed.data)
             self.assertEqual(confirmed.data["data"]["smile_credentials_version"], "1")

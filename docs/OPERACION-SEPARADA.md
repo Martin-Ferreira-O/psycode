@@ -121,9 +121,9 @@ o elige **Sin colector** para desactivar la autorización importada. Después de
 la migración puedes retirar `CAPTURE_AGENDA_SOURCES` y los parámetros
 operativos Smile del entorno de los agentes.
 
-El agente solicita una generación mediante `POST /api/v1/internal/agenda-collections`
+El agente solicita una generación mediante `POST /api/v2/internal/agenda-collections`
 (JSON `source` y `revision` del perfil). Recibe `collection_id`, generación SQL y boxes. Sube el reporte original JSON o Excel a
-`POST /api/v1/internal/agenda-reports` con multipart `archivo` y `metadata` JSON.
+`POST /api/v2/internal/agenda-reports` con multipart `archivo` y `metadata` JSON.
 El schema está en [contracts](../contracts/agenda-v1.schema.json).
 
 Una recolección conserva identidad, bytes y metadatos al reintentar. Se devuelve
@@ -159,6 +159,14 @@ reenvío ciego ante envíos inciertos. Los journals existentes de proveedores si
 protegiendo sus solicitudes. Los contextos de sesiones terminales se liberan cuando
 no quedan trabajos pendientes/procesando. Las evidencias en memoria están acotadas.
 
+## Paso a la API interna v2
+
+Desplegar el servidor y distribuir el instalador del agente que usa
+`/api/v2/internal/` en la misma ventana. Esto incluye vinculación, actualizaciones,
+captura, diagnóstico de audio y Smile. Los agentes de prueba que todavía consultan
+la ruta de actualizaciones v1 necesitan instalar el paquete nuevo directamente.
+Los WAV antiguos que carecen de metadatos temporales se conservan para revisión.
+
 ## Verificación
 
 Para una primera ejecución, seguir [Cómo probar el servidor junto con
@@ -175,7 +183,7 @@ uv run python -m tests.cross.run --agent-wheel /ruta/psycode_agent-1.0.0-py3-non
 ```
 
 La última suite crea bases y entornos temporales, levanta un servidor real ASGI y
-un agente instalado en otro proceso, simula OBS/proveedores y comprueba HTTP v1/v2,
+un agente instalado en otro proceso, simula OBS/proveedores y comprueba HTTP interno v2,
 ACK perdido después de commit, reconexión, agenda y coordinador entre procesos.
 Recibe un wheel explícito y registra su SHA-256; no depende de carpetas hermanas.
 No ejecutar dos suites sobre el mismo SQLite de pruebas: usar

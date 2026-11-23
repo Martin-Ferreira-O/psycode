@@ -29,7 +29,7 @@ previous=
 if [[ -e "$current" ]]; then
   previous=$(readlink -f "$current")
 fi
-public_host=144.22.56.52
+public_host=${PSYCODE_HOST:-}
 export PSYCODE_PROBE_LOCAL=0
 if [[ -r /etc/psycode/deploy.conf ]]; then
   # shellcheck disable=SC1091
@@ -75,6 +75,15 @@ else
 fi
 export DJANGO_SETTINGS_MODULE=backend.config.vps_settings
 .venv/bin/python manage.py check --deploy --fail-level WARNING
+if [[ -z "$public_host" ]]; then
+  public_host=$(.venv/bin/python - <<'PY'
+from urllib.parse import urlsplit
+from django.conf import settings
+
+print(urlsplit(settings.FRONTEND_BASE_URL).netloc)
+PY
+  )
+fi
 
 if [[ ! -r "$HOME/shared/control-probe.json" || ! -r "$probe_script" ]]; then
   echo 'Configure the dedicated WSS deployment probe before stopping production.' >&2

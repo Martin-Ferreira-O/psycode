@@ -1,6 +1,6 @@
 # Speechmatics y JEV: integración y pruebas en Psycode
 
-> Actualización de separación: [operación vigente](../docs/OPERACION-SEPARADA.md). Agente en el repositorio independiente `psycode-agent`; control WS autenticado, audio v1/v2 y agenda durable. Las instrucciones históricas incompatibles quedan sustituidas por ese runbook.
+> Actualización de separación: [operación vigente](../docs/OPERACION-SEPARADA.md). Agente en el repositorio independiente `psycode-agent`; control WS autenticado, audio v2 y agenda durable. Las instrucciones históricas incompatibles quedan sustituidas por ese runbook.
 
 
 ## Estado verificado

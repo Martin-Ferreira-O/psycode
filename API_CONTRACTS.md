@@ -19,7 +19,7 @@ Endpoints sin barra final; el prefijo sí se escribe `/api/v1/`. No depender de 
 
 | Método | Ruta completa | Nombre Django | Acceso |
 |---|---|---|---|
-| POST | `/api/v1/internal/fragments` | `capture:fragment_upload` | Agente autorizado y vinculado al box; multipart |
+| POST | `/api/v2/internal/fragments` | `capture:fragment_upload` | Agente autorizado y vinculado al box; multipart |
 | POST | `/api/v1/auth/login` | `accounts:login` | Público |
 | POST | `/api/v1/auth/refresh` | `accounts:refresh` | Refresh válido, no exige access |
 | POST | `/api/v1/auth/logout` | `accounts:logout` | Access válido + refresh propio |
@@ -469,7 +469,7 @@ Incluye `jev_model` (`1.14` o `1.13`) y `speechmatics_model`
 `smile_collector_id` (UUID registrado o `null` para desactivar), `smile_source`,
 `smile_url`, `smile_interval`, `smile_timeout`, `smile_request_timeout`,
 `smile_format`, `smile_timezone` y `smile_boxes`. Smile usa la zona fija
-`America/Santiago` y la URL predeterminada `https://192.168.10.184/providencia/usmile/index.php/`.
+`America/Santiago`. La URL inicial se configura mediante `SMILE_DEFAULT_URL` o en el panel operativo.
 El objeto `options` expone los valores admitidos y los PCs activos con su estado de conexión.
 
 Extracto de una respuesta 200 para una configuración guardada:
@@ -559,14 +559,14 @@ El texto de los mensajes puede variar con el idioma; frontend debe usar HTTP,
 inválidos se conserva el error existente `400 VALIDATION_ERROR` sin campos.
 Aplican también los errores comunes de autenticación y persistencia.
 
-### GET /api/v1/internal/smile-configuration
+### GET /api/v2/internal/smile-configuration
 
 Requiere autenticación de agente y responde con `Cache-Control: no-store`.
 `data` contiene el perfil vigente solo para el colector designado y es `null`
 para los demás. El agente negocia `agenda.smile-config.v1` por WebSocket y
 consulta el perfil mediante la URL interna HTTPS. El perfil se documenta en el
 [esquema de Smile](contracts/smile-configuration-v1.schema.json). La solicitud
-`POST /api/v1/internal/agenda-collections` incluye `source` y `revision`
+`POST /api/v2/internal/agenda-collections` incluye `source` y `revision`
 del perfil. Un cambio de designación deniega al PC anterior con 403.
 Una revisión obsoleta devuelve 409 `AGENDA_CONFIGURATION_CHANGED`.
 
@@ -910,7 +910,7 @@ todos los resultados coincidentes en XLSX. Admite `order` (por defecto `desc`).
 
 ## 5. Ingesta interna de fragmentos
 
-Implementada: `POST /api/v1/internal/fragments`, sin barra final. Recibe un archivo,
+Implementada: `POST /api/v2/internal/fragments`, sin barra final. Recibe un archivo,
 lo valida y lo deja en almacenamiento privado temporal con un trabajo SQL
 `pendiente`. No controla OBS, analiza audio, genera alertas ni envía notificaciones.
 La respuesta utiliza el envelope JSON común. No hay descarga pública del archivo
@@ -951,7 +951,7 @@ Usar HTTPS y publicar esta ruta únicamente en la red de los agentes.
 ### Campos y límites
 
 Content-Type: `multipart/form-data; boundary=...`. Exactamente un archivo y los
-seis campos de texto siguientes, todos obligatorios y sin repeticiones. Los
+doce campos de texto siguientes, todos obligatorios y sin repeticiones. Los
 campos desconocidos se rechazan. Se exige el cierre multipart completo, sin
 epílogo. El nombre del archivo y su MIME declarado no determinan el formato y
 no se guardan ni aparecen en respuestas o errores.
@@ -965,9 +965,16 @@ no se guardan ni aparecen en respuestas o errores.
 | `formato` | `wav`. Otros formatos o perfiles PCM se rechazan. |
 | `checksum` | SHA-256 de todos los bytes del archivo: exactamente 64 caracteres `[0-9a-f]`, sin prefijo. Se recalcula en el backend. |
 | `captured_at` | Fecha/hora ISO 8601 con zona horaria, máximo 40 caracteres. Es el instante de captura; se exige para validar fragmentos retrasados durante la finalización. |
+| `session_start_sample` | Índice de la primera muestra del WAV respecto al inicio de la sesión. |
+| `session_end_sample` | Índice exclusivo de la última muestra respecto al inicio de la sesión. |
+| `new_audio_start_sample` | Primera muestra que aporta audio nuevo, después del solapamiento. |
+| `sample_rate` | Frecuencia de muestreo. Debe ser `16000`. |
+| `chunk_samples` | Cantidad nominal de muestras por fragmento. El último WAV puede ser parcial. |
+| `overlap_samples` | Cantidad de muestras compartidas entre fragmentos según el perfil de la sesión. |
 
 Límite inclusivo de archivo: **25 MiB (26.214.400 bytes)** por defecto, configurable
-con `CAPTURE_FRAGMENT_MAX_BYTES` (entero positivo). El cuerpo multipart completo
+con `CAPTURE_FRAGMENT_MAX_BYTES` (entero positivo). Una sesión con duración negociada
+usa su propia cota. El cuerpo multipart completo
 no puede superar ese límite más **64 KiB (65.536 bytes)**. Se verifican tanto
 Content-Length como los bytes realmente leídos; declarar un tamaño menor no
 evita el límite. La carga se escribe en streaming a un temporal privado, sin
@@ -977,7 +984,7 @@ Ejemplo de envío; las variables contienen la URL interna HTTPS, credencial,
 UUID de sesión, checksum real e instante de captura proporcionados por el agente:
 
 ~~~sh
-curl --request POST "$PSYCODE_INTERNAL_BASE_URL/api/v1/internal/fragments" \
+curl --request POST "$PSYCODE_INTERNAL_BASE_URL/api/v2/internal/fragments" \
   --header "Authorization: Agent $PSYCODE_AGENT_TOKEN" \
   --form 'archivo=@fragment.wav;type=audio/wav' \
   --form 'box=box-3' \
@@ -985,7 +992,13 @@ curl --request POST "$PSYCODE_INTERNAL_BASE_URL/api/v1/internal/fragments" \
   --form 'secuencia=0' \
   --form 'formato=wav' \
   --form "checksum=$FRAGMENT_SHA256" \
-  --form "captured_at=$FRAGMENT_CAPTURED_AT"
+  --form "captured_at=$FRAGMENT_CAPTURED_AT" \
+  --form 'session_start_sample=0' \
+  --form "session_end_sample=$FRAGMENT_FRAME_COUNT" \
+  --form 'new_audio_start_sample=0' \
+  --form 'sample_rate=16000' \
+  --form "chunk_samples=$CAPTURE_CHUNK_SAMPLES" \
+  --form "overlap_samples=$CAPTURE_OVERLAP_SAMPLES"
 ~~~
 
 Una secuencia nueva requiere sesión `activa` o `finalizando` e inicio real
@@ -1167,9 +1180,9 @@ captura; después requiere `resume_capture_reception`, conservando pendientes.
 
 | Método | Ruta interna | Uso |
 |---|---|---|
-| GET | `/api/v1/internal/sessions/<uuid>` | Captura, recepción y procesamiento separados, limitado al box autenticado. |
-| POST | `/api/v1/internal/sessions/<uuid>/capture-ended` | Evidencia física durable de detención, independiente del ACK y los uploads. |
-| POST | `/api/v1/internal/agent-events` | Hasta 64 eventos técnicos, JSON de hasta 64 KiB, deduplicación por agente/evento. |
+| GET | `/api/v2/internal/sessions/<uuid>` | Captura, recepción y procesamiento separados, limitado al box autenticado. |
+| POST | `/api/v2/internal/sessions/<uuid>/capture-ended` | Evidencia física durable de detención, independiente del ACK y los uploads. |
+| POST | `/api/v2/internal/agent-events` | Hasta 64 eventos técnicos, JSON de hasta 64 KiB, deduplicación por agente/evento. |
 
 Todas usan `Authorization: Agent <agent_id>.<secret>`, sin JWT de profesionales.
 `capture-ended` admite `last_sequence: null` para un manifiesto desconocido; no

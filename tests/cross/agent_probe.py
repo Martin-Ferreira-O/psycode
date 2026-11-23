@@ -18,7 +18,7 @@ base, token, root, alternate=sys.argv[1:]
 from dataclasses import replace
 config=AgentConfig('box-3',10,1,
     backend_url=base,agent_token=token,agent_state_root=root,websocket_url=base.replace('https:','wss:').replace('http:','ws:')+'/ws/v1/agents',
-    max_retries=2,retry_backoff=0,autonomous=False,audio_v2=True, control_ca_file=__import__("os").environ.get("SSL_CERT_FILE", ""))
+    max_retries=2,retry_backoff=0,autonomous=False, control_ca_file=__import__("os").environ.get("SSL_CERT_FILE", ""))
 control=WebSocketControl(config)
 try:
     control.open()

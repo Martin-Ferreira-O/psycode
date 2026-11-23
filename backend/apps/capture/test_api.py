@@ -16,7 +16,7 @@ from .uploads import FragmentUploadHandler
 
 TOKEN = "agent-3." + "s" * 43
 AGENTS = {"agent-3": {"box": "box-3", "token_sha256": hashlib.sha256(TOKEN.encode()).hexdigest()}}
-URL = "/api/v1/internal/fragments"
+URL = "/api/v2/internal/fragments"
 
 
 class FragmentAPITests(IngestionFixtures, TestCase):
@@ -36,7 +36,9 @@ class FragmentAPITests(IngestionFixtures, TestCase):
         result = dict(archivo=SimpleUploadedFile("PRIVATE-CLINICAL-FILENAME.wav", content, "audio/wav"),
                       box="box-3", session_id=str(self.session.session_id), secuencia="0", formato="wav",
                       checksum=hashlib.sha256(content).hexdigest(),
-                      captured_at=(NOW + timedelta(seconds=10)).isoformat())
+                      captured_at=(NOW + timedelta(seconds=10)).isoformat(),
+                      session_start_sample=0, session_end_sample=max(1, (len(content) - 44) // 2),
+                      new_audio_start_sample=0, sample_rate=16000, chunk_samples=160000, overlap_samples=16000)
         result.update(changes)
         return result
 
@@ -105,11 +107,15 @@ class FragmentAPITests(IngestionFixtures, TestCase):
 
     def test_finalizing_accepts_last_fragment_but_rejects_sequences_beyond_declared_final(self):
         self.ack_stop(self.stop(), last_sequence=0)
+        first = wav_bytes(b"\0\0" * 160000)
+        extra = wav_bytes(b"\0\0" * 32000)
         with patch("django.utils.timezone.now", return_value=NOW + timedelta(seconds=36)):
-            self.assert_error(self.post(secuencia="1"), 409, "SEQUENCE_OUT_OF_ORDER")
-            self.assertEqual(self.post().status_code, 201)
-            self.assert_error(self.post(secuencia="1"), 409, "SESSION_NOT_ACCEPTING_SEQUENCES")
-            self.assertEqual(self.post().status_code, 200)
+            self.assertEqual(self.post(content=first).status_code, 201)
+            response = self.post(content=extra, secuencia="1", session_start_sample=144000,
+                                 session_end_sample=176000, new_audio_start_sample=160000,
+                                 captured_at=(NOW + timedelta(seconds=19)).isoformat())
+            self.assert_error(response, 409, "SESSION_NOT_ACCEPTING_SEQUENCES")
+            self.assertEqual(self.post(content=first).status_code, 200)
         self.assertEqual(FragmentJob.objects.count(), 1)
 
     def test_conflict_preserves_original_job_and_audio(self):
@@ -221,6 +227,16 @@ class FragmentAPITests(IngestionFixtures, TestCase):
         self.assert_error(self.client.get(URL), 405, "METHOD_NOT_ALLOWED")
         self.assertIn("POST", self.client.get(URL)["Allow"])
         self.assertEqual(self.client.post(URL + "/", {}, format="multipart").status_code, 404)
+
+    def test_old_internal_routes_and_fragment_aliases_return_404(self):
+        for path in (
+            "/api/v1/internal/fragments", "/api/v1/internal/fragments/v2", URL + "/v2",
+            f"/api/v1/internal/audio-tests/{uuid4()}/fragments",
+            f"/api/v1/internal/audio-tests/{uuid4()}", "/api/v1/internal/pcs/vincular",
+            "/api/v1/internal/agent-updates/windows-x64", "/api/v1/internal/smile-configuration",
+        ):
+            with self.subTest(path=path):
+                self.assertEqual(self.client.post(path).status_code, 404)
 
 
 class InterruptedUploadHandlerTests(IngestionFixtures, TestCase):

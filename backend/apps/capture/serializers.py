@@ -17,6 +17,12 @@ class FragmentSerializer(serializers.Serializer):
     formato = serializers.CharField(max_length=16, trim_whitespace=False)
     checksum = serializers.RegexField(r"\A[0-9a-f]{64}\Z", min_length=64, max_length=64, trim_whitespace=False)
     captured_at = serializers.CharField(max_length=40, trim_whitespace=False)
+    session_start_sample = serializers.IntegerField(min_value=0, max_value=9223372036854775806)
+    session_end_sample = serializers.IntegerField(min_value=1, max_value=9223372036854775806)
+    new_audio_start_sample = serializers.IntegerField(min_value=0, max_value=9223372036854775806)
+    sample_rate = serializers.IntegerField(min_value=16000, max_value=16000)
+    chunk_samples = serializers.IntegerField(min_value=1, max_value=9223372036854775806)
+    overlap_samples = serializers.IntegerField(min_value=0, max_value=9223372036854775806 - 1)
 
     def to_internal_value(self, data):
         if set(data) != set(self.fields) or any(len(data.getlist(key)) != 1 for key in data):
@@ -37,15 +43,6 @@ class FragmentSerializer(serializers.Serializer):
         if instant is None or timezone.is_naive(instant):
             raise serializers.ValidationError("Fecha inválida.")
         return instant
-
-
-class FragmentV2Serializer(FragmentSerializer):
-    session_start_sample = serializers.IntegerField(min_value=0, max_value=9223372036854775806)
-    session_end_sample = serializers.IntegerField(min_value=1, max_value=9223372036854775806)
-    new_audio_start_sample = serializers.IntegerField(min_value=0, max_value=9223372036854775806)
-    sample_rate = serializers.IntegerField(min_value=16000, max_value=16000)
-    chunk_samples = serializers.IntegerField(min_value=1, max_value=9223372036854775806)
-    overlap_samples = serializers.IntegerField(min_value=0, max_value=9223372036854775806 - 1)
 
 
 class AgentRegistrationCreateSerializer(serializers.Serializer):

@@ -18,13 +18,15 @@ from backend.apps.analysis.tests.test_integration import answer
 from backend.apps.capture.pc_registry import create_agent, revoke_agent
 from backend.config.composition import analysis_worker
 
-from .models import OperationalConfiguration, SMILE_DEFAULT_URL, SMILE_TIMEZONE
+from .models import OperationalConfiguration, SMILE_TIMEZONE
+
+TEST_SMILE_URL = "https://smile.example.test/index.php/"
 
 
 class ProcessingConfigurationTests(APITestCase):
     url = "/api/v1/configuracion-operativa"
-    profile_url = "/api/v1/internal/smile-configuration"
-    collections = "/api/v1/internal/agenda-collections"
+    profile_url = "/api/v2/internal/smile-configuration"
+    collections = "/api/v2/internal/agenda-collections"
 
     def setUp(self):
         self.client.force_authenticate(User.objects.create_user(
@@ -94,16 +96,17 @@ class ProcessingConfigurationTests(APITestCase):
             "source": "smile", "revision": profile["revision"],
         }, format="json")
 
+    @override_settings(SMILE_DEFAULT_URL=TEST_SMILE_URL)
     def test_smile_defaults_are_available_to_admin_and_assigned_agent(self):
         initial = self.client.get(self.url).data["data"]
-        self.assertEqual(initial["smile_url"], SMILE_DEFAULT_URL)
+        self.assertEqual(initial["smile_url"], TEST_SMILE_URL)
         self.assertEqual(initial["smile_timezone"], SMILE_TIMEZONE)
         self.assertIsNone(self.profile(self.machines[0]))
 
         assigned = self.put(smile_collector_id=str(self.first.pk), smile_boxes=["box-3"])
         self.assertEqual(assigned.status_code, 200, assigned.data)
         profile = self.profile(self.machines[0])
-        self.assertEqual((profile["url"], profile["timezone"]), (SMILE_DEFAULT_URL, SMILE_TIMEZONE))
+        self.assertEqual((profile["url"], profile["timezone"]), (TEST_SMILE_URL, SMILE_TIMEZONE))
         self.assertEqual(self.put(smile_timezone="UTC").status_code, 400)
         self.assertEqual(self.put(smile_timezone=SMILE_TIMEZONE).status_code, 200)
         self.assertEqual(self.profile(self.machines[0]), profile)
@@ -130,7 +133,7 @@ class ProcessingConfigurationTests(APITestCase):
         self.assertEqual(current["interval"], 60)
         self.assertEqual(self.issue(new, profile).status_code, 409)
         self.assertEqual(self.issue(new, current).status_code, 201)
-        catalog = old.post("/api/v1/internal/smile-room-catalogues", {
+        catalog = old.post("/api/v2/internal/smile-room-catalogues", {
             "version": "1.0", "source": "smile", "collection_id": issued.data["data"]["collection_id"],
             "rooms": [{"box": "box-3", "name": "Box 3", "smile_box_id": "20"}],
         }, format="json")
@@ -166,7 +169,7 @@ class ProcessingConfigurationTests(APITestCase):
         self.assertEqual(issued.status_code, 201, issued.data)
         updated = self.put(smile_format="smile.excel.v1", smile_boxes=["box-3"])
         self.assertEqual(updated.status_code, 200, updated.data)
-        catalog = machine.post("/api/v1/internal/smile-room-catalogues", {
+        catalog = machine.post("/api/v2/internal/smile-room-catalogues", {
             "version": "1.0", "source": "smile", "collection_id": issued.data["data"]["collection_id"],
             "rooms": [{"box": "box-3", "name": "Box 3", "smile_box_id": "20"}],
         }, format="json")
@@ -223,7 +226,10 @@ class ProcessingConfigurationTests(APITestCase):
 
 
 class SmileMigrationTests(TransactionTestCase):
-    @override_settings(CAPTURE_AGENTS={"old-agent": {"box": "box-5", "token_sha256": "a" * 64}})
+    @override_settings(
+        CAPTURE_AGENTS={"old-agent": {"box": "box-5", "token_sha256": "a" * 64}},
+        SMILE_DEFAULT_URL=TEST_SMILE_URL,
+    )
     def test_imports_legacy_scope_and_defaults(self):
         executor = MigrationExecutor(connection)
         latest = executor.loader.graph.leaf_nodes()
@@ -237,8 +243,9 @@ class SmileMigrationTests(TransactionTestCase):
         self.assertEqual((config.jev_model, config.speechmatics_model), ("1.14", "enhanced"))
         self.assertEqual(config.smile_legacy_sources, {"legacy": {"collector_id": "old-agent", "boxes": ["box-5"]}})
         self.assertEqual((config.smile_source, config.smile_boxes), ("legacy", ["box-5"]))
-        self.assertEqual(config.smile_url, SMILE_DEFAULT_URL)
+        self.assertEqual(config.smile_url, TEST_SMILE_URL)
 
+    @override_settings(SMILE_DEFAULT_URL=TEST_SMILE_URL)
     def test_existing_custom_url_survives_fixed_timezone_migration(self):
         executor = MigrationExecutor(connection)
         latest = executor.loader.graph.leaf_nodes()
@@ -247,7 +254,7 @@ class SmileMigrationTests(TransactionTestCase):
         executor.migrate(previous)
         legacy = executor.loader.project_state(previous).apps.get_model("operational", "OperationalConfiguration")
         collector, _ = create_agent(name="Colector", box="box-3")
-        custom_url = "https://smile.example.test/index.php/"
+        custom_url = "https://custom-smile.example.test/index.php/"
         legacy.objects.update_or_create(pk=1, defaults={
             "smile_url": custom_url, "smile_timezone": "UTC", "smile_collector_id": collector.pk, "smile_revision": 4,
         })

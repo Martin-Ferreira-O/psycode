@@ -12,7 +12,6 @@ from .authentication import authenticate_agent_header
 from .models import AgentConfiguration, AgentRegistration, ConfigurationState
 from .pc_registry import create_agent
 from .protocol import decode, envelope
-from .serializers import AgentConfigurationSerializer
 from .websocket import RemoteControl
 
 
@@ -48,13 +47,6 @@ class AgentConfigurationTests(APITestCase):
                 self.assertEqual(self.client.put(self.url, data, format="json").status_code, 400)
         self.assertFalse(AgentConfiguration.objects.exists())
 
-    def test_bug_97_01_serializer_rejects_unknown_parameters_and_negative_values(self):
-        serializer = AgentConfigurationSerializer(
-            data={"desired_config": {'parametro_inventado': True, 'heartbeat_interval': -999}}
-        )
-        self.assertFalse(serializer.is_valid())
-        self.assertIn("desired_config", serializer.errors)
-
     def test_bug_97_02_03_04_state_transitions_obsolete_rejection_and_effective_config(self):
         v1 = AgentConfiguration.objects.create(agent=self.agent, version=1, desired_config={'heartbeat_interval': 10})
         v2 = AgentConfiguration.objects.create(agent=self.agent, version=2, desired_config={'heartbeat_interval': 15})
@@ -82,7 +74,7 @@ class AgentConfigurationTests(APITestCase):
         self.assertNotEqual(v1.state, ConfigurationState.APPLIED)
         self.assertEqual(v1.state, ConfigurationState.FAILED)
 
-    def test_bug_97_05_concurrent_or_stale_edits_are_rejected_and_audited(self):
+    def test_configuration_write_is_audited_and_stale_edits_are_rejected(self):
         admin = User(role=Role.ADMIN, is_active=True, is_staff=False)
         self.client.force_authenticate(admin)
 
@@ -93,6 +85,7 @@ class AgentConfigurationTests(APITestCase):
             first = self.client.put(self.url, {"desired_config": {'heartbeat_interval': 10}, "base_version": 0}, format="json")
             self.assertEqual(first.status_code, 201)
             self.assertEqual(first.data["data"]["version"], 1)
+            self.assertEqual(AgentConfiguration.objects.filter(agent=self.agent).count(), 1)
             self.assertGreaterEqual(emit.call_count, 1)
 
             stale = self.client.put(self.url, {"desired_config": {'heartbeat_interval': 20}, "base_version": 0}, format="json")
@@ -100,49 +93,6 @@ class AgentConfigurationTests(APITestCase):
 
             blind_stale = self.client.put(self.url, {"desired_config": {'heartbeat_interval': 25}}, format="json")
             self.assertEqual(blind_stale.status_code, 409)
-
-    def test_qa_auditoria_configuracion(self):
-        admin = User(role=Role.ADMIN, is_active=True, is_staff=False)
-        self.client.force_authenticate(admin)
-        with patch("backend.common.audit.AuditWriter.emit") as emit:
-            response = self.client.put(self.url, {"desired_config": {'heartbeat_interval': 10}}, format="json")
-            sql_count = AgentConfiguration.objects.filter(agent=self.agent).count()
-            audit_count = emit.call_count
-            self.assertEqual(response.status_code, 201)
-            self.assertEqual(sql_count, 1)
-            self.assertGreaterEqual(audit_count, 1)
-
-    def test_qa_ediciones_concurrentes(self):
-        admin = User(role=Role.ADMIN, is_active=True, is_staff=False)
-        self.client.force_authenticate(admin)
-        v_init = self.client.get(self.url).data["data"]["version"]
-        r1 = self.client.put(self.url, {"desired_config": {'heartbeat_interval': 10}, "base_version": v_init}, format="json")
-        r2 = self.client.put(self.url, {"desired_config": {'heartbeat_interval': 20}, "base_version": v_init}, format="json")
-        self.assertEqual(r1.status_code, 201)
-        self.assertEqual(r2.status_code, 409)
-
-    def test_qa_multiple_pending_versions(self):
-        v1 = AgentConfiguration.objects.create(agent=self.agent, version=1, desired_config={'heartbeat_interval': 10})
-        v2 = AgentConfiguration.objects.create(agent=self.agent, version=2, desired_config={'heartbeat_interval': 20})
-        identity = authenticate_agent_header(f"Agent {self.token}".encode())
-        control = RemoteControl(identity, uuid4())
-        control.open()
-        control.acknowledge_config(v2.pk, success=True, effective_config={'heartbeat_interval': 20})
-        control.acknowledge_config(v1.pk, success=True, effective_config={'heartbeat_interval': 10})
-        v1.refresh_from_db()
-        v2.refresh_from_db()
-        self.assertEqual(v2.state, ConfigurationState.APPLIED)
-        self.assertEqual(v1.state, ConfigurationState.FAILED)
-
-    def test_qa_configuracion_efectiva(self):
-        v1 = AgentConfiguration.objects.create(agent=self.agent, version=1, desired_config={'heartbeat_interval': 15})
-        identity = authenticate_agent_header(f"Agent {self.token}".encode())
-        control = RemoteControl(identity, uuid4())
-        control.open()
-        control.acknowledge_config(v1.pk, success=True, effective_config=None)
-        v1.refresh_from_db()
-        self.assertEqual(v1.state, ConfigurationState.FAILED)
-        self.assertEqual(v1.error_code, "MISSING_EFFECTIVE_CONFIG")
 
 
 class ConfigurationProtocolTests(SimpleTestCase):
@@ -229,7 +179,8 @@ class RemoteConfigurationAcceptanceTests(APITestCase):
         self.client.raise_request_exception = False
         for desired in ({"audio_chunk_mode": []}, {"analysis_unit": {}},
                         {"obs_port": 65536}, {"log_level": {}},
-                        {"audio_chunk_duration": 10, "audio_chunk_overlap": 20}):
+                        {"audio_chunk_duration": 10, "audio_chunk_overlap": 20},
+                        {"parametro_inventado": True}, {"heartbeat_interval": -999}):
             with self.subTest(desired=desired):
                 self.assertEqual(self.client.put(self.url, {"desired_config": desired}, format="json").status_code, 400)
 

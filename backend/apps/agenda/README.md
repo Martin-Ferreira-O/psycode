@@ -1,6 +1,6 @@
 # Agenda Excel
 
-> Actualización de separación: [operación vigente](../../../docs/OPERACION-SEPARADA.md). Agente en el repositorio independiente `psycode-agent`; control WS autenticado, audio v1/v2 y agenda durable. Las instrucciones históricas incompatibles quedan sustituidas por ese runbook.
+> Actualización de separación: [operación vigente](../../../docs/OPERACION-SEPARADA.md). Agente en el repositorio independiente `psycode-agent`; control WS autenticado, audio v2 y agenda durable. Las instrucciones históricas incompatibles quedan sustituidas por ese runbook.
 
 
 `AgendaService` mantiene en memoria la ocupación de las salas registradas/configuradas (3–7 en el despliegue inicial),
@@ -51,5 +51,4 @@ produce `AgendaNotLoaded`. Cerrar el proceso elimina las agendas de memoria.
 uv run python manage.py test backend.apps.agenda --settings=backend.config.test_settings
 ```
 
-Para incluir las muestras del cliente, definir `PSYCODE_TEST_CITAS_XLSX` y/o
-`PSYCODE_TEST_CITAS2_XLSX` con sus rutas antes de ejecutar las pruebas.
+Las pruebas de Excel generan sus propios archivos sintéticos.

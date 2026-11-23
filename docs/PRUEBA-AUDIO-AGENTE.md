@@ -11,9 +11,9 @@ worker. Los resultados se consultan con la credencial individual del PC.
 La limpieza del contexto conserva el resumen de cada alerta de prueba
 para que el asistente pueda mostrar el mismo resultado después del análisis.
 
-## Contrato HTTP v1
+## Contrato HTTP v2
 
-Prefijo `/api/v1/internal/audio-tests/<uuid>`. Todas las solicitudes usan
+Prefijo `/api/v2/internal/audio-tests/<uuid>`. Todas las solicitudes usan
 `Authorization: Agent <credencial>` por HTTPS.
 
 - `PUT` con JSON `scenario` (`neutral` o `alerta`) y `samples` (1 a 9 600 000).
@@ -27,7 +27,7 @@ Prefijo `/api/v1/internal/audio-tests/<uuid>`. Todas las solicitudes usan
 - `POST /fragments` con el multipart y recibo de audio v2. El `session_id`
   es el UUID de la prueba, `captured_at` es `started_at` más el offset del
   fragmento y el PCM es mono de 16 bits a 16 kHz. Enviar 160 000 muestras por
-  fragmento con 16 000 de solapamiento, salvo el tramo final, en modo legacy.
+  fragmento con 16 000 de solapamiento, salvo el tramo final, para el perfil sin negociación.
 - `GET` devuelve el estado, cantidades de fragmentos y alertas de prueba. El
   objeto `data` contiene `test_id`, `box`, `scenario`, `samples`,
   `started_at`, `state`, `expected`, `accepted`, `analyzed`,
@@ -62,11 +62,18 @@ prueba. El clip **Sin alerta esperada** solo genera un registro o correo si el a
 detecta una señal. Para mostrar el flujo completo, inicia una nueva prueba
 después de actualizar la web y el worker de fragmentos.
 
-## Perfil operativo negociado v1
+## Perfil del diagnóstico
 
-El cliente solicita `PUT <prefijo>?fragment_profile_version=1`, conservando
+El asistente solicita `PUT <prefijo>?fragment_profile_version=2`. Este perfil
+aplica la duración operativa de fragmento y usa cero solapamiento. Una prueba
+de 600 s genera 10 WAV de 60 s o un WAV de 600 s, según la configuración.
+El contrato está en [`audio-test-profile-v2.schema.json`](../contracts/audio-test-profile-v2.schema.json).
+
+### Perfil con solapamiento
+
+Se puede solicitar `PUT <prefijo>?fragment_profile_version=1`, conservando
 exactamente el JSON `scenario`, `samples`. Sin query se mantiene el perfil legacy
-de 10 s/1 s. Valores distintos de `1`, vacíos o repetidos devuelven 400.
+de 10 s/1 s. Valores distintos de `1` o `2`, vacíos o repetidos devuelven 400.
 Cambiar entre legacy y v1 para el mismo UUID devuelve 409; cambiar escenario o
 cantidad de muestras también. Requiere servidor y agente que implementen esta negociación.
 
@@ -88,7 +95,6 @@ El contrato central está en
 [`audio-test-profile-v1.schema.json`](../contracts/audio-test-profile-v1.schema.json),
 con hash SHA-256 de sus bytes en `contracts/manifest.json`. La definición `query`
 representa la query decodificada y `response` el objeto `data`, sin el envelope.
-El agente debe incorporar este contrato y solicitar v1 para aplicar el ajuste web.
 
 Verificación local sin proveedores, OBS ni base institucional:
 

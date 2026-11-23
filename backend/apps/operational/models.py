@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
@@ -19,7 +20,6 @@ class SmileFormat(models.TextChoices):
     EXCEL = "smile.excel.v1", "Excel (XLSX)"
 
 
-SMILE_DEFAULT_URL = "https://192.168.10.184/providencia/usmile/index.php/"
 SMILE_TIMEZONE = "America/Santiago"
 SMILE_FIELDS = (
     "smile_collector_id", "smile_source", "smile_url", "smile_interval", "smile_timeout",
@@ -50,7 +50,7 @@ class OperationalConfiguration(models.Model):
     )
     smile_collector = models.ForeignKey("capture.AgentRegistration", on_delete=models.SET_NULL, null=True, blank=True)
     smile_source = models.CharField(max_length=64, default="smile")
-    smile_url = models.URLField(max_length=2048, blank=True, default=SMILE_DEFAULT_URL)
+    smile_url = models.URLField(max_length=2048, blank=True, default="")
     smile_interval = models.PositiveIntegerField(default=300)
     smile_timeout = models.PositiveIntegerField(default=300)
     smile_request_timeout = models.PositiveIntegerField(default=30)
@@ -106,6 +106,7 @@ class OperationalConfiguration(models.Model):
                 "close_time": "18:00",
                 "primary_email": "",
                 "backup_email": "",
+                "smile_url": settings.SMILE_DEFAULT_URL,
             },
         )
         return obj

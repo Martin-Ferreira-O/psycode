@@ -38,6 +38,8 @@ class AuthTests(TestCase):
 
     def setUp(self):
         self.client = APIClient()
+        self.reset_clock = self.enterContext(patch("backend.apps.accounts.views.time"))
+        self.reset_clock.monotonic.return_value = 0.0
 
     def login(self, identifier="martin"):
         response = self.client.post(PREFIX + "login", {"usuario": identifier, "password": PASSWORD}, format="json")
@@ -65,6 +67,21 @@ class AuthTests(TestCase):
 
     def confirm(self, token, password=NEW_PASSWORD):
         return self.client.post(PREFIX + "password-reset/confirm", {"token": token, "nueva_password": password}, format="json")
+
+    def test_password_reset_pads_known_and_unknown_accounts_to_half_a_second(self):
+        cases = (
+            (self.user.email, 0.125, 0.375),
+            ("absent@example.test", 0.125, 0.375),
+            ("slow@example.test", 0.75, 0),
+        )
+        with patch.object(EmailClient, "send_password_reset"):
+            for email, elapsed, delay in cases:
+                with self.subTest(email=email, elapsed=elapsed):
+                    self.reset_clock.monotonic.side_effect = (0, elapsed)
+                    self.reset_clock.sleep.reset_mock()
+                    response = self.client.post(PREFIX + "password-reset", {"correo": email}, format="json")
+                    self.assertEqual(response.status_code, 202)
+                    self.reset_clock.sleep.assert_called_once_with(delay)
 
     def test_login_username_email_and_user_contract(self):
         pair = self.login(" MARTIN@EXAMPLE.TEST ")

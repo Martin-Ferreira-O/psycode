@@ -22,7 +22,7 @@ class PairingTests(APITestCase):
         self.admin = User.objects.create_user(username='pair-admin', email='pair@example.test', password='Synthetic-only-2026!', role='admin')
         self.client.force_authenticate(self.admin)
         self.exchange = APIClient()
-        self.url = '/api/v1/internal/pcs/vincular'
+        self.url = '/api/v2/internal/pcs/vincular'
         self.room = SmileRoom.objects.create(source='smile', box='box-8', name='BOX DE ATENCIÓN 8', smile_box_id='77', last_seen_at=timezone.now())
 
     def enroll(self, name='Box 8'):

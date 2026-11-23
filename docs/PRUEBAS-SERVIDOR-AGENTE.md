@@ -70,21 +70,21 @@ Abre otra terminal **en la raíz de consultoria-bn**, donde está `manage.py`:
 
 ```sh
 uv sync --locked --no-dev
+npm ci --prefix frontend
+npm run build --prefix frontend
 uv run --no-sync python scripts/check_boundaries.py
-uv run --no-sync python manage.py test --settings=backend.config.test_settings --noinput
+uv run --no-sync python manage.py test --settings=backend.config.test_settings --noinput --exclude-tag=mongo --timing --durations 15
 uv run --no-sync python manage.py makemigrations --check --dry-run --settings=backend.config.test_settings
 ```
 
 Los resultados esperados son: comprobación de límites sin errores, suite Django
-con `OK` y ninguna migración pendiente. Puede haber pruebas omitidas por no tener
-MongoDB de pruebas o muestras Excel externas; revisa sus motivos. Una omisión
-no acredita que ese servicio haya sido validado. El número de pruebas cambia
-con el código, por lo que no se exige una cifra histórica concreta.
+con `OK` y ninguna migración pendiente. Las pruebas de integración con MongoDB
+requieren una instancia de pruebas. El número de pruebas cambia con el código.
 
-Los ajustes de prueba omiten la carga del `.env`; no necesitas migrar la base de
-desarrollo ni crear el usuario web. Ejecuta estas comprobaciones en serie: las
-pruebas ordinarias usan `.local/test-auth.sqlite3` por defecto. Para paralelizarlas,
-cada ejecución necesita un `PSYCODE_TEST_SQLITE_PATH` diferente.
+Los ajustes de prueba omiten la carga del `.env` y preparan su propia base.
+Cada invocación simultánea de Django necesita un `PSYCODE_TEST_SQLITE_PATH`
+diferente. El CI de Linux usa `--parallel 4` dentro de una sola invocación
+y Django crea una copia de SQLite por proceso.
 
 ## 5. Ejecutar la integración entre ambos
 
@@ -140,7 +140,7 @@ $LASTEXITCODE
 | Se comprueba automáticamente | Se necesita otra validación |
 |---|---|
 | Agente instalado y aislado, sin Django/backend/MongoDB. | Instalación y permisos en las PCs institucionales. |
-| Control WebSocket y HTTP v1/v2 entre procesos. | Certificados, proxy y red del despliegue real. |
+| Control WebSocket y HTTP interno v2 entre procesos. | Certificados, proxy y red del despliegue real. |
 | Reconexión, sustitución de conexión y ACK perdido tras commit. | Comportamiento físico de OBS/MediaMTX ante fallos. |
 | Upload idempotente, última secuencia y cierre de sesión. | Audio real, latencia y límite físico del corte. |
 | Agenda sintética Excel/JSON recibida y observada por otro coordinador. | Login y descarga en Smile institucional. |
@@ -341,10 +341,19 @@ Al compartir un resultado, indica fecha, sistema operativo, `uv --version`,
 JSON final y SHA-256 del wheel. Indica si hubo cambios sin commit y distingue
 simulación de captura real.
 
-El CI actual del servidor (`.github/workflows/ci.yml`) ejecuta sus pruebas propias
-en Linux con Python 3.12/3.13; **no ejecuta la suite cruzada**. El repositorio del
-agente actualmente no incluye workflows. Por tanto, estos comandos conjuntos
-deben ejecutarse explícitamente; un CI del servidor aprobado no los sustituye.
+El CI del servidor (`.github/workflows/ci.yml`) ejecuta Django en Linux con
+Python 3.12 y 3.13. MongoDB y los recorridos de navegador del servidor se
+ejecutan en jobs independientes.
+
+El workflow **Server and agent** construye el wheel desde `main` del agente
+o desde la revisión indicada por `PSYCODE_AGENT_REF`, ejecuta la suite
+cruzada y comprueba en Chromium el emparejamiento de un PC por HTTPS y WSS.
+Para habilitarlo, configura en el repositorio del servidor el secreto
+`PSYCODE_AGENT_READ_TOKEN` con permiso de lectura de contenidos sobre el
+repositorio privado `Martin-Ferreira-O/psycode-alterno`. Puedes iniciarlo
+manualmente desde Actions. La variable de repositorio
+`PSYCODE_AGENT_TESTS=true` habilita además las ejecuciones automáticas
+ante cambios relevantes en `main`.
 
 Los reportes de separación del 27 de octubre son antecedentes. La revisión del
 agente registró un fallo de fixture HTTP/ACK que después fue corregido en el

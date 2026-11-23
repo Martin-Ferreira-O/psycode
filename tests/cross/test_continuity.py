@@ -56,8 +56,13 @@ class FiveAgentContinuityTests(TransactionTestCase):
                         journal.mark_acknowledged(command)
                         folder = root / box / "fragments" / str(session.session_id)
                         for sequence in range(2 if index == 0 else 1):
+                            offset = sequence * 9 * 16000
+                            frames = (10 if sequence == 0 else 2) * 16000
+                            temporal = dict(session_start_sample=offset, session_end_sample=offset + frames,
+                                            new_audio_start_sample=sequence * 160000, sample_rate=16000,
+                                            chunk_samples=160000, overlap_samples=16000)
                             save_fragment(folder, box, session.session_id, sequence,
-                                bytes([sequence, 0]) * 16000, start + timedelta(seconds=1 + sequence * 9))
+                                bytes([sequence, 0]) * frames, start + timedelta(seconds=1 + sequence * 9), temporal)
                             path = folder / f"{sequence:06d}.wav"
                             original_hashes[str(path)] = hashlib.sha256(path.read_bytes()).hexdigest()
                         if index == 0:

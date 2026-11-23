@@ -34,7 +34,7 @@ coincidan con los solicitados. Una solicitud pendiente no oculta la última
 configuración confirmada. La recuperación ante fallos conserva la última
 configuración válida sin restaurar credenciales antiguas.
 
-La API `GET/PUT /api/v1/internal/pcs/<agent_id>/config` conserva `version` como
+La API `GET/PUT /api/v2/internal/pcs/<agent_id>/config` conserva `version` como
 revisión global para concurrencia, y añade `desired_version`, `effective_version`
 y `effective_local_revision`. PUT envía `base_version`; una revisión ausente en
 un registro existente u obsoleta devuelve 409. Los alias anteriores
@@ -225,7 +225,7 @@ impórtalo desde **Soporte** en ese PC. Un resultado correcto no confirma la
 entrega de una recolección completa; para eso revisa la sincronización normal.
 
 El agente anuncia `agenda.smile-check.v1` y el servidor la negocia solo para el
-colector autorizado. `POST /api/v1/internal/smile-collector-check` usa la
+colector autorizado. `POST /api/v2/internal/smile-collector-check` usa la
 credencial del agente y el [contrato v1](../contracts/smile-collector-check-v1.schema.json).
 La prueba se reclama una sola vez y vence tras diez minutos sin resultado.
 Aplicar `agenda.0004` antes de activar la función. Las versiones anteriores
@@ -250,13 +250,13 @@ Los archivos privados usan 0600 en POSIX y los helpers de ACL en Windows.
 | `GET /api/v1/pcs` | Registro, estados y `installation_pending`; nunca devuelve secretos. |
 | `GET /api/v1/pcs/salas` | Boxes configurados y salas verificadas; `room_id`/`smile_box_id` pueden ser nulos sin catálogo. |
 | `GET /api/v1/pcs/instalador/windows-x64/{version}` | Descarga privada del `.exe` de la versión activa. Añade `/sha256` para descargar su checksum. Devuelve 404 si la versión solicitada no está disponible. |
-| `GET /api/v1/internal/agent-updates/windows-x64` | Solo HTTPS con la credencial individual activa `Authorization: Agent <clave>`. Devuelve `version`, `size` en bytes y `sha256` de la versión activa, o 404 si no está disponible. |
-| `GET /api/v1/internal/agent-updates/windows-x64/{version}` | Entrega el ejecutable de la versión activa con la misma autenticación del agente. Si cambió la versión desde la consulta, devuelve 404. |
+| `GET /api/v2/internal/agent-updates/windows-x64` | Solo HTTPS con la credencial individual activa `Authorization: Agent <clave>`. Devuelve `version`, `size` en bytes y `sha256` de la versión activa, o 404 si no está disponible. |
+| `GET /api/v2/internal/agent-updates/windows-x64/{version}` | Entrega el ejecutable de la versión activa con la misma autenticación del agente. Si cambió la versión desde la consulta, devuelve 404. |
 | `POST /api/v1/pcs/alta` | `{name, box}` o `{name, room_id}`, exactamente una selección; devuelve código temporal. |
 | `POST /api/v1/pcs/{id}/vinculacion` | Prepara instalación conservando la credencial vigente. |
 | `POST /api/v1/pcs/{id}/cancelar-instalacion` | Cancela preparación sin revocar acceso actual; rechaza cancelar una activación ya confirmada. |
-| `POST /api/v1/internal/pcs/vincular` | Canje compatible; con `installation_id` y `secret` prepara una credencial pendiente. |
-| `POST /api/v1/internal/pcs/confirmar` | `{installation_id}` y `Authorization: Agent <clave-candidata>`; activa o confirma idempotentemente. |
+| `POST /api/v2/internal/pcs/vincular` | Canje compatible; con `installation_id` y `secret` prepara una credencial pendiente. |
+| `POST /api/v2/internal/pcs/confirmar` | `{installation_id}` y `Authorization: Agent <clave-candidata>`; activa o confirma idempotentemente. |
 | `POST /api/v1/pcs/{id}/revocar` | Revocación inmediata, incluida instalación pendiente. |
 | `GET /api/v1/pcs/{id}/historial` | Fechas, box y paginación; conserva procedencia de eventos antiguos. |
 

@@ -1,11 +1,11 @@
 # Configuración del backend
 
-> Actualización de separación: [operación vigente](../../docs/OPERACION-SEPARADA.md). Agente en el repositorio independiente `psycode-agent`; control WS autenticado, audio v1/v2 y agenda durable. Las instrucciones históricas incompatibles quedan sustituidas por ese runbook.
+> Actualización de separación: [operación vigente](../../docs/OPERACION-SEPARADA.md). Agente en el repositorio independiente `psycode-agent`; control WS autenticado, audio v2 y agenda durable. Las instrucciones históricas incompatibles quedan sustituidas por ese runbook.
 
 
 Aquí se configuran Django, las rutas raíz y la composición de los servicios.
 
-La ingesta de captura está implementada en `/api/v1/internal/fragments`, con
+La ingesta de captura está implementada en `/api/v2/internal/fragments`, con
 credencial de agente, archivos privados y cola SQL. La composición expone
 `fragment_storage()` y `fragment_ingestion_service()` sin iniciar trabajadores.
 

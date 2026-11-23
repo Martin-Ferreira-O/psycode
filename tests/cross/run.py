@@ -114,17 +114,22 @@ basicConstraints=critical,CA:true
             for col,v in enumerate((start.date().isoformat(),start.strftime('%H:%M'),'00:10','CONFIRMADA'),1):s.cell(8,col,v)
             out=io.BytesIO();w.save(out);raw=out.getvalue()
             headers={'Authorization':'Agent '+token}
-            op=httpx.post(base+'/api/v1/internal/agenda-collections',headers=headers,json={'source':'smile'});op.raise_for_status()
+            op=httpx.post(base+'/api/v2/internal/agenda-collections',headers=headers,json={'source':'smile'});op.raise_for_status()
             metadata=dict(collection_id=op.json()['data']['collection_id'],source='smile',boxes=['box-3'],
                 agenda_date=local.date().isoformat(),obtained_at=datetime.now(timezone.utc).isoformat(),
                 format_version='smile.excel.v1',checksum=hashlib.sha256(raw).hexdigest(),outcome='valid')
             for status in (201,200):
-                response=httpx.post(base+'/api/v1/internal/agenda-reports',headers=headers,data={'metadata':json.dumps(metadata)},
+                response=httpx.post(base+'/api/v2/internal/agenda-reports',headers=headers,data={'metadata':json.dumps(metadata)},
                                     files={'archivo':('synthetic.xlsx',raw)})
                 assert response.status_code==status,response.text
             from backend.apps.operational.models import OperationalConfiguration
-            OperationalConfiguration.objects.create(enabled_days=list(range(7)),open_time='00:00',close_time='23:59',
-                primary_email='synthetic@example.test',backup_email='synthetic-backup@example.test')
+            OperationalConfiguration.objects.update_or_create(pk=1, defaults={
+                'enabled_days': list(range(7)),
+                'open_time': '00:00',
+                'close_time': '23:59',
+                'primary_email': 'synthetic@example.test',
+                'backup_email': 'synthetic-backup@example.test',
+            })
             def coordinate(*flags):subprocess.run([sys.executable,'manage.py','coordinate_capture','--once',*flags],cwd=ROOT,env=env,check=True,capture_output=True)
             coordinate()
             from backend.apps.capture.models import CaptureSession, FragmentJob
@@ -184,7 +189,7 @@ basicConstraints=critical,CA:true
                 fecha=start.date().isoformat(),hora_inicio=start.strftime('%H:%M'),duracion_minutos=10,
                 estado='CONFIRMADA',codigo_estado='SYNTHETIC')]).encode()
             metadata['checksum']=hashlib.sha256(native_raw).hexdigest()
-            response=httpx.post(base+'/api/v1/internal/agenda-reports',headers=headers,data={'metadata':json.dumps(metadata)},
+            response=httpx.post(base+'/api/v2/internal/agenda-reports',headers=headers,data={'metadata':json.dumps(metadata)},
                 files={'archivo':('synthetic.json',native_raw,'application/json')})
             assert response.status_code==201,response.text
             coordinate()
@@ -211,7 +216,7 @@ basicConstraints=critical,CA:true
             assert second_session.capture_chunk_config['audio_chunk_duration'] == 600
             assert second_session.audio_profile['chunk_samples'] == 600 * 16000
             assert FragmentJob.objects.filter(sequence__session_id=sid2).count()==1
-            # Ejecutar también la cobertura HTTP v1 y ACK históricos, fuera de la suite ordinaria.
+            # Ejecutar también la cobertura HTTP v2 y los ACK históricos, fuera de la suite ordinaria.
             # Esta instalación temporal del servidor admite el agente solo para esas pruebas.
             result=subprocess.run(['uv','run','--with',str(wheel),'--reinstall-package','psycode-agent','--no-editable','python','manage.py','test','tests/cross',
                 '--settings=backend.config.test_settings','--noinput'],cwd=ROOT,env=env,capture_output=True,text=True)
@@ -222,7 +227,7 @@ basicConstraints=critical,CA:true
                 'cross_test_count': int(test_count.group(1)),
                 'coverage':['five concurrent simulated agents with consecutive sessions and old backlog',
                 'lost HTTPS responses after commit for each agent','separate WS/HTTP processes','SQL agenda and coordinator restart','lost ACK after commit',
-                'reconnect','idempotent uploads','stop and final sequence','queue to simulated unknown-speaker analysis','historical v1 HTTP and ACK tests','autonomous runtime with synthetic microphone PCM','lease replacement across two ASGI processes','isolated agent without Django/backend/MongoDB','native delivered Smile JSON through HTTP to authorization']}))
+                'reconnect','idempotent uploads','stop and final sequence','queue to simulated unknown-speaker analysis','internal HTTP v2 and ACK tests','autonomous runtime with synthetic microphone PCM','lease replacement across two ASGI processes','isolated agent without Django/backend/MongoDB','native delivered Smile JSON through HTTP to authorization']}))
         finally:
             processes.close()
             for server_log in (second_log, log):

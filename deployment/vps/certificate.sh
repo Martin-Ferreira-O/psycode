@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-# La VPS original puede seguir renovando su linaje al actualizar este archivo.
-PSYCODE_HOST=144.22.56.52
+PSYCODE_HOST=${PSYCODE_HOST:-}
 PSYCODE_CERT_KIND=ip
 PSYCODE_CERT_EMAIL=
 PSYCODE_ACME_TOS=1
@@ -19,6 +18,10 @@ if [[ -s "$live/fullchain.pem" && -s "$live/privkey.pem" ]]; then
   /opt/certbot/bin/certbot renew --non-interactive --quiet --no-random-sleep-on-renew \
     --cert-name "$lineage" --deploy-hook 'systemctl reload nginx'
 else
+  if [[ -z "$PSYCODE_HOST" ]]; then
+    echo 'Configure PSYCODE_HOST in /etc/psycode/deploy.conf before issuing the certificate.' >&2
+    exit 2
+  fi
   identity=(--domain "$PSYCODE_HOST")
   if [[ "$PSYCODE_CERT_KIND" == ip ]]; then
     identity=(--ip-address "$PSYCODE_HOST" --preferred-profile shortlived)
