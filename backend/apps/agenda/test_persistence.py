@@ -92,7 +92,7 @@ class DurableAgendaTests(TestCase):
         client = APIClient()
         client.credentials(HTTP_AUTHORIZATION='Agent '+TOKEN)
         with TemporaryDirectory() as root, override_settings(CAPTURE_FRAGMENT_ROOT=root):
-            response = client.post('/api/v1/internal/agenda-reports', {
+            response = client.post('/api/v2/internal/agenda-reports', {
                 'archivo': 'not-a-file',
                 'metadata': json.dumps(self.metadata(persistence.issue(self.identity, 'smile'))),
             }, format='multipart')
@@ -102,10 +102,10 @@ class DurableAgendaTests(TestCase):
     def test_http_collection_report_auth_and_durable_receipt(self):
         with TemporaryDirectory() as root,override_settings(CAPTURE_FRAGMENT_ROOT=root):
             c=APIClient();c.credentials(HTTP_AUTHORIZATION='Agent '+TOKEN)
-            op=c.post('/api/v1/internal/agenda-collections',{'source':'smile'},format='json')
+            op=c.post('/api/v2/internal/agenda-collections',{'source':'smile'},format='json')
             self.assertEqual(op.status_code,201,op.data)
             metadata=self.metadata(op.data['data'])
-            def post():return c.post('/api/v1/internal/agenda-reports',
+            def post():return c.post('/api/v2/internal/agenda-reports',
                 {'archivo':SimpleUploadedFile('synthetic.xlsx',self.raw),'metadata':json.dumps(metadata)},format='multipart')
             first=post();self.assertEqual(first.status_code,201,first.data)
             self.assertEqual(post().status_code,200)

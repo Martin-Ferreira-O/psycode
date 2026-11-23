@@ -15,7 +15,7 @@ en el panel operativo.
 
 Después de confirmar la vinculación recuperable, el servidor anuncia
 `smile_credentials_version: "1"`. El agente consulta por HTTPS
-`GET /api/v1/internal/smile-credentials` con su credencial `Agent` ya activada.
+`GET /api/v2/internal/smile-credentials` con su credencial `Agent` ya activada.
 Solo el colector vigente recibe usuario y contraseña. Un PC sin designación
 recibe `data: null`: puede completar su vinculación sin tener la cuenta Smile.
 Si se lo designa después, el runtime la obtiene automáticamente al consultar

@@ -98,7 +98,7 @@ const ok = data => ({ status: 200, contentType: 'application/json', body: JSON.s
             await login(page,'pcs-supervisor');
             assert.equal((await page.goto(`${base}/api/v1/pcs/panel`)).status(),403);
             assert.equal(await page.evaluate(async url=>(await fetch(url)).status,
-                `/api/v1/internal/pcs/${agentId}/config`),403);
+                `/api/v2/internal/pcs/${agentId}/config`),403);
             assert.deepEqual(errors,[]);
             console.log('SCRUM97_UI_NO_MANUAL_CONFIG_OK: no button/modal/heartbeat/version/recovery controls, no config API requests on PC page, desktop/mobile/reload, rename/focus/history preserved, automatic WSS heartbeat15, global fixed/session controls, supervisor403; no screenshots.');
             return;
@@ -171,8 +171,8 @@ const ok = data => ({ status: 200, contentType: 'application/json', body: JSON.s
         // Catálogo real recibido por la API del colector; no se inventan IDs desde el nombre.
         await page.evaluate(async () => {
             const headers={'Content-Type':'application/json',Authorization:'Agent collector-test.'+'S'.repeat(43)};
-            const issued=await (await fetch('/api/v1/internal/agenda-collections',{method:'POST',headers,body:JSON.stringify({source:'smile'})})).json();
-            const response=await fetch('/api/v1/internal/smile-room-catalogues',{method:'POST',headers,body:JSON.stringify({version:'1.0',source:'smile',collection_id:issued.data.collection_id,rooms:[
+            const issued=await (await fetch('/api/v2/internal/agenda-collections',{method:'POST',headers,body:JSON.stringify({source:'smile'})})).json();
+            const response=await fetch('/api/v2/internal/smile-room-catalogues',{method:'POST',headers,body:JSON.stringify({version:'1.0',source:'smile',collection_id:issued.data.collection_id,rooms:[
                 {box:'box-3',name:'BOX DE ATENCIÓN 3',smile_box_id:'77'},
                 {box:'box-18',name:'BOX DE ATENCIÓN 18',smile_box_id:'91'}]})});
             if(response.status!==200)throw Error('catalogue rejected');

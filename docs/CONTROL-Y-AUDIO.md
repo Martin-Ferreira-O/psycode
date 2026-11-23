@@ -55,15 +55,12 @@ Se transmite solo el código, correlación y recuperabilidad, sin excepción lib
 
 ## Audio
 
-`POST /api/v1/internal/fragments` conserva exactamente sus siete campos y semántica.
-No incluye posición de sesión suficiente para eliminar repetición por solapamiento.
-El cliente nuevo usa `/api/v2/internal/fragments` solo tras negociar `audio.v2`.
-El servidor admite ambos; instalar primero el servidor. No cambiar de versión ni
-perfil en mitad de una sesión. WAV RIFF PCM mono, 16 kHz, 16 bits; legacy conserva
-el máximo de 25 MiB. Sesiones con duración negociada usan una cota de bytes
-calculada desde la duración autorizada, además del límite del proxy.
+`POST /api/v2/internal/fragments` recibe WAV RIFF PCM mono de 16 kHz y 16 bits.
+El agente publica siempre los metadatos v2 y mantiene el perfil durante toda la
+sesión. El límite por defecto es 25 MiB. Las sesiones con duración negociada
+usan una cota calculada desde la duración autorizada, además del límite del proxy.
 
-V2 añade seis campos enteros al multipart v1: `session_start_sample`,
+El multipart exige seis campos temporales enteros: `session_start_sample`,
 `session_end_sample` (exclusivo), `new_audio_start_sample`, `sample_rate`,
 `chunk_samples`, `overlap_samples`. Perfil v2 operativo: 960000/0 muestras (60 s sin solapamiento).
 Ejemplo compatible configurando 10 s/1 s: `[0,160000)` nuevo desde 0; `[144000,304000)` nuevo desde 160000;

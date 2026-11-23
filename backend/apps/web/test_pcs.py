@@ -162,10 +162,10 @@ class PCPanelTests(APITestCase):
 
         machine = APIClient()
         payload = {'code': enrollment['pairing_code'], 'installation_id': str(uuid4()), 'secret': 'x' * 43}
-        prepared = machine.post('/api/v1/internal/pcs/vincular', payload, format='json', secure=True)
+        prepared = machine.post('/api/v2/internal/pcs/vincular', payload, format='json', secure=True)
         self.assertEqual(prepared.status_code, 200)
         self.assertEqual(prepared.data['data']['agent_id'], enrollment['agent_id'])
-        confirmed = machine.post('/api/v1/internal/pcs/confirmar', {'installation_id': payload['installation_id']},
+        confirmed = machine.post('/api/v2/internal/pcs/confirmar', {'installation_id': payload['installation_id']},
                                  format='json', secure=True, HTTP_AUTHORIZATION='Agent ' + prepared.data['data']['api_key'])
         self.assertEqual(confirmed.status_code, 200)
         self.assertTrue(AgentRegistration.objects.get(pk=grant.agent_id).is_active)

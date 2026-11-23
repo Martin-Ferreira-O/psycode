@@ -1,5 +1,5 @@
 from django.urls import path
-from backend.apps.capture.pairing import PCEnrollmentView, PCReEnrollmentView, PCPairingExchangeView, PCPairingConfirmView, PCEnrollmentCancelView
+from backend.apps.capture.pairing import PCEnrollmentView, PCReEnrollmentView, PCEnrollmentCancelView
 from .views import (
     OperationalConfigView,
     AgentRegistrationListCreateView,
@@ -11,7 +11,7 @@ from .views import (
     SmileCollectorCheckView,
 )
 from backend.apps.capture.storage_views import StorageStatusView, StoragePreviewView, StorageCleanupView
-from .windows_installer import AgentWindowsUpdateView, WindowsInstallerView
+from .windows_installer import WindowsInstallerView
 
 app_name = "operational"
 
@@ -22,10 +22,6 @@ urlpatterns = [
     path("pcs/instalador/windows-x64/<str:version>/sha256", WindowsInstallerView.as_view(), {"checksum": True}, name="pcs_windows_checksum"),
     path("pcs/<uuid:agent_id>/vinculacion", PCReEnrollmentView.as_view(), name="pcs_reenroll"),
     path("pcs/<uuid:agent_id>/cancelar-instalacion", PCEnrollmentCancelView.as_view(), name="pcs_cancel_enrollment"),
-    path("internal/pcs/confirmar", PCPairingConfirmView.as_view(), name="pcs_pair_confirm"),
-    path("internal/pcs/vincular", PCPairingExchangeView.as_view(), name="pcs_pair"),
-    path("internal/agent-updates/windows-x64", AgentWindowsUpdateView.as_view(), name="agent_windows_update"),
-    path("internal/agent-updates/windows-x64/<str:version>", AgentWindowsUpdateView.as_view(), name="agent_windows_update_download"),
     path("almacenamiento", StorageStatusView.as_view(), name="storage_status"),
     path("almacenamiento/vista-previa", StoragePreviewView.as_view(), name="storage_preview"),
     path("almacenamiento/liberar", StorageCleanupView.as_view(), name="storage_cleanup"),

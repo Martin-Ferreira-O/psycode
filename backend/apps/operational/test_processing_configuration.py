@@ -25,8 +25,8 @@ TEST_SMILE_URL = "https://smile.example.test/index.php/"
 
 class ProcessingConfigurationTests(APITestCase):
     url = "/api/v1/configuracion-operativa"
-    profile_url = "/api/v1/internal/smile-configuration"
-    collections = "/api/v1/internal/agenda-collections"
+    profile_url = "/api/v2/internal/smile-configuration"
+    collections = "/api/v2/internal/agenda-collections"
 
     def setUp(self):
         self.client.force_authenticate(User.objects.create_user(
@@ -133,7 +133,7 @@ class ProcessingConfigurationTests(APITestCase):
         self.assertEqual(current["interval"], 60)
         self.assertEqual(self.issue(new, profile).status_code, 409)
         self.assertEqual(self.issue(new, current).status_code, 201)
-        catalog = old.post("/api/v1/internal/smile-room-catalogues", {
+        catalog = old.post("/api/v2/internal/smile-room-catalogues", {
             "version": "1.0", "source": "smile", "collection_id": issued.data["data"]["collection_id"],
             "rooms": [{"box": "box-3", "name": "Box 3", "smile_box_id": "20"}],
         }, format="json")
@@ -169,7 +169,7 @@ class ProcessingConfigurationTests(APITestCase):
         self.assertEqual(issued.status_code, 201, issued.data)
         updated = self.put(smile_format="smile.excel.v1", smile_boxes=["box-3"])
         self.assertEqual(updated.status_code, 200, updated.data)
-        catalog = machine.post("/api/v1/internal/smile-room-catalogues", {
+        catalog = machine.post("/api/v2/internal/smile-room-catalogues", {
             "version": "1.0", "source": "smile", "collection_id": issued.data["data"]["collection_id"],
             "rooms": [{"box": "box-3", "name": "Box 3", "smile_box_id": "20"}],
         }, format="json")

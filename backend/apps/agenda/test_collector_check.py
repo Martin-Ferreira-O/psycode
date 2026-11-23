@@ -36,7 +36,7 @@ class SmileCollectorCheckTests(APITestCase):
         self.control.register_hello("synthetic", True)
         self.control.dispatch({"type": "status", "payload": {"obs": "ready"}})
         self.url = f"/api/v1/pcs/{self.agent.pk}/smile/prueba"
-        self.internal = "/api/v1/internal/smile-collector-check"
+        self.internal = "/api/v2/internal/smile-collector-check"
         user = get_user_model().objects.create_user(
             username="admin-smile", email="admin@example.test", password="synthetic", role=Role.ADMIN,
         )

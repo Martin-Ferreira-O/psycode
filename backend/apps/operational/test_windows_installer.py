@@ -11,7 +11,7 @@ from backend.apps.accounts.models import User
 from backend.apps.capture.pc_registry import create_agent, revoke_agent
 
 
-METADATA = "/api/v1/internal/agent-updates/windows-x64"
+METADATA = "/api/v2/internal/agent-updates/windows-x64"
 DOWNLOAD = METADATA + "/1.3.0"
 WEB_DOWNLOAD = "/api/v1/pcs/instalador/windows-x64/1.3.0"
 

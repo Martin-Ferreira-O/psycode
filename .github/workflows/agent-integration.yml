@@ -33,7 +33,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: Martin-Ferreira-O/psycode-alterno
-          ref: 582017c7cf52a349032134ba745d6626da28ef67
+          ref: ${{ vars.PSYCODE_AGENT_REF || 'main' }}
           token: ${{ secrets.PSYCODE_AGENT_READ_TOKEN }}
           persist-credentials: false
           path: .ci-agent

@@ -1,6 +1,6 @@
 # SCRUM-72 — Especificación de integración del agente del box
 
-> Actualización de separación: [operación vigente](../docs/OPERACION-SEPARADA.md). Agente en el repositorio independiente `psycode-agent`; control WS autenticado, audio v1/v2 y agenda durable. Las instrucciones históricas incompatibles quedan sustituidas por ese runbook.
+> Documento histórico de SCRUM-72. Las rutas vigentes del agente están en [Operación separada](OPERACION-SEPARADA.md#paso-a-la-api-interna-v2).
 
 
 Fecha: 2026-10-24. Destinatario: responsable de **Capturar y enviar fragmentos

@@ -119,7 +119,7 @@ class CatalogueTests(TestCase):
         self.assertIsNone(AgendaCollection.objects.get(collection_id=op['collection_id']).received_at)
 
     def test_api_catalogue_requires_designated_collector_and_admin_listing_requires_admin(self):
-        c=APIClient();path='/api/v1/internal/smile-room-catalogues'
+        c=APIClient();path='/api/v2/internal/smile-room-catalogues'
         op=persistence.issue(self.identity,'smile')
         payload=dict(version='1.0',source='smile',collection_id=op['collection_id'],rooms=ROOMS)
         self.assertEqual(c.post(path,payload,format='json').status_code,401)

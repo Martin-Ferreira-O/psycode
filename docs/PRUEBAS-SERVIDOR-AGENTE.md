@@ -140,7 +140,7 @@ $LASTEXITCODE
 | Se comprueba automáticamente | Se necesita otra validación |
 |---|---|
 | Agente instalado y aislado, sin Django/backend/MongoDB. | Instalación y permisos en las PCs institucionales. |
-| Control WebSocket y HTTP v1/v2 entre procesos. | Certificados, proxy y red del despliegue real. |
+| Control WebSocket y HTTP interno v2 entre procesos. | Certificados, proxy y red del despliegue real. |
 | Reconexión, sustitución de conexión y ACK perdido tras commit. | Comportamiento físico de OBS/MediaMTX ante fallos. |
 | Upload idempotente, última secuencia y cierre de sesión. | Audio real, latencia y límite físico del corte. |
 | Agenda sintética Excel/JSON recibida y observada por otro coordinador. | Login y descarga en Smile institucional. |
@@ -345,8 +345,8 @@ El CI del servidor (`.github/workflows/ci.yml`) ejecuta Django en Linux con
 Python 3.12 y 3.13. MongoDB y los recorridos de navegador del servidor se
 ejecutan en jobs independientes.
 
-El workflow **Server and agent** construye el wheel desde la revisión del
-agente fijada en `.github/workflows/agent-integration.yml`, ejecuta la suite
+El workflow **Server and agent** construye el wheel desde `main` del agente
+o desde la revisión indicada por `PSYCODE_AGENT_REF`, ejecuta la suite
 cruzada y comprueba en Chromium el emparejamiento de un PC por HTTPS y WSS.
 Para habilitarlo, configura en el repositorio del servidor el secreto
 `PSYCODE_AGENT_READ_TOKEN` con permiso de lectura de contenidos sobre el

@@ -94,6 +94,8 @@ class AgentHTTPIntegrationTests(IngestionFixtures, TransactionTestCase):
             sequence=0,
             audio=audio,
             captured_at=NOW + timedelta(seconds=10),
+            temporal=dict(session_start_sample=0, session_end_sample=160000, new_audio_start_sample=0,
+                          sample_rate=16000, chunk_samples=160000, overlap_samples=16000),
         )
 
         self.wav_path = self.folder / "000000.wav"
@@ -137,6 +139,7 @@ class AgentHTTPIntegrationTests(IngestionFixtures, TransactionTestCase):
                     sequence=self.metadata["sequence"],
                     captured_at=self.metadata["captured_at"],
                     checksum=self.metadata["checksum_sha256"],
+                    temporal=self.metadata["temporal"],
                 )
 
                 second = self.backend_client.upload_fragment(
@@ -145,6 +148,7 @@ class AgentHTTPIntegrationTests(IngestionFixtures, TransactionTestCase):
                     sequence=self.metadata["sequence"],
                     captured_at=self.metadata["captured_at"],
                     checksum=self.metadata["checksum_sha256"],
+                    temporal=self.metadata["temporal"],
                 )
 
         self.assertEqual(statuses, [201, 200])

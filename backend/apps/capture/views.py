@@ -13,7 +13,7 @@ from backend.common.audit import AuditWriter
 from backend.common.responses import success_response
 from backend.config.composition import fragment_ingestion_service
 from .authentication import BoxAgentAuthentication
-from .serializers import FragmentSerializer, FragmentV2Serializer, AgentConfigurationSerializer
+from .serializers import FragmentSerializer, AgentConfigurationSerializer
 from .storage import FragmentError
 from .uploads import FragmentMultiPartParser
 from .models import AgentRegistration, AgentConfiguration, ConfigurationState
@@ -61,9 +61,7 @@ class FragmentUploadView(APIView):
                         "chunk_samples",
                         "overlap_samples",
                     )
-                }
-                if self.serializer_class is FragmentV2Serializer
-                else None,
+                },
             )
             return success_response(
                 {
@@ -86,10 +84,6 @@ class FragmentUploadView(APIView):
             handler = getattr(request, "_fragment_upload_handler", None)
             if handler is not None:
                 handler.close()
-
-
-class FragmentV2UploadView(FragmentUploadView):
-    serializer_class = FragmentV2Serializer
 
 
 class AgentConfigurationView(APIView):

@@ -45,7 +45,7 @@ class AudioDiagnosticTests(TestCase):
 
     def start(self, scenario, samples=16000):
         ident = str(uuid4())
-        url = f"/api/v1/internal/audio-tests/{ident}"
+        url = f"/api/v2/internal/audio-tests/{ident}"
         payload = {"scenario": scenario, "samples": samples}
         response = self.client.put(url, payload, content_type="application/json")
         self.assertEqual(response.status_code, 201, response.json())
@@ -79,7 +79,7 @@ class AudioDiagnosticTests(TestCase):
         self.assertEqual(self.upload("/api/v2/internal/fragments", data).status_code, 404)
         self.assertEqual(self.upload(url + "/fragments", data, seq=1).status_code, 409)
         self.assertEqual(self.upload(url + "/fragments", data, end=8000).status_code, 422)
-        clinical = self.client.get("/api/v1/internal/sessions/" + data["test_id"])
+        clinical = self.client.get("/api/v2/internal/sessions/" + data["test_id"])
         self.assertEqual(clinical.json()["error"]["code"], "SESSION_NOT_FOUND")
         self.assertFalse(AgentCommand.objects.exists())
         self.assertFalse(FragmentJob.objects.exists())
@@ -255,7 +255,7 @@ class AudioDiagnosticTests(TestCase):
                 config.audio_chunk_duration = seconds
                 config.audio_chunk_mode = mode
                 config.save()
-                url = f"/api/v1/internal/audio-tests/{uuid4()}"
+                url = f"/api/v2/internal/audio-tests/{uuid4()}"
                 payload = {"scenario": "neutral", "samples": samples}
                 query = url + "?fragment_profile_version=1"
                 response = self.client.put(query, payload, content_type="application/json")
@@ -293,7 +293,7 @@ class AudioDiagnosticTests(TestCase):
         self.assertFalse(AgentCommand.objects.exists())
 
     def test_profile_query_is_strict_and_legacy_cannot_upgrade(self):
-        url = f"/api/v1/internal/audio-tests/{uuid4()}"
+        url = f"/api/v2/internal/audio-tests/{uuid4()}"
         payload = {"scenario": "neutral", "samples": 16000}
         for query in ["", "0", "3", "01", "true", "1&fragment_profile_version=1", "1&fragment_profile_version=2"]:
             response = self.client.put(url + "?fragment_profile_version=" + query,
@@ -328,7 +328,7 @@ class AudioDiagnosticTests(TestCase):
                 config = OperationalConfiguration.load()
                 config.audio_chunk_duration = seconds
                 config.save()
-                url = f"/api/v1/internal/audio-tests/{uuid4()}"
+                url = f"/api/v2/internal/audio-tests/{uuid4()}"
                 query = url + "?fragment_profile_version=2"
                 payload = {"scenario": "neutral", "samples": samples}
                 response = self.client.put(query, payload, content_type="application/json")

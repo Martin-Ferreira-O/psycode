@@ -27,7 +27,7 @@ class AgentSessionContinuityAPITests(CaptureFixtures, TestCase):
         self.session = self.active()
         self.client = APIClient()
         self.client.credentials(HTTP_AUTHORIZATION="Agent " + TOKEN)
-        self.url = f"/api/v1/internal/sessions/{self.session.session_id}"
+        self.url = f"/api/v2/internal/sessions/{self.session.session_id}"
         clock = patch("django.utils.timezone.now", return_value=NOW + timedelta(seconds=40))
         clock.start()
         self.addCleanup(clock.stop)
@@ -77,7 +77,7 @@ class AgentSessionContinuityAPITests(CaptureFixtures, TestCase):
         self.assertEqual(self.end().status_code, 401)
         self.client.credentials(HTTP_AUTHORIZATION="Agent " + TOKEN)
         other = self.service.apply_authorization(replace(self.authorization, box="box-4"), now=NOW)
-        foreign_url = f"/api/v1/internal/sessions/{other.session_id}"
+        foreign_url = f"/api/v2/internal/sessions/{other.session_id}"
         self.assertGreaterEqual(self.client.get(foreign_url).status_code, 400)
         response = self.client.post(foreign_url + "/capture-ended", {
             "occurred_at": (NOW + timedelta(seconds=20)).isoformat(),
@@ -154,6 +154,7 @@ class ContinuityCapabilityHandshakeTests(TransactionTestCase):
         ready = next(json.loads(event["text"]) for event in sent
                      if event["type"] == "websocket.send" and json.loads(event["text"])["type"] == "ready")
         self.assertEqual(ready["protocol_version"], "1.0")
-        self.assertIn("audio.v1", ready["payload"]["capabilities"])
+        self.assertIn("audio.v2", ready["payload"]["capabilities"])
+        self.assertNotIn("audio.v1", ready["payload"]["capabilities"])
         self.assertIn("agent.events.v1", ready["payload"]["capabilities"])
         self.assertIn("sessions.capture-ended.v1", ready["payload"]["capabilities"])
