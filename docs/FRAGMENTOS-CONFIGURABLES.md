@@ -68,8 +68,7 @@ Speechmatics transcribe cada WAV completo. En las sesiones operativas nuevas,
 JEV recibe una sola solicitud con el texto completo de ese bloque, sus turnos y
 roles conservados. Los turnos se interpretan como diálogo entre entrevistador
 y paciente. Ya no se llama a JEV por cada intervención de 15 segundos.
-Cada trabajo conserva un único resultado y genera como máximo una alerta del
-bloque si hay evidencia atribuible y suficiente. Un resultado sin señal o
+Cada trabajo conserva un resultado y puede generar varias alertas por expresiones distintas verificadas. Un resultado sin señal o
 indeterminado no equivale a una alerta clínica. Los trabajos legacy ya iniciados
 conservan su unidad de análisis para no duplicar solicitudes ni reinterpretar
 respuestas persistidas.
@@ -77,7 +76,7 @@ respuestas persistidas.
 El cliente directo de Typesafe puede volver a enviar el bloque completo con
 contexto largo tras un rechazo explícito por contexto. Si el límite persiste,
 el bloque queda en revisión y los demás bloques pueden seguir analizándose.
-La alerta requiere una voz confirmada como paciente.
+El detalle indica si hace falta confirmar quién emitió la declaración.
 
 El modo sesión completa aumenta memoria y disco en agente y servidor (una hora
 PCM son unos 115 MB, además de copias de trabajo y OBS). Los plazos de proveedores

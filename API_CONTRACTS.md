@@ -611,6 +611,7 @@ SCRUM-32, 33, 34, 37, 39 y 40. Todas requieren autenticación. No hay creación,
 | `evaluacion` | Evaluation o null | Listado y detalle; null si pendiente |
 | `sesion_id` | UUID | Solo detalle; referencia de sesión de captura o prueba de audio |
 | `descripcion` | string o null | Solo detalle; fragmento relevante de transcripción asociado a la alerta; máximo 500 caracteres; se normalizan espacios y Unicode; ausente o vacío se normaliza a null | 
+| `analisis` | objeto o null | Solo detalle. Las alertas nuevas incluyen categoría, nivel de matriz, intervalo de sesión en segundos, puntaje de categoría, umbral efectivo, versión de preguntas y plazo explícito cuando se reconoce. Los registros históricos pueden carecer de estos datos. |
 | `trazabilidad` | objeto | Solo detalle: registrada_en, actualizada_en (UTC), origen (string 1–100) |
 
 Evaluation tiene la misma forma en GET/POST y dentro de alertas:

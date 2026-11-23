@@ -147,6 +147,7 @@ class Alerta:
     sesion_id: str
     descripcion: str | None
     trazabilidad: Trazabilidad
+    analisis: dict | None = None
 
     @property
     def es_prueba(self) -> bool:
@@ -195,6 +196,7 @@ def alerta_nueva(
     sesion_id: object,
     origen: object,
     descripcion: object = None,
+    analisis: dict | None = None,
     registrada_en: object,
 ) -> Alerta:
     """Alta interna: pendiente, sin evaluación, semáforo derivado. El llamador no aporta estado."""
@@ -212,6 +214,7 @@ def alerta_nueva(
         evaluacion=None,
         sesion_id=normalizar_uuid(sesion_id, "sesion_id"),
         descripcion=_descripcion(descripcion),
+        analisis=analisis,
         trazabilidad=trazabilidad_nueva(origen, momento_registro),
     )
     validar_alerta(alerta)
@@ -253,6 +256,7 @@ def alerta_rehidratada(
     sesion_id: object,
     descripcion: object,
     trazabilidad: Trazabilidad,
+    analisis: dict | None = None,
 ) -> Alerta:
     """Reconstruye una alerta ya persistida. No cambia semáforo ni estado: solo valida invariantes."""
     alerta = Alerta(
@@ -266,6 +270,7 @@ def alerta_rehidratada(
         evaluacion=evaluacion,
         sesion_id=normalizar_uuid(sesion_id, "sesion_id"),
         descripcion=_descripcion(descripcion),
+        analisis=analisis,
         trazabilidad=trazabilidad,
     )
     validar_alerta(alerta)
@@ -291,6 +296,7 @@ def alerta_con_evaluacion(alerta: Alerta, evaluacion: Evaluacion, actualizada_en
         evaluacion=evaluacion,
         sesion_id=alerta.sesion_id,
         descripcion=alerta.descripcion,
+        analisis=alerta.analisis,
         trazabilidad=Trazabilidad(
             registrada_en=alerta.trazabilidad.registrada_en,
             actualizada_en=momento,

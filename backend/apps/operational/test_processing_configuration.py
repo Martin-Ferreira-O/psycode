@@ -67,7 +67,7 @@ class ProcessingConfigurationTests(APITestCase):
 
             self.assertEqual(analyze(), AnalysisState.SIGNAL)
             self.assertEqual(self.put(jev_threshold=0.8).status_code, 200)
-            self.assertEqual(analyze(), AnalysisState.NO_SIGNAL)
+            self.assertEqual(analyze(), AnalysisState.INDETERMINATE)
             self.assertEqual(self.put(jev_threshold=0.7).status_code, 200)
             self.assertEqual(analyze(), AnalysisState.SIGNAL)
 

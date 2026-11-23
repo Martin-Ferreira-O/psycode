@@ -18,7 +18,7 @@ const outcomes = Object.keys(evaluationChoices);
 const emptyFilters = { q: "", box: "", state: "", from: "", to: "" };
 const alertColumns = [
     { key: "risk", label: "Alerta" },
-    { key: "level", label: "Nivel" },
+    { key: "level", label: "Prioridad" },
     { key: "location", label: "Ubicación" },
     { key: "date", label: "Fecha y hora" },
     { key: "status", label: "Estado" },

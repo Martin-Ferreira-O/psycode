@@ -24,7 +24,7 @@ from backend.apps.analysis.errors import JevContextLimit
 from backend.apps.analysis.ledger import FileFragmentLedger
 from backend.apps.analysis.providers.http import ProviderError, SubmissionUncertain, request
 from backend.apps.analysis.providers.jev_contract import (
-    CONTEXT_CHOICES, MAX_INDIVIDUAL_REVIEW_QUESTIONS, block_questions, validate_response,
+    CONTEXT_CHOICES, block_questions, validate_response,
 )
 from backend.apps.analysis.providers.settings import Settings
 from backend.apps.analysis.services import AnalysisService
@@ -232,13 +232,10 @@ class IntegrationTests(SimpleTestCase):
         self.assertEqual(self.alerts()[0]["descripcion"], "He pensado en quitarme la vida.")
 
     def test_long_block_keeps_candidates_beyond_the_individual_question_budget(self):
-        turns = [f"t{index}" for index in range(MAX_INDIVIDUAL_REVIEW_QUESTIONS + 2)]
+        turns = [f"t{index}" for index in range(14)]
         questions = block_questions(review_turns={2: turns})
-        individual = [key for key in questions if key.startswith("verificar_")]
-        self.assertEqual(len(individual), MAX_INDIVIDUAL_REVIEW_QUESTIONS)
-        self.assertEqual(
-            set(questions["revision_2_0"]["criteria"]), {"ninguno", *turns[MAX_INDIVIDUAL_REVIEW_QUESTIONS:]}
-        )
+        self.assertEqual({key for key in questions if key.startswith("verificar_")},
+                         {f"verificar_2_{turn}" for turn in turns})
 
     def test_mixed_clinical_block_requires_local_evidence_for_the_confirmed_patient(self):
         self.transcript_results = [
@@ -263,7 +260,8 @@ class IntegrationTests(SimpleTestCase):
                 result = self.process(worker, replace(self.fragment, session_id=str(uuid4()), analysis_unit="fragment"))
                 self.assertEqual(result.state, AnalysisState.SIGNAL)
                 self.assertEqual(result.signals[0].speaker, "batch-0-S1" if "evidencia_4_0" in selected else None)
-        self.assertEqual(len(self.alerts()), 3)
+                self.assertEqual(len(result.signals), len(selected))
+        self.assertEqual(len(self.alerts()), 4)
 
     def test_typesafe_retries_only_a_confirmed_context_rejection_with_long_context(self):
         current = {"analysis_unit": "fragment", "turns": [{"text": "Diálogo sintético."}]}
@@ -351,6 +349,11 @@ class IntegrationTests(SimpleTestCase):
         self.assertEqual(result.transcription.words[0].end, 1)
         self.assertEqual(self.alerts()[0]["descripcion"], self.text)
         self.assertEqual(self.alerts()[0]["nivel_severidad"], 1)
+        record = self.alerts()[0]
+        detail = self.store.get_alert(record["alerta_id"]).analisis
+        self.assertEqual(detail["nivel_matriz"], 1)
+        self.assertEqual(detail["categoria"], "Deseo pasivo de muerte")
+        self.assertEqual(detail["umbral"], .55)
         self.assertEqual([r.method for r in self.requests], ["POST", "GET", "GET", "DELETE"])
         self.assertEqual(self.requests[2].url.params["format"], "json-v2")
         self.assertEqual(self.requests[-1].url.params["force"], "true")
@@ -488,8 +491,8 @@ class IntegrationTests(SimpleTestCase):
 
     def test_alert_levels_follow_existing_operational_scale(self):
         for level, text, severity in [
-            (2, "Pienso en suicidarme", 1),
-            (4, "Tengo intención de suicidarme", 2),
+            (2, "Pienso en suicidarme", 2),
+            (4, "Tengo intención de suicidarme", 3),
             (5, "Tengo un plan de suicidio y tengo intención de actuar", 3)]:
             with self.subTest(level=level):
                 self.text, self.jev_answer = text, answer(level)

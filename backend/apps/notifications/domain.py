@@ -73,7 +73,7 @@ class NotificationPayload:
             return f"[PRUEBA] Alerta simulada - {self.box_correo}"
         if self.hablante_no_confirmado:
             return f"[REVISAR] Señal con hablante sin confirmar - {self.box_correo}"
-        return f"{self.circulo_riesgo} [RIESGO {self.nivel_normalizado}] Alerta del sistema - {self.box_correo}"
+        return f"{self.circulo_riesgo} [PRIORIDAD {self.nivel_normalizado}] Alerta del sistema - {self.box_correo}"
 
     @property
     def titulo_correo(self) -> str:
@@ -98,7 +98,7 @@ class NotificationPayload:
             f"{self.titulo_correo}\n\n"
             f"Box: {self.box_correo}\n"
             f"Tipo: {self.tipo_riesgo_correo}\n"
-            f"Nivel: {self.indicador_visual}\n"
+            f"Prioridad de revisión: {self.indicador_visual}\n"
             f"{linea_fecha}Hora: {hora}\n\n"
             f"{self.mensaje_correo}\n\n"
             "Sin datos personales del paciente"

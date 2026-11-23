@@ -80,7 +80,7 @@ class BlockAnalysisPipelineTests(IngestionFixtures, TestCase):
         self.assertEqual(processor.process_next(now=NOW + timedelta(hours=2)), FragmentJob.State.COMPLETED)
         job = FragmentJob.objects.get()
         self.assertEqual(job.result, FragmentJob.Result.RISK_DETECTED)
-        self.assertEqual(job.checkpoint["block_result"]["questions_version"], "bloque-signals-5")
+        self.assertEqual(job.checkpoint["block_result"]["questions_version"], "bloque-signals-6")
         self.assertEqual(job.checkpoint["block_result"]["decisions"][0]["evidence_turns"], {"2": ["t0"]})
         self.assertNotIn("utterances", job.checkpoint)
         self.assertNotIn("test_alerts", job.checkpoint)

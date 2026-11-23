@@ -102,6 +102,21 @@
               "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
               "description": "Referencia opaca a la sesión clínica externa. No es la sesión JWT."
             },
+            "analisis": {
+              "bsonType": "object",
+              "additionalProperties": false,
+              "required": ["categoria", "nivel_matriz", "inicio", "fin", "puntaje", "umbral", "version"],
+              "properties": {
+                "categoria": {"bsonType": "string", "maxLength": 100},
+                "plazo": {"enum": [null, "ahora", "ahora mismo", "hoy", "mañana", "esta noche"]},
+                "nivel_matriz": {"bsonType": "int", "minimum": 1, "maximum": 7},
+                "inicio": {"bsonType": ["double", "int", "long"], "minimum": 0},
+                "fin": {"bsonType": ["double", "int", "long"], "minimum": 0},
+                "puntaje": {"bsonType": ["double", "int", "null"], "minimum": 0, "maximum": 1},
+                "umbral": {"bsonType": ["double", "int", "null"], "minimum": 0, "maximum": 1},
+                "version": {"bsonType": "string", "maxLength": 64}
+              }
+            },
             "descripcion": {
               "bsonType": ["string", "null"],
               "maxLength": 500,

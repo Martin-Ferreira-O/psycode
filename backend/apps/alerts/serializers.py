@@ -120,6 +120,7 @@ class TrazabilidadSerializer(serializers.Serializer):
 
 
 class AlertaDetailSerializer(AlertaListItemSerializer):
+    analisis = serializers.DictField(read_only=True, allow_null=True)
     sesion_id = serializers.CharField()
     descripcion = serializers.CharField(allow_null=True)
     hablante_no_confirmado = serializers.BooleanField()

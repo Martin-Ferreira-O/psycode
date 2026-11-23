@@ -1,7 +1,5 @@
 """Reglas y coordinación interna. Sin rutas HTTP, colas auxiliares ni notificaciones."""
 from dataclasses import asdict
-import json
-from pathlib import Path
 import re
 from threading import Lock
 from uuid import NAMESPACE_URL, uuid4, uuid5
@@ -18,14 +16,13 @@ from .errors import AnalysisRetry, JevContextLimit, ProviderError, SubmissionUnc
 from .ports import AnalizadorDeSenales, FragmentLedger, TechnicalAudit, Transcriptor
 from .privacy import redact
 from .rules import (
-    align_words, context_flags, evidence_dimensions, jev_candidates, literal_candidates,
-    requests_non_literal_speech, unattributed_levels,
+    align_words, context_flags, expressed_time, jev_candidates, literal_candidates,
+    requests_non_literal_speech, unattributed_levels, review_priority, MATRIX,
 )
 from .providers.jev_contract import (
-    BLOCK_QUESTIONS_VERSION, CLINICAL_REVIEW_QUESTIONS_VERSIONS, LEGACY_BLOCK_QUESTIONS_VERSION,
+    BLOCK_QUESTIONS_VERSION, CLINICAL_REVIEW_QUESTIONS_VERSIONS, DIAGNOSTIC_QUESTIONS_VERSION, QUESTIONS_VERSION,
 )
 
-MATRIX = json.loads(Path(__file__).with_name("matrix.json").read_text(encoding="utf-8"))
 BLOCK_SENTENCE_END = re.compile(r"[.!?…][\s\"»”]*$")
 BLOCK_TURN_GAP = 1.2
 
@@ -217,9 +214,10 @@ class AnalysisService:
 
     def _block_signals(self, fragment, utterances, roles, model_roles, decision, threshold, review_turns=None):
         review_turns = review_turns or {}
-        verified = []
+        distinct = {}
         evidence_errors = set()
         eligible = False
+        below_threshold = False
         for index, item in enumerate(utterances):
             turn_id = f"t{index}"
             review_levels = review_turns.get(turn_id)
@@ -229,47 +227,55 @@ class AnalysisService:
             if decision.context != "afirmacion_propia":
                 continue
             text = item["text"]
+            direct_levels = review_levels or unattributed_levels(text)
+            if any(decision.values[level] < threshold for level in direct_levels):
+                below_threshold = True
+            verified = []
             if review_levels:
                 for level in review_levels:
                     if decision.values[level] < threshold:
                         continue
                     if turn_id in decision.evidence_turns.get(str(level), ()):
-                        severity = 1 if level <= 2 else 2 if level <= 4 else 3
+                        severity = review_priority(level)
                         verified.append(Signal(MATRIX["categories"][level]["id"], level, severity, text,
-                                               item["start"], item["end"], None))
+                                               item["start"], item["end"], None, decision.values[level], threshold))
                     else:
                         verdict = decision.review_verdicts.get(str(level), {}).get(turn_id)
                         if verdict in EVIDENCE_ABSTENTION_CODES:
                             evidence_errors.add(EVIDENCE_ABSTENTION_CODES[verdict])
-                continue
-            literal = literal_candidates(text)
-            dimensions = evidence_dimensions(text)
-            for candidate in jev_candidates(text, decision.values, MATRIX, threshold=threshold):
-                level = candidate["matrix_level"]
-                turn_ids = decision.evidence_turns.get(str(level))
-                localized = turn_ids is not None and turn_id in turn_ids
-                literal_verified = level in literal and (
-                    turn_ids is None or self._confirmed_role(item["speaker"], model_roles) == "patient")
-                if (decision.values[level] < threshold or (review_turns and not localized)
-                        or (level < 3 and not (literal_verified or localized))
-                        or (level >= 3 and not dimensions[level])):
-                    continue
-                severity = 1 if level <= 2 else 2 if level <= 4 else 3
-                verified.append(Signal(candidate["category_id"], level, severity, text,
-                                       item["start"], item["end"], item["speaker"]))
-        # A igual nivel se prefiere el turno atribuido y luego el primero en el tiempo.
-        best = max(verified, key=lambda signal: (signal.severity, signal.matrix_level,
-                                                 signal.speaker is not None, -signal.start), default=None)
+            else:
+                literal = set(literal_candidates(text)) | set(direct_levels)
+                for candidate in jev_candidates(text, decision.values, MATRIX, threshold=threshold):
+                    level = candidate["matrix_level"]
+                    turn_ids = decision.evidence_turns.get(str(level))
+                    localized = turn_ids is not None and turn_id in turn_ids
+                    literal_verified = level in literal and (
+                        turn_ids is None or self._confirmed_role(item["speaker"], model_roles) == "patient")
+                    if ((review_turns and not localized)
+                            or (level < 3 and not (literal_verified or localized))):
+                        continue
+                    severity = review_priority(level)
+                    verified.append(Signal(candidate["category_id"], level, severity, text,
+                                           item["start"], item["end"], item["speaker"], decision.values[level], threshold))
+            if verified:
+                # A falta de voz identificable, conservar los intervalos por separado.
+                voice = item["speaker"] if item["speaker"] is not None else item["start"]
+                key = (voice, " ".join(text.casefold().split()))
+                best = max(verified, key=lambda signal: signal.matrix_level)
+                if key not in distinct or best.matrix_level > distinct[key].matrix_level:
+                    distinct[key] = best
         errors = []
         if not eligible or decision.context != "afirmacion_propia":
             errors.append("CONTEXT_NOT_EVALUABLE")
-        elif best is None and evidence_errors:
+        elif not distinct and (evidence_errors or below_threshold):
             errors.extend(sorted(evidence_errors))
-        elif best is None and (any(v >= threshold for v in decision.values[1:])
+            if below_threshold:
+                errors.append("JEV_BELOW_THRESHOLD")
+        elif not distinct and (any(v >= threshold for v in decision.values[1:])
                               or any(self._confirmed_role(item["speaker"], roles) == "unknown"
                                      or item["attribution"] != "assigned" for item in utterances)):
             errors.append("TEXT_NOT_EVALUABLE")
-        return (() if best is None else (best,)), errors
+        return tuple(distinct.values()), errors
 
     def _process_block(self, fragment, utterances, roles, transcription, errors, checkpoint, threshold):
         model_roles = roles
@@ -285,7 +291,7 @@ class AnalysisService:
                 model_roles = roles
         decision = None
         signals = ()
-        questions_version = LEGACY_BLOCK_QUESTIONS_VERSION if fragment.audio_test else BLOCK_QUESTIONS_VERSION
+        questions_version = DIAGNOSTIC_QUESTIONS_VERSION if fragment.audio_test else BLOCK_QUESTIONS_VERSION
         if checkpoint is not None and "jev_response" in checkpoint.data:
             questions_version = checkpoint.data.get("jev_pending", {}).get("questions_version", "bloque-signals-1")
         if checkpoint is not None and checkpoint.data.get("review_code") == "JEV_CONTEXT_LIMIT":
@@ -467,10 +473,9 @@ class AnalysisService:
                 else:
                     for candidate in candidates:
                         level = candidate["matrix_level"]
-                        # Conversión operativa documentada en MONGODB.md; nunca persistir 0–7.
-                        severity = 1 if level <= 2 else 2 if level <= 4 else 3
+                        severity = review_priority(level)
                         signals.append(Signal(candidate["category_id"], level, severity, text,
-                                              utterance["start"], utterance["end"], utterance["speaker"]))
+                                              utterance["start"], utterance["end"], utterance["speaker"], decision.values[level], threshold))
             except ProviderError as exc:
                 code = "JEV_SUBMISSION_UNCERTAIN" if isinstance(exc, SubmissionUncertain) else "JEV_FAILED"
                 if checkpoint is not None:
@@ -493,13 +498,14 @@ class AnalysisService:
         state = (AnalysisState.INDETERMINATE if errors else
                  AnalysisState.SIGNAL if signals else AnalysisState.NO_SIGNAL)
         result = AnalysisResult(fragment.session_id, fragment.sequence, state, transcription,
-                                tuple(signals), tuple(decisions), tuple(sorted(set(errors))))
+                                tuple(signals), tuple(decisions), tuple(sorted(set(errors))),
+                                questions_version=QUESTIONS_VERSION)
         if checkpoint is None:
             self.register_signals(fragment, result)
         else:
             checkpoint.data["result"] = {
                 "state": result.state, "signals": [asdict(signal) for signal in result.signals],
-                "error_codes": result.error_codes,
+                "error_codes": result.error_codes, "questions_version": result.questions_version,
             }
             for key in ("utterances", "roles", "signals", "errors", "next_utterance"):
                 checkpoint.data.pop(key, None)
@@ -525,10 +531,7 @@ class AnalysisService:
             return
         delivery = checkpoint.data.setdefault("delivery", {}) if checkpoint is not None else {}
         test_alerts = []
-        signals = result.signals
-        if fragment.analysis_unit == "fragment" and signals:
-            signals = (max(signals, key=lambda signal: (signal.severity, signal.matrix_level, -signal.start)),)
-        for signal in signals:
+        for signal in result.signals:
             evidence = self.evidence.setdefault(fragment.session_id, [])
             excerpt = " ".join(signal.excerpt.casefold().split())
             if fragment.new_audio_start_sample is not None and any(
@@ -560,6 +563,14 @@ class AnalysisService:
                         sesion_id=fragment.session_id,
                         origen=origin,
                         descripcion=" ".join(signal.excerpt.split())[:DESCRIPCION_MAX],
+                        analisis={
+                            "categoria": MATRIX["categories"][signal.matrix_level]["name"],
+                            "nivel_matriz": signal.matrix_level,
+                            "inicio": signal.start, "fin": signal.end,
+                            "puntaje": signal.score, "umbral": signal.threshold,
+                            "version": result.questions_version,
+                            "plazo": expressed_time(signal.excerpt) if signal.matrix_level in (4, 5) else None,
+                        },
                         **options)
                     if checkpoint is not None:
                         delivery[ident] = "done"

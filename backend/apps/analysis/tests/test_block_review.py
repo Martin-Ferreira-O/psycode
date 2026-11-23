@@ -28,6 +28,9 @@ class ClinicalReviewTests(TestCase):
     def test_explicit_affirmative_language_limited_to_the_expressed_level(self):
         for text, levels in (
             ("Ojalá no despertar.", (1,)),
+            ("Ojalá no despertara.", (1,)),
+            ("No me importaría morir.", (1,)),
+            ("No dejo de pensar en suicidarme.", (2,)),
             ("Sí, me quiero matar.", (2,)),
             ("He pensado en quitarme la vida.", (2,)),
             ("He pensado en una forma de suicidarme.", (3,)),
@@ -90,7 +93,9 @@ class ClinicalReviewTests(TestCase):
                          replace(self.decision, evidence_turns={"1": ["t0"], "4": ["t0"]})):
             with self.subTest(decision=decision):
                 self.assertEqual(self.process(word, decision=decision).state, AnalysisState.INDETERMINATE)
-        self.assertEqual(self.process(word, threshold=.91).state, AnalysisState.INDETERMINATE)
+        below = self.process(word, threshold=.91)
+        self.assertEqual(below.state, AnalysisState.INDETERMINATE)
+        self.assertIn("JEV_BELOW_THRESHOLD", below.error_codes)
         self.alerts.register_alert.assert_not_called()
 
     def test_review_uses_preceding_turn_to_distinguish_testimony_from_requested_examples(self):
@@ -107,3 +112,18 @@ class ClinicalReviewTests(TestCase):
                 sent = self.jev.evaluate.call_args.args[0]["turns"][1]
                 self.assertEqual("review_id" in sent, expected == AnalysisState.SIGNAL)
                 self.assertEqual(self.alerts.register_alert.call_count, int(expected == AnalysisState.SIGNAL))
+
+    def test_distinct_statements_in_one_block_keep_their_matrix_category_and_priority(self):
+        words = (Word("He pensado en quitarme la vida y es algo que me preocupa mucho.", 0., 1., "S1"),
+                 Word("Me voy a matar mañana.", 2., 3., "S1"))
+        decision = replace(self.decision, values=(0., 0., .85, 0., .91, 0., 0., 0.),
+                           evidence_turns={"2": ["t0"], "4": ["t1"]})
+        for roles in ({}, {"S1": "patient"}):
+            with self.subTest(roles=roles):
+                self.alerts.reset_mock()
+                result = self.process(*words, roles=roles, decision=decision, threshold=.4)
+                self.assertEqual([(s.matrix_level, s.severity) for s in result.signals], [(2, 2), (4, 3)])
+                records = [call.kwargs["analisis"] for call in self.alerts.register_alert.call_args_list]
+                self.assertEqual([r["plazo"] for r in records], [None, "mañana"])
+                self.assertEqual([(r["inicio"], r["puntaje"], r["umbral"]) for r in records],
+                                 [(0., .85, .4), (2., .91, .4)])

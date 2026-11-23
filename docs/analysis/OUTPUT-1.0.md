@@ -11,7 +11,7 @@ Tipos ejecutables: [`domain.py`](../../backend/apps/analysis/domain.py). No es u
 | `transcription` | `null` si falló Speechmatics; en otro caso `{text, words, cleanup}`. |
 | `transcription.words[]` | `{text, start, end, speaker}`. Tiempos en segundos absolutos dentro de la sesión. `speaker` puede ser `null`. |
 | `transcription.cleanup` | `deleted` o `delete_pending`. El segundo vuelve el resultado indeterminado. |
-| `signals[]` | `{category_id, matrix_level, severity, excerpt, start, end, speaker}`. Solo `severity` 1–3 entra a alertas. `excerpt` es el texto redactado relacionado. `speaker` es `null` cuando el hablante clínico queda sin confirmar. |
+| `signals[]` | `{category_id, matrix_level, severity, excerpt, start, end, speaker, score, threshold}`. La alerta nueva conserva el nivel de matriz y la prioridad operativa. `excerpt` es el texto redactado relacionado. `speaker` es `null` cuando el hablante clínico queda sin confirmar. |
 | `decisions[]` | `{model, context, values, input_tokens, output_tokens, evidence_turns?, review_verdicts?}`. Ocho valores Noul validados. `evidence_turns` contiene IDs de turnos aceptados por nivel. `review_verdicts` guarda solo `confirmed`, `rejected` o `uncertain` por nivel e ID local. |
 | `error_codes[]` | Códigos técnicos o de abstención; nunca excepciones libres ni cuerpos HTTP. |
 
@@ -19,7 +19,7 @@ Tipos ejecutables: [`domain.py`](../../backend/apps/analysis/domain.py). No es u
 
 Los fallos, resultados parciales, texto vacío, contexto desconocido o señales que no superan las puertas de evidencia son `indeterminado`. Pueden conservar candidatos en `signals`. El alta de alertas exige estado `senal`. Una negación, cita, pregunta o referencia histórica se conserva como contexto.
 
-La conversión existente en Psycode ([MONGODB.md](../MONGODB.md)) agrupa niveles de matriz 1–2 → severidad 1, 3–4 → 2 y 5–7 → 3. El nivel 0 no produce alerta. No se añade una escala clínica nueva. El corte experimental `.55`, las preguntas y las puertas léxicas se adaptan del origen.
+Las nuevas alertas tienen prioridad de revisión operativa. El nivel 1 corresponde a prioridad baja, 2–3 a media y 4–7 a alta. El nivel 0 no genera alerta. Esta agrupación es una decisión de implementación pendiente de validación clínica. La matriz fuente define las categorías, no los colores. Cada frase distinta verificada conserva su categoría más específica, intervalo, puntaje y umbral. Los registros anteriores mantienen su clasificación original. Las versiones de preguntas basadas en la matriz son `bloque-signals-6`, `bloque-diagnostico-4` y `habla-signals-2`.
 
 `register_signals(fragment, result)` llama a `AlertsService.register_alert`. Usa UUIDv5 determinista por sesión, secuencia, intervalo y categoría. El índice único de `alerts.alerta_id` evita duplicados incluso tras reiniciar el trabajador. `descripcion` recibe el fragmento redactado normalizado y limitado a 500 caracteres. La alerta con hablante sin confirmar usa el origen `analysis.speechmatics-jev/unattributed/1.0`. La notificación indica la incertidumbre sin incluir el texto de la conversación ni una identidad.
 

@@ -112,11 +112,22 @@ export default function AlertDetail({ id, onClose, returnFocusRef, evaluation, s
                             <div className="alert-detail-grid">
                                 <DetailValue label="Box" id="detalleBox">{formatearBox(alert.box)}</DetailValue>
                                 <DetailValue label="Tipo de riesgo" id="detalleTipo">{formatearTipoRiesgo(alert.tipo_riesgo)}</DetailValue>
-                                <DetailValue label="Nivel" id="detalleNivel"><SeverityBadge alert={alert} /></DetailValue>
+                                <DetailValue label="Prioridad de revisión" id="detalleNivel"><SeverityBadge alert={alert} /></DetailValue>
                                 <DetailValue label="Fecha y hora" id="detalleFecha">{dateTime(alert.fecha_hora)}</DetailValue>
                                 <DetailValue label="Estado" id="detalleEstado">{pending ? "Pendiente" : obtenerEtiquetaEvaluacion(alert.estado_evaluacion)}</DetailValue>
                                 <DetailValue label="Sesión" id="detalleSesion">{alert.sesion_id || "—"}</DetailValue>
                             </div>
+                            {alert.analisis && (
+                                <section className="alert-detail-section" aria-label="Evidencia de la señal">
+                                    <h3>{alert.analisis.categoria}</h3>
+                                    <p>Nivel {alert.analisis.nivel_matriz} de la matriz · Intervalo {alert.analisis.inicio}–{alert.analisis.fin} s</p>
+                                    {alert.analisis.plazo && <p>Plazo expresado en la frase: {alert.analisis.plazo}</p>}
+                                    {alert.analisis.puntaje != null && (
+                                        <p>Puntaje de la categoría {alert.analisis.puntaje.toLocaleString("es-CL")} · Umbral {alert.analisis.umbral?.toLocaleString("es-CL")}</p>
+                                    )}
+                                    <p>Versión de las preguntas {alert.analisis.version}</p>
+                                </section>
+                            )}
                             <section id="seccionTranscripcion" className="alert-detail-section" aria-labelledby="tituloTranscripcion">
                                 <h3 id="tituloTranscripcion">Fragmento de transcripción</h3>
                                 {alert.es_prueba && (
