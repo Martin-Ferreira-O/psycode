@@ -206,6 +206,12 @@ class FragmentJobProcessor:
             ).values_list("checkpoint", flat=True).first()
             if previous is None or (not previous and not checkpoint.data.get("accept_missing_context")):
                 return self._reschedule(claimed, "ANALYSIS_CONTEXT_LOST", now, review=True)
+        elif (claimed.sequence and claimed.temporal and "result" not in checkpoint.data
+              and not checkpoint.data.get("plain_context_prepared")):
+            previous = FragmentJob.objects.filter(
+                sequence__session_id=claimed.session_id, sequence__number=claimed.sequence - 1,
+                state=FragmentJob.State.COMPLETED,
+            ).values_list("checkpoint", flat=True).first()
 
         def run(path, frames, roles):
             fragment = Fragment(
@@ -216,7 +222,7 @@ class FragmentJobProcessor:
                 audio_test=claimed.audio_test,
                 analysis_unit=claimed.analysis_unit,
             )
-            if roles:
+            if roles and claimed.analysis_unit == "utterance":
                 resolved_roles = self.roles_provider(fragment)
                 roles = resolved_roles if isinstance(resolved_roles, dict) else {}
             return self.analysis.resume(fragment, roles=roles or {}, checkpoint=checkpoint, previous=previous or {})
@@ -399,8 +405,8 @@ class FragmentJobProcessor:
                     legacy_started = any(key in job.checkpoint for key in
                                          ("utterances", "next_utterance", "jev_pending", "result"))
                     analysis_unit = "utterance"
-                    if session.capture_chunk_config and not legacy_started:
-                        analysis_unit = session.capture_chunk_config.get("analysis_unit", "fragment")
+                    if self.durable and not legacy_started:
+                        analysis_unit = "fragment"
                 blocked = (
                     (not self.durable or analysis_unit == "utterance")
                     and FragmentJob.objects

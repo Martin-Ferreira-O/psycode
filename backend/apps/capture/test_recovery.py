@@ -50,9 +50,11 @@ class FragmentRecoveryTests(IngestionFixtures, TestCase):
         self.addCleanup(self.override.disable)
 
     def queue(self, number=0):
-        return self.receive(content=wav_bytes(b"\x00\x00" * 64000), number=number,
-                            captured_at=NOW + timedelta(seconds=10 + number),
-                            now=NOW + timedelta(seconds=20 + number))[0].job_id
+        job_id = self.receive(content=wav_bytes(b"\x00\x00" * 64000), number=number,
+                              captured_at=NOW + timedelta(seconds=10 + number),
+                              now=NOW + timedelta(seconds=20 + number))[0].job_id
+        FragmentJob.objects.filter(pk=job_id).update(checkpoint={"analysis_unit": "utterance"})
+        return job_id
 
     def speech(self, req):
         self.speech_calls.append((req.method, req.url.path))
@@ -220,10 +222,11 @@ class FragmentRecoveryTests(IngestionFixtures, TestCase):
             call_command("process_fragment_jobs", "--report-processing", stdout=report)
         self.assertIn("PENDIENTE_MAS_DE_1_HORA", report.getvalue())
 
-        self.receive(
+        late, _ = self.receive(
             content=wav_bytes(b"\x00\x00" * 64000), number=1,
             captured_at=NOW + timedelta(seconds=11), now=ended + timedelta(minutes=80),
         )
+        FragmentJob.objects.filter(pk=late.job_id).update(checkpoint={"analysis_unit": "utterance"})
         self.speaker = "S7"
         with patch("backend.apps.capture.processing.timezone.now", return_value=ended + timedelta(minutes=90)):
             self.assertEqual(self.worker().process_next(), FragmentJob.State.COMPLETED)

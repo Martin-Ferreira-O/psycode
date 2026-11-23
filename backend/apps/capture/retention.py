@@ -178,6 +178,8 @@ def purge_checkpoints(now):
                 if codes:
                     keep["test_error_codes"] = codes
             if session.origin != AUDIO_TEST_ORIGIN and job.state == FragmentJob.State.COMPLETED:
+                if job.checkpoint.get("analysis_review"):
+                    keep["analysis_review"] = job.checkpoint["analysis_review"]
                 block = job.checkpoint.get("block_result", {})
                 codes = set(job.checkpoint.get("analysis_error_codes", block.get("error_codes", ())))
                 for decision in block.get("decisions", ()):

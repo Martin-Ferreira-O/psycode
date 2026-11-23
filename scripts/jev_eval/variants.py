@@ -94,7 +94,10 @@ def revise(payload, variant):
             question["criteria"] = {"true": yes, "false": no}
         elif key.startswith("evidencia_"):
             _, level, _ = key.split("_")
-            query, yes, no = DEFINITIONS[int(level)]
+            query, yes, no = DEFINITIONS.get(int(level), (
+                HYPOTHESES[int(level)], "Requiere evidencia propia en el turno seleccionado.",
+                "La señal expresada únicamente en otro turno no basta.",
+            ))
             question["instructions"] = (
                 scope + " " + query + " " + yes + " " + no +
                 " Elige un único ID del turno actual donde la paciente lo expresa. "

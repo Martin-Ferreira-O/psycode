@@ -22,7 +22,8 @@
     "questions_version": {
       "enum": [
         "habla-signals-1", "bloque-signals-1", "bloque-signals-2", "bloque-signals-3",
-        "bloque-signals-4", "bloque-signals-5", "bloque-signals-6", "habla-signals-2", "bloque-diagnostico-4"
+        "bloque-signals-4", "bloque-signals-5", "bloque-signals-6", "habla-signals-2", "bloque-diagnostico-4",
+        "bloque-signals-7", "bloque-diagnostico-5", "bloque-signals-8", "bloque-texto-1"
       ]
     },
     "session_id": {
@@ -116,6 +117,8 @@
         "properties": {
           "score": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
           "threshold": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+          "context_before": {"type": "string"},
+          "context_after": {"type": "string"},
           "category_id": {
             "type": "string"
           },
@@ -215,6 +218,21 @@
                 }
               }
             }
+          },
+          "text_evidence": {
+            "type": "object",
+            "additionalProperties": false,
+            "patternProperties": {
+              "^t[0-9]+$": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["choice", "score"],
+                "properties": {
+                  "choice": {"type": "string", "pattern": "^(ninguna|indeterminado|nivel_[1-7])$"},
+                  "score": {"type": ["number", "null"], "minimum": 0, "maximum": 1}
+                }
+              }
+            }
           }
         }
       }
@@ -224,6 +242,20 @@
       "items": {
         "type": "string",
         "pattern": "^[A-Z][A-Z0-9_]+$"
+      }
+    },
+    "review_issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "start", "end", "matrix_level"],
+        "properties": {
+          "code": {"enum": ["JEV_EVIDENCE_UNCERTAIN", "JEV_BELOW_THRESHOLD"]},
+          "start": {"type": "number", "minimum": 0},
+          "end": {"type": "number", "minimum": 0},
+          "matrix_level": {"type": ["integer", "null"], "minimum": 1, "maximum": 7}
+        }
       }
     }
   },
@@ -245,7 +277,6 @@
             "maxItems": 0
           },
           "transcription": {
-            "type": "object",
             "properties": {
               "cleanup": {
                 "const": "deleted"
@@ -272,7 +303,6 @@
             "maxItems": 0
           },
           "transcription": {
-            "type": "object",
             "properties": {
               "cleanup": {
                 "const": "deleted"

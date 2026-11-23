@@ -56,7 +56,8 @@ class ProcessingConfigurationTests(APITestCase):
             )
             worker.analyzer = Mock()
             worker.analyzer.evaluate.return_value = JevDecision(
-                "jev-1.14.0", "afirmacion_propia", (0.1, 0.7, *[0.1] * 6), 1, 1,
+                "jev-1.14.0", "afirmacion_propia", (0.1, 0.7, *[0.1] * 6), 1, 1, evidence_turns={"1": ["t0"]},
+                text_evidence={"t0": {"choice": "nivel_1", "score": .7}},
             )
             worker.register_signals = Mock()
 

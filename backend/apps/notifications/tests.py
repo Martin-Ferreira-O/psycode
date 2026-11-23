@@ -89,15 +89,15 @@ class NotificationsTestCase(TestCase):
         for forbidden in ('private@example.com', 'token=secret', 'confidencial', self.alert.sesion_id):
             self.assertNotIn(forbidden, message)
 
-    def test_correo_de_revision_indica_hablante_incierto_desde_el_origen_guardado(self):
+    def test_correo_de_alerta_historica_usa_el_asunto_de_prioridad(self):
         alert = alta_pendiente(alerta_id="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
                                origen=ORIGEN_HABLANTE_NO_CONFIRMADO, descripcion="Transcripción reservada")
         self.store.insert_alert(alert)
         self.assertTrue(self.notify(ident=alert.alerta_id).enviado)
         payload = self.primary.send.call_args.args[0]
-        self.assertIn("[REVISAR]", payload.formatear_asunto_correo())
-        for message in (payload.formatear_cuerpo_correo(), payload.formatear_html_correo()):
-            self.assertIn("Hablante sin confirmar.", message)
+        self.assertIn("[PRIORIDAD ", payload.formatear_asunto_correo())
+        for message in (payload.formatear_asunto_correo(), payload.formatear_cuerpo_correo(), payload.formatear_html_correo()):
+            self.assertNotIn("hablante sin confirmar", message.lower())
             self.assertNotIn(alert.descripcion, message)
 
     def test_audit_failure_preserves_delivery_result(self):

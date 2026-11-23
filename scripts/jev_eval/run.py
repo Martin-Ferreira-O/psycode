@@ -18,9 +18,9 @@ import httpx
 
 from backend.apps.analysis.clients import JevAnalizador
 from backend.apps.analysis.domain import Fragment
-from backend.apps.analysis.providers.jev_contract import BLOCK_QUESTIONS_VERSION
+from backend.apps.analysis.providers.jev_contract import BLOCK_QUESTIONS_VERSION, DIAGNOSTIC_QUESTIONS_VERSION
 from backend.apps.analysis.providers.settings import Settings
-from backend.apps.analysis.rules import THRESHOLDS
+from backend.apps.analysis.rules import MATRIX, THRESHOLDS
 from backend.apps.analysis.services import AnalysisService
 from backend.common.processing_models import JevVersion
 
@@ -106,7 +106,9 @@ def evaluate(case, variant, client, settings, repetition):
     service = AnalysisService(Mock(), adapter, Mock(), alerts, Mock())
     started = monotonic()
     result = service._process_block(
-        fragment, case["utterances"], case["roles"], None, [], None, threshold=THRESHOLDS["candidate"]
+        fragment, case["utterances"], case["roles"], None, [], None, threshold=THRESHOLDS["candidate"],
+        questions_version=DIAGNOSTIC_QUESTIONS_VERSION if fragment.audio_test else BLOCK_QUESTIONS_VERSION,
+        previous_text=(),
     )
     elapsed_ms = round((monotonic() - started) * 1000, 2)
     decision = result.decisions[0] if result.decisions else None
@@ -129,8 +131,9 @@ def evaluate(case, variant, client, settings, repetition):
         "localized": decision.evidence_turns if decision else {},
         "signal": [{"level": signal.matrix_level, "severity": signal.severity, "start": signal.start, "end": signal.end,
                     "turn": next(f"t{i}" for i, item in enumerate(case["utterances"])
-                                 if (item["start"], item["end"], item["speaker"]) ==
-                                    (signal.start, signal.end, signal.speaker))}
+                                 if (item["start"], item["end"], item["text"]) ==
+                                    (signal.start, signal.end, signal.excerpt)
+                                 and (signal.speaker is None or item["speaker"] == signal.speaker))}
                    for signal in result.signals],
     }
 
@@ -152,9 +155,18 @@ def metric(rows, level):
                 (False, True): "fn", (False, False): "tn"}[predicted, bool(expected)]] += 1
         if level == 0:
             continue
-        choices = [value["choice"] for key, value in answers.items() if key.startswith(f"evidencia_{level}_")]
-        picks = [int(choice[1:]) for choice in choices if choice != "ninguno"]
-        counts["none"] += bool(choices and not picks)
+        picks = set()
+        offered = False
+        for key, answer in answers.items():
+            if key.startswith((f"evidencia_{level}_", f"revision_{level}_")):
+                offered = True
+                if answer["choice"] != "ninguno":
+                    picks.add(int(answer["choice"][1:]))
+            elif key.startswith(f"verificar_{level}_"):
+                offered = True
+                if answer["choice"] == "afirma":
+                    picks.add(int(key.rsplit("_t", 1)[1]))
+        counts["none"] += offered and not picks
         counts["choice_selected"] += len(picks)
         counts["choice_exact"] += sum(index in expected for index in picks)
         counts["choice_on_positive_exact"] += bool(expected.intersection(picks))
@@ -163,11 +175,10 @@ def metric(rows, level):
         empty = not row["localized"].get(str(level))
         counts["local_evidence_empty"] += empty
         counts["local_evidence_on_score_positive_empty"] += empty and predicted
-        signals = [int(signal["turn"][1:]) for signal in row["signal"] if signal["level"] == level]
-        matched = any(index in expected for index in signals)
-        counts["local_tp"] += matched
-        counts["local_fp"] += sum(index not in expected for index in signals)
-        counts["local_fn"] += bool(expected and not matched)
+        signals = {int(signal["turn"][1:]) for signal in row["signal"] if signal["level"] == level}
+        counts["local_tp"] += len(signals & expected)
+        counts["local_fp"] += len(signals - expected)
+        counts["local_fn"] += len(expected - signals)
         counts["local_voice_errors"] += sum(row["actual_roles"][index] != "patient" for index in signals)
     def ratio(num, den):
         return num / den if den else None
@@ -210,10 +221,11 @@ def summarize(rows, variants=VARIANTS, *, model):
                 "p95_http_ms": percentile95([row["attempts"][-1]["http_ms"] for row in items]),
                 "context_uncertain": sum(row["answers"]["context"]["choice"] == "incierto" for row in items),
                 "indeterminate": sum(row["state"] == "indeterminado" for row in items),
-                "no_choice_offered": sum(not row["turn_speakers"] for row in items),
+                "no_choice_offered": sum(not any(k.startswith(("evidencia_", "verificar_", "revision_"))
+                                                 for k in row["answers"]) for row in items),
                 "simulated_alerts": sum(row["simulated_alerts"] for row in items),
                 # Un solo clip diagnóstico, cortes solapados y roles de audio inciertos.
-                **({"levels": {str(level): metric(items, level) for level in range(3)}}
+                **({"levels": {str(level): metric(items, level) for level in range(len(MATRIX["categories"]))}}
                    if source.startswith("synthetic") else {}),
             }
     return summary

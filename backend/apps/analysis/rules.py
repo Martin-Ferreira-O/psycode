@@ -30,8 +30,8 @@ def context_flags(text):
     flags = []
     patterns = {
         "pregunta": r"[¿?]|\b(?:has|ha|habias) pensado\b",
-        "antecedente_temporal": r"\b(?:antes|hace anos|hace meses|el ano pasado|cuando era|en el pasado|intente)\b",
-        "referencia_a_terceros": r"\b(?:mi (?:amigo|amiga|hermano|hermana|padre|madre)|el paciente|ella dijo|el dijo|me dijo)\b",
+        "antecedente_temporal": r"\b(?:antes|hace anos|hace meses|el ano pasado|cuando era|en el pasado)\b",
+        "referencia_a_terceros": rf"\b(?:{_THIRD_PERSON}|el paciente|ella dijo|el dijo|me dijo)\b",
         "cita": r'[«»“”"]',
         "negacion": r"\b(?:no|nunca|jamas)\b",
     }
@@ -57,6 +57,7 @@ def literal_candidates(text):
 
 
 _SELF_HARM_ACTION = r"(?:suicidarme|matarme|quitarme la vida|(?:acabar|terminar) con mi vida)"
+_THIRD_PERSON = r"mi (?:amig[oa]|herman[oa]|padre|madre|papa|mama|prim[oa]|ti[oa]|pareja|companero|companera)"
 _PASSIVE_WISH = re.compile(
     r"\b(?:ojala (?:que )?no (?:despertar(?:a)?|despierte|existir|exista|estar viv[oa])|"
     r"no me importaria morir|estaria mejor si no existiera|(?:preferiria|quisiera|desearia|me gustaria) (?:no (?:despertar|existir|estar viv[oa]|seguir viv[oa])|"
@@ -68,8 +69,15 @@ _PASSIVE_WISH = re.compile(
 _AFFIRMATIVE_THOUGHT = re.compile(r"\bno dejo de pensar en (?:suicidarme|quitarme la vida|matarme)\b")
 _ACTIVE_THOUGHT = r"(?:pienso|he pensado|estoy pensando|sigo pensando) (?:en )?"
 _ACTIVE_INTENT = r"(?:voy a|he decidido|estoy decidid[oa] a|tengo (?:la )?intencion de) "
+# Ayer, hoy y las franjas de ambos días son recientes. Un pasado sin fecha
+# no establece que el episodio sea remoto.
+_RECENT_TIME = r"(?:hoy|ayer|anoche|esta (?:manana|tarde|noche)|ayer (?:en la|por la) (?:manana|tarde|noche))"
+# El inicio en primera persona evita tomar "que intente ..." como un intento propio.
+_ATTEMPT_REPORT = re.compile(
+    rf"^\s*(?:si,\s*)?(?:yo\s+)?(?:{_RECENT_TIME}[, ]+)?(?:intente|empece a) {_SELF_HARM_ACTION}\b"
+)
 _REVIEW_PATTERNS = {
-    2: re.compile(rf"\b(?:{_ACTIVE_THOUGHT}|(?:tengo (?:ganas|pensamientos) de|quiero|quisiera|deseo|me gustaria) ){_SELF_HARM_ACTION}\b|"
+    2: re.compile(rf"\b(?:{_ACTIVE_THOUGHT}|(?:he pensado que deberia|tengo (?:ganas|pensamientos) de|quiero|quisiera|deseo|me gustaria) ){_SELF_HARM_ACTION}\b|"
                   r"\b(?:me (?:quiero|deseo) (?:matar|suicidar|quitar la vida)|tengo pensamientos suicidas)\b"),
     3: re.compile(rf"\b(?:{_ACTIVE_THOUGHT}|(?:se|ya se|he decidido) )"
                   rf"(?:como|(?:una manera|una forma|la forma) de|el metodo para) {_SELF_HARM_ACTION}\b"),
@@ -83,11 +91,24 @@ _REVIEW_PATTERNS = {
 _REVIEW_EXCLUDED_CONTEXT = re.compile(
     r"['‘’‹›]|\b(?:ejemplos?|supongamos|imaginemos|imagina(?:te)?|digamos que|hipoteticamente|"
     r"en un caso hipotetico|(?:dice|dijo|decia|dije|diria|dijera|conto|cito|repito|niego)|"
-    r"ayer|hace (?:tiempo|\w+ (?:dias|semanas|meses|anos)|semanas|meses|anos)|"
+    r"(?:cree[n]?|piensa[n]?|opina[n]?|sospecha[n]?|les? parece) que|"
+    r"hace (?:(?:\w+ ){0,4}(?:tiempo|dias|semanas|meses|anos))|"
     r"la semana pasada|en (?:19|20)\d{2}|en aquel (?:entonces|momento)|"
     r"cuando (?:era|tenia|estaba)|ya no|sin (?:ganas|deseo|intencion|pensar)|"
-    r"matar(?:me)? (?:de risa|trabajando|estudiando|de hambre))\b"
+    r"(?:matar(?:me)?|morir(?:me)?) (?:de (?:risa|verguenza|hambre)|trabajando|estudiando)|"
+    r"sone|en (?:un|mi) sueno|en mis suenos|dentro de un sueno)\b"
 )
+_CLAUSE_BOUNDARY = re.compile(
+    rf"(?<=[.!…;])\s+|(?:,\s*|\s+)(?:pero|sin embargo|en cambio|y(?= +(?:yo|{_THIRD_PERSON})\b)|"
+    r"porque(?= +(?:yo +)?(?:me|tengo|intente|siento|he|quiero|deseo|estoy|pienso)\b))\b[ ,]+"
+)
+_NEGATION = re.compile(r"\b(?:no|nunca|jamas|tampoco|ni)\b")
+_DENIED_RISK = re.compile(
+    r"\b(?:no|nunca|jamas|tampoco)\b[^.!?]{0,70}\b(?:intencion|intentarlo|intentar(?:lo|me)?|"
+    r"intentad[oa]|intente|suicid\w*|matarme|quitarme la vida)\b"
+)
+_UNSUCCESSFUL_ATTEMPT = re.compile(r"\b(?:y )?no (?:resulto|lo logre|pude hacerlo)\b")
+_REPORT_TIME_QUALIFIER = re.compile(r"^\s*(?:(?:eso|esto|lo que conte)\s+)?(?:fue|ocurrio|paso|sucedio)\b")
 _REVIEW_QUOTE_REQUEST = re.compile(
     r"\b(?:supongamos|imaginemos|simulemos|"
     r"(?:en|durante) (?:una|la|esta) simulacion|"
@@ -106,21 +127,56 @@ def requests_non_literal_speech(text):
 
 def unattributed_levels(text):
     """High-specificity self-statements that can be checked without a role."""
-    if set(context_flags(text)).intersection({"pregunta", "cita", "referencia_a_terceros", "antecedente_temporal"}):
-        return ()
-    normalized = normalize(text)
-    if (_REVIEW_EXCLUDED_CONTEXT.search(normalized) or _REVIEW_QUOTE_REQUEST.search(normalized)
-            or re.search(r"\bsi\b|:", text, re.IGNORECASE)):
-        return ()
-    passive = bool(_PASSIVE_WISH.search(normalized))
+    return tuple(sorted({level for claim in block_claims(text) for level in _claim_levels(claim)}))
+
+
+def _without_affirmative_negations(claim):
     # A negation inside an affirmative passive wish is part of the evidence.
-    remaining = _AFFIRMATIVE_THOUGHT.sub(" ", _PASSIVE_WISH.sub(" ", normalized))
-    if re.search(r"\b(?:no|nunca|jamas|tampoco|ni)\b", remaining):
+    remaining = _AFFIRMATIVE_THOUGHT.sub(" ", _PASSIVE_WISH.sub(" ", claim))
+    if _ATTEMPT_REPORT.match(claim) or _REVIEW_PATTERNS[7].search(claim):
+        remaining = _UNSUCCESSFUL_ATTEMPT.sub(" ", remaining)
+    return remaining
+
+
+def block_claims(text):
+    """Keep the clauses that can contain a current own claim in a block turn."""
+    normalized = normalize(text.strip())
+    if not normalized or _REVIEW_QUOTE_REQUEST.search(normalized):
         return ()
-    levels = [1] if passive else []
+    flags = {"pregunta", "cita", "referencia_a_terceros", "antecedente_temporal"}
+    # Quotes and questions can span a contrast or a sentence boundary.
+    if re.search(r"['‘’‹›:]", normalized) or set(context_flags(normalized)).intersection({"pregunta", "cita"}):
+        return ()
+    claims = []
+    excluded_risk = False
+    for clause in _CLAUSE_BOUNDARY.split(normalized):
+        excluded_context = _REVIEW_EXCLUDED_CONTEXT.search(clause)
+        if excluded_context and _REPORT_TIME_QUALIFIER.match(clause) and claims:
+            # Una aclaración posterior puede fechar la afirmación inmediatamente anterior.
+            claims.pop()
+        if (excluded_context or set(context_flags(clause)).intersection(flags)
+                or re.search(r"\bsi\b", re.sub(r"^si,\s*", "", clause))
+                or _NEGATION.search(_without_affirmative_negations(clause))):
+            excluded_risk |= bool(_DENIED_RISK.search(clause) or
+                                  any(pattern.search(clause) for pattern in _REVIEW_PATTERNS.values()) or
+                                  _ATTEMPT_REPORT.match(clause) or _PASSIVE_WISH.search(clause))
+            continue
+        claims.append(clause)
+    # An unrelated sentence in a denial or historical report cannot inherit its signal.
+    if excluded_risk:
+        claims = [claim for claim in claims if _claim_levels(claim)]
+    return tuple(claims)
+
+
+def _claim_levels(claim):
+    levels = [1] if _PASSIVE_WISH.search(claim) else []
     for level, pattern in _REVIEW_PATTERNS.items():
-        matched = pattern.search(normalized) or (level == 2 and _AFFIRMATIVE_THOUGHT.search(normalized))
-        has_intent = 4 in levels or re.search(r"\bvoy a hacerlo\b", normalized)
+        matched = pattern.search(claim)
+        if level == 2:
+            matched = matched or _AFFIRMATIVE_THOUGHT.search(claim)
+        elif level == 7:
+            matched = matched or _ATTEMPT_REPORT.match(claim)
+        has_intent = 4 in levels or re.search(r"\bvoy a hacerlo\b", claim)
         if matched and (level != 5 or has_intent):
             levels.append(level)
     return tuple(levels)

@@ -235,6 +235,41 @@ dialog.alert-detail-dialog {
     margin-top: 8px;
 }
 
+.alert-evidence-list {
+    margin: 10px 0;
+    padding-inline-start: 24px;
+}
+
+.alert-evidence-list > li + li {
+    margin-top: 16px;
+}
+
+.alert-evidence-list h4 {
+    margin: 0 0 4px;
+    font-size: 15px;
+}
+
+.alert-evidence-list p,
+.alert-evidence-context p {
+    margin: 4px 0;
+    color: var(--texto-secundario);
+    overflow-wrap: anywhere;
+}
+
+.alert-evidence-list blockquote {
+    min-height: 0;
+    margin-top: 8px;
+}
+
+.alert-evidence-context {
+    margin-top: 8px;
+}
+
+.alert-evidence-context summary {
+    min-height: 24px;
+    cursor: pointer;
+}
+
 .alert-detail-options {
     margin: 14px 0;
 }
@@ -268,15 +303,6 @@ dialog.alert-detail-dialog {
     display: block;
     margin-bottom: 4px;
     color: var(--texto);
-}
-
-.alert-detail-note {
-    margin: 12px 0 0;
-    padding: 10px 12px;
-    border-radius: 8px;
-    background: var(--azul-claro);
-    color: var(--azul);
-    font-size: 13px;
 }
 
 @media (max-width: 900px) {

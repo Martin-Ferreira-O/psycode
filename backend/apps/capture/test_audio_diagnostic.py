@@ -1,5 +1,6 @@
 from datetime import timedelta
 import hashlib
+import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
@@ -14,7 +15,7 @@ import httpx
 from rest_framework.test import APIClient
 
 from backend.apps.analysis.providers.settings import Settings
-from backend.apps.analysis.tests.test_integration import answer
+from backend.apps.analysis.tests.test_integration import plain_answer
 from backend.apps.alerts.repositories import AlertsRepository
 from backend.apps.alerts.services import AlertsService
 from backend.apps.alerts.tests.test_persistence import FakeDatabase
@@ -148,7 +149,8 @@ class AudioDiagnosticTests(TestCase):
 
         def jev(request):
             sent_to_jev.append(request.content)
-            return httpx.Response(200, json=answer(signal))
+            questions = json.loads(request.content)["questions"]
+            return httpx.Response(200, json=plain_answer(questions, {"t0": (f"nivel_{signal}", .9)} if signal else {}))
 
         with (httpx.Client(transport=httpx.MockTransport(speech)) as speech_client,
               httpx.Client(transport=httpx.MockTransport(jev)) as jev_client):

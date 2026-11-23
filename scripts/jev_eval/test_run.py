@@ -19,7 +19,7 @@ class EvaluationTests(TestCase):
         self.settings = Settings(jev_key="dummy", jev_provider="typesafe", jev_model=MODEL, external_enabled=True)
 
     def test_revised_prompt_keeps_choice_keys_and_points_to_current_turn(self):
-        questions = block_questions(("t1",))
+        questions = block_questions(("t1",), review_turns={7: ["t0"]})
         base = {"state": {"current": {"turns": [{"speaker": "voz1"}, {"id": "t1", "speaker": "voz2"}]},
                           "history": []}, "questions": questions}
         revised = deepcopy(base)
@@ -29,6 +29,7 @@ class EvaluationTests(TestCase):
         self.assertEqual(set(revised["questions"]["evidencia_1_0"]["criteria"]), {"t1", "ninguno"})
         self.assertIn("current.turns[1]", revised["questions"]["evidencia_1_0"]["criteria"]["t1"])
         self.assertIn("voz2", revised["questions"]["evidencia_1_0"]["criteria"]["t1"])
+        self.assertIn("t1", revised["questions"]["evidencia_7_0"]["criteria"])
         untouched = deepcopy(base)
         revise(untouched, FOLLOWUP)
         self.assertEqual(base, untouched)
@@ -60,7 +61,9 @@ class EvaluationTests(TestCase):
             else:
                 options = question["criteria"]
                 choice = ("afirmacion_propia" if key == "context" else
-                          "t0" if key.startswith("evidencia_2") and "t0" in options else "ninguno")
+                          "t0" if key.startswith("evidencia_2") and "t0" in options else
+                          "afirma" if key.startswith("verificar_2_") else
+                          "descartar" if "descartar" in options else "ninguno")
                 answers[key] = {"type": "choice", "choice": choice, "confidence": 1,
                                 "probabilities": {option: int(option == choice) for option in options}}
         return httpx.Response(200, json={"model": MODEL, "answers": answers,
@@ -83,12 +86,15 @@ class EvaluationTests(TestCase):
         self.assertEqual(set(sent[0]["questions"]["evidencia_2_0"]["criteria"]), {"t0", "ninguno"})
         self.assertEqual(sent[0]["state"]["history"][0]["role"], "professional")
 
-    def test_unconfirmed_clinical_role_never_produces_alert(self):
+    def test_unconfirmed_clinical_role_keeps_turn_with_verified_evidence(self):
         case = self.cases["activo_rol_clinico_no_confirmado"]
         with httpx.Client(transport=httpx.MockTransport(self.response)) as client:
             row = evaluate(case, FOLLOWUP, client, self.settings, 1)
-        self.assertEqual(row["simulated_alerts"], 0)
-        self.assertEqual(row["state"], "indeterminado")
+        self.assertEqual(row["simulated_alerts"], 1)
+        self.assertEqual(row["signal"][0]["turn"], "t1")
+        self.assertEqual(metric([row], 2)["choice_exact"], 1)
+        row["gold"] = {2: [0, 1]}
+        self.assertEqual(metric([row], 2)["local_fn"], 1)
         self.assertEqual(row["turn_speakers"], {})
         self.assertEqual(row["history_turns"], 0)
 

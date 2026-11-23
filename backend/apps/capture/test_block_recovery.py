@@ -6,7 +6,6 @@ from unittest.mock import Mock
 from uuid import uuid4
 
 from django.test import SimpleTestCase
-from backend.apps.alerts.domain import ORIGEN_HABLANTE_NO_CONFIRMADO
 from backend.apps.analysis.domain import AnalysisState, Fragment, JevDecision
 from backend.apps.analysis.errors import AnalysisRetry, SubmissionUncertain
 from backend.apps.analysis.services import AnalysisService
@@ -30,7 +29,11 @@ class Checkpoint:
 class BlockRecoveryTests(SimpleTestCase):
     def setUp(self):
         self.analyzer, self.alerts = Mock(), Mock()
-        self.analyzer.evaluate.return_value = JevDecision("simulated", "afirmacion_propia", (.1, .9, .1, .1, .1, .1, .1, .1), 10, 1)
+        self.analyzer.evaluate.return_value = JevDecision(
+            "simulated", "afirmacion_propia", (.1, .9, .1, .1, .1, .1, .1, .1), 10, 1,
+            evidence_turns={"1": ["t0", "t2"]},
+            text_evidence={"t0": {"choice": "nivel_1", "score": .9}, "t2": {"choice": "nivel_1", "score": .9}},
+        )
         self.fragment = Fragment(str(uuid4()), 0, "box-3", datetime.now(timezone.utc), Path("synthetic.wav"),
                                  end=600 * 16000, analysis_unit="fragment")
         self.checkpoint = Checkpoint()
@@ -42,11 +45,11 @@ class BlockRecoveryTests(SimpleTestCase):
         result, context = self.resume()
         self.assertEqual(self.analyzer.evaluate.call_count, 1)
         self.assertEqual(len(result.decisions), 1)
-        self.assertEqual(len(result.signals), 1)
+        self.assertEqual(len(result.signals), 2)
         self.assertEqual(self.alerts.register_alert.call_count, 1)
         current = self.analyzer.evaluate.call_args.args[0]
-        self.assertEqual(current["turns"][1], {"speaker": "voz2", "text": "¿Cómo estás?"})
-        self.assertEqual(current["speaker_roles"], {"voz1": "patient", "voz2": "professional"})
+        self.assertEqual(current["text"].splitlines()[1], "[t1] ¿Cómo estás?")
+        self.assertNotIn("speaker_roles", current)
         self.assertEqual(len(context["block_result"]["decisions"]), 1)
         self.assertNotIn("text", context["block_result"])
     def test_saved_provider_response_survives_restart_without_reclassification(self):
@@ -74,17 +77,15 @@ class BlockRecoveryTests(SimpleTestCase):
         self.assertEqual(self.analyzer.evaluate.call_count, 1)
         self.assertEqual(self.alerts.register_alert.call_count, 2)
 
-    def test_synthetic_test_roles_do_not_leak_into_clinical_blocks(self):
+    def test_clinical_and_test_audio_share_the_same_processing(self):
         from dataclasses import replace
         self.checkpoint.data["roles"] = {}
         clinical, _ = self.resume()
-        self.assertFalse(clinical.signals)
-        self.alerts.register_alert.assert_not_called()
         self.checkpoint = Checkpoint()
         self.checkpoint.data["roles"] = {}
         self.fragment = replace(self.fragment, audio_test=True)
         synthetic, context = self.resume()
-        self.assertEqual(len(synthetic.signals), 1)
+        self.assertEqual(synthetic.signals, clinical.signals)
         self.assertEqual(len(context["test_alerts"]), 1)
 
     def test_saved_review_response_resumes_without_resubmission_or_duplicate_alert(self):
@@ -94,6 +95,7 @@ class BlockRecoveryTests(SimpleTestCase):
         ]
         self.analyzer.evaluate.return_value = JevDecision(
             "simulated", "afirmacion_propia", (.1, .1, .9, .1, .1, .1, .1, .1), 10, 1, {"2": ["t0"]},
+            text_evidence={"t0": {"choice": "nivel_2", "score": .9}},
         )
         self.checkpoint.interrupt = True
         with self.assertRaises(RuntimeError):
@@ -105,7 +107,7 @@ class BlockRecoveryTests(SimpleTestCase):
         self.assertIsNone(recovered.signals[0].speaker)
         self.analyzer.evaluate.assert_called_once()
         self.alerts.register_alert.assert_called_once()
-        self.assertEqual(self.alerts.register_alert.call_args.kwargs["origen"], ORIGEN_HABLANTE_NO_CONFIRMADO)
+        self.assertEqual(self.alerts.register_alert.call_args.kwargs["origen"], "analysis.speechmatics-jev/1.0")
 
     def test_saved_legacy_response_does_not_create_unattributed_evidence(self):
         self.checkpoint.data["roles"] = {}
@@ -137,7 +139,7 @@ class BlockRecoveryTests(SimpleTestCase):
         self.analyzer.evaluate.assert_not_called()
         self.alerts.register_alert.assert_called_once()
 
-    def test_partial_delivery_reuses_both_verified_signals_and_their_identifiers(self):
+    def test_retry_reuses_the_grouped_alert_with_both_verified_signals(self):
         self.checkpoint.data["roles"] = {}
         self.checkpoint.data["utterances"] = [
             {"text": "He pensado en quitarme la vida.", "start": 0., "end": 1., "speaker": None, "attribution": "unknown"},
@@ -145,13 +147,15 @@ class BlockRecoveryTests(SimpleTestCase):
         ]
         self.analyzer.evaluate.return_value = JevDecision(
             "simulated", "afirmacion_propia", (.1, .1, .9, .1, .9, .1, .1, .1), 10, 1, {"2": ["t0"], "4": ["t1"]},
+            text_evidence={"t0": {"choice": "nivel_2", "score": .9}, "t1": {"choice": "nivel_4", "score": .9}},
         )
-        self.alerts.register_alert.side_effect = [None, PersistenceUnavailable(), None]
+        self.alerts.register_alert.side_effect = [PersistenceUnavailable(), None]
         with self.assertRaises(PersistenceUnavailable):
             self.resume()
         self.resume()
         self.analyzer.evaluate.assert_called_once()
-        ids = [call.kwargs["alerta_id"] for call in self.alerts.register_alert.call_args_list]
-        self.assertEqual(len(ids), 3)
-        self.assertNotEqual(ids[0], ids[1])
-        self.assertEqual(ids[1], ids[2])
+        first, retry = [call.kwargs for call in self.alerts.register_alert.call_args_list]
+        self.assertEqual(first["alerta_id"], retry["alerta_id"])
+        self.assertEqual(first["nivel_severidad"], 3)
+        self.assertEqual(first["analisis"], retry["analisis"])
+        self.assertEqual(len(retry["analisis"]["evidencias"]), 2)

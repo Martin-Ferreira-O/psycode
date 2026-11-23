@@ -102,6 +102,13 @@ class Command(BaseCommand):
                 f"Revisión requerida: trabajo={job.pk} sesión={job.sequence.session_id} "
                 f"secuencia={job.sequence.number} código={job.last_error_code}{request}"
             )
+        for job in FragmentJob.objects.filter(state=FragmentJob.State.COMPLETED,
+                                              checkpoint__analysis_review__isnull=False).select_related("sequence"):
+            for issue in job.checkpoint["analysis_review"]:
+                self.stdout.write(
+                    f"Evidencia pendiente: trabajo={job.pk} sesión={job.sequence.session_id} "
+                    f"secuencia={job.sequence.number} intervalo={issue['start']}–{issue['end']}s código={issue['code']}"
+                )
         complete = Q(sequences__fragment_job__state=FragmentJob.State.COMPLETED)
         sessions = CaptureSession.objects.filter(actual_end__isnull=False).annotate(
             completed_count=Count("sequences__fragment_job", filter=complete),

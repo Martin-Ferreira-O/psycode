@@ -89,7 +89,6 @@ class NotificationService(AlertNotifier):
         confirmed_payload = NotificationPayload(
             str(alert.semaforo), 'riesgo_suicida', alert.box, alert.fecha_hora.isoformat(),
             es_prueba=alert.es_prueba,
-            hablante_no_confirmado=alert.hablante_no_confirmado,
         )
         recipients = self.recipient_resolver.resolve()
         notification = {'id': str(uuid4()), 'mode': (

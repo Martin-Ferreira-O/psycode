@@ -12,7 +12,7 @@ class AudioOverlapTests(TestCase):
         self.transcriptor=Mock();self.analyzer=Mock();self.alerts=Mock()
         self.analyzer.evaluate.return_value=JevDecision('simulated','afirmacion_propia',(.1,.9,.1,.1,.1,.1,.1,.1),1,1)
         self.service=AnalysisService(self.transcriptor,self.analyzer,Mock(),self.alerts,Mock())
-        self.fragment=Fragment(str(uuid4()),0,'box-3',datetime.now(timezone.utc),Path('synthetic.wav'),end=160000,new_audio_start_sample=0)
+        self.fragment=Fragment(str(uuid4()),0,'box-3',datetime.now(timezone.utc),Path('synthetic.wav'),end=160000,new_audio_start_sample=0,analysis_unit="utterance")
     def words(self,start,end):
         self.transcriptor.transcribe.return_value=Transcription('Ojalá no despertar',(Word('Ojalá no despertar',start,end,'S1'),),'deleted')
     def test_overlap_evidence_has_one_alert_but_distinct_occurrence_has_another(self):
