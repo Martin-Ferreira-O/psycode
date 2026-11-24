@@ -1,4 +1,5 @@
 import os
+import re
 
 from asgiref.sync import sync_to_async
 from django.core.asgi import get_asgi_application
@@ -10,6 +11,11 @@ http_application = get_asgi_application()
 from backend.apps.capture.upload_access import check_fragment_upload_access, reserve_fragment_upload
 from backend.apps.capture.websocket import agent_websocket
 from backend.common.errors import error_body
+
+AUDIO_TEST_FRAGMENT_PATH = re.compile(
+    r"/api/v2/internal/audio-tests/"
+    r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/fragments"
+)
 
 async def send_json(send, response):
     await send({
@@ -32,7 +38,9 @@ async def application(scope, receive, send):
                 await send({"type": "lifespan.shutdown.complete"})
                 return
     path = scope.get("path", "").removeprefix(scope.get("root_path", ""))
-    if scope["type"] == "http" and path == "/api/v2/internal/fragments":
+    if scope["type"] == "http" and (
+        path == "/api/v2/internal/fragments" or AUDIO_TEST_FRAGMENT_PATH.fullmatch(path)
+    ):
         # Django spools the body before running middleware or view authentication.
         # Workers share upload slots on the fragment volume. Never queue upload bodies.
         header = b",".join(value for name, value in scope["headers"] if name == b"authorization")
