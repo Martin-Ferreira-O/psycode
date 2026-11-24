@@ -48,15 +48,16 @@ def _try_lock_slot(path, reservations):
 
 
 @contextmanager
-def reserve_fragment_upload(box):
-    """Reserve one slot across all workers and at most one per box."""
+def reserve_fragment_upload(box, *, audio_test=False):
+    """Reserve one upload per box and enforce the limit for its upload type across workers."""
     root = Path(settings.CAPTURE_FRAGMENT_ROOT) / ".upload-slots"
     box_key = hashlib.sha256(box.encode("ascii")).hexdigest()
+    prefix = "audio-test-" if audio_test else ""
     with ExitStack() as reservations:
         try:
             root.mkdir(mode=0o700, parents=True, exist_ok=True)
-            reserved = _try_lock_slot(root / f"box-{box_key}.lock", reservations) and any(
-                _try_lock_slot(root / f"slot-{slot}.lock", reservations)
+            reserved = _try_lock_slot(root / f"{prefix}box-{box_key}.lock", reservations) and any(
+                _try_lock_slot(root / f"{prefix}slot-{slot}.lock", reservations)
                 for slot in range(settings.CAPTURE_V2_MAX_CONCURRENT_UPLOADS)
             )
         except OSError:

@@ -38,9 +38,8 @@ async def application(scope, receive, send):
                 await send({"type": "lifespan.shutdown.complete"})
                 return
     path = scope.get("path", "").removeprefix(scope.get("root_path", ""))
-    if scope["type"] == "http" and (
-        path == "/api/v2/internal/fragments" or AUDIO_TEST_FRAGMENT_PATH.fullmatch(path)
-    ):
+    audio_test = AUDIO_TEST_FRAGMENT_PATH.fullmatch(path) is not None
+    if scope["type"] == "http" and (path == "/api/v2/internal/fragments" or audio_test):
         # Django spools the body before running middleware or view authentication.
         # Workers share upload slots on the fragment volume. Never queue upload bodies.
         header = b",".join(value for name, value in scope["headers"] if name == b"authorization")
@@ -54,7 +53,7 @@ async def application(scope, receive, send):
         access = await sync_to_async(check_fragment_upload_access)(header, client[0] if client else "")
         if isinstance(access, JsonResponse):
             return await send_json(send, access)
-        with reserve_fragment_upload(access.box) as reserved:
+        with reserve_fragment_upload(access.box, audio_test=audio_test) as reserved:
             if reserved:
                 return await http_application(scope, receive, send)
         response = JsonResponse(

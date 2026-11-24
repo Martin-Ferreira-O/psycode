@@ -15,13 +15,14 @@ from django.utils import timezone
 from backend.config import asgi
 
 from .pc_registry import create_agent, revoke_agent
-from .models import AudioTest, FragmentJob
+from .models import AudioTest, CaptureSession, FragmentJob, SessionState
 from .test_ingestion import wav_bytes
 from .upload_access import reserve_fragment_upload
 
 
 class UploadAccessTests(TransactionTestCase):
     path = "/api/v2/internal/fragments"
+    audio_test = False
 
     def setUp(self):
         root = self.enterContext(TemporaryDirectory())
@@ -81,7 +82,7 @@ class UploadAccessTests(TransactionTestCase):
 
     async def test_same_box_retry_waits_without_reading_upload(self):
         with patch.object(asgi, "http_application", new_callable=AsyncMock) as django_app:
-            with reserve_fragment_upload(self.agent.box) as reserved:
+            with reserve_fragment_upload(self.agent.box, audio_test=self.audio_test) as reserved:
                 self.assertTrue(reserved)
                 _, receive, send = await self.request(self.header)
                 receive.assert_not_awaited()
@@ -110,19 +111,18 @@ class UploadAccessTests(TransactionTestCase):
 
         with patch.object(asgi, "http_application", django_app):
             async with asyncio.TaskGroup() as tasks:
-                for index, header in enumerate(headers):
-                    other = (AudioTestUploadAccessTests.path if self.path == UploadAccessTests.path
-                             else UploadAccessTests.path)
-                    path = self.path if index % 2 == 0 else other
-                    tasks.create_task(self.request(header, path=path))
+                for header in headers:
+                    tasks.create_task(self.request(header))
                 try:
                     await asyncio.wait_for(all_entered.wait(), timeout=5)
                     self.assertEqual(entered, ["127.0.0.1"] * 5)
-                    with reserve_fragment_upload("box-other") as reserved:
+                    with reserve_fragment_upload("box-other", audio_test=self.audio_test) as reserved:
                         self.assertFalse(reserved)
+                    with reserve_fragment_upload("box-other", audio_test=not self.audio_test) as reserved:
+                        self.assertTrue(reserved)
                 finally:
                     release.set()
-        with reserve_fragment_upload("box-other") as reserved:
+        with reserve_fragment_upload("box-other", audio_test=self.audio_test) as reserved:
             self.assertTrue(reserved)
 
     async def test_interrupted_upload_releases_the_box_slot(self):
@@ -134,7 +134,7 @@ class UploadAccessTests(TransactionTestCase):
             await self.request(self.header)
             django_app.assert_awaited_once()
 
-    async def test_clinical_and_test_uploads_share_the_same_box_slot(self):
+    async def test_clinical_and_test_uploads_can_overlap_in_the_same_box(self):
         entered, release = asyncio.Event(), asyncio.Event()
 
         async def django_app(scope, receive, send):
@@ -144,25 +144,22 @@ class UploadAccessTests(TransactionTestCase):
             else:
                 await send({"type": "http.response.start", "status": 200, "headers": []})
 
-        other = (AudioTestUploadAccessTests.path if self.path == UploadAccessTests.path
-                 else UploadAccessTests.path)
+        other = UploadAccessTests.path if self.audio_test else AudioTestUploadAccessTests.path
         with patch.object(asgi, "http_application", django_app):
             upload = asyncio.create_task(self.request(self.header))
             try:
                 await asyncio.wait_for(entered.wait(), timeout=5)
                 _, receive, send = await asyncio.wait_for(self.request(self.header, path=other), timeout=5)
                 receive.assert_not_awaited()
-                self.assertEqual(send.await_args_list[0].args[0]["status"], 503)
+                self.assertEqual(send.await_args_list[0].args[0]["status"], 200)
             finally:
                 release.set()
                 await upload
-        with patch.object(asgi, "http_application", new_callable=AsyncMock) as django_app:
-            await self.request(self.header, path=other)
-            django_app.assert_awaited_once()
 
 
 class AudioTestUploadAccessTests(UploadAccessTests):
     path = "/api/v2/internal/audio-tests/11111111-1111-4111-8111-111111111111/fragments"
+    audio_test = True
 
 
 class RealAudioUploadBoundaryTests(TransactionTestCase):
@@ -172,6 +169,12 @@ class RealAudioUploadBoundaryTests(TransactionTestCase):
         root = self.enterContext(TemporaryDirectory())
         self.enterContext(override_settings(CAPTURE_FRAGMENT_ROOT=root))
         self.agent, self.token = create_agent(name="PC sintético R1", box="box-3")
+        now = timezone.now()
+        self.clinical_session = CaptureSession.objects.create(
+            box=self.agent.box, origin="agenda", state=SessionState.ACTIVE,
+            scheduled_start=now, scheduled_end=now + timedelta(hours=1),
+            authorized_at=now, actual_start=now, last_seen_at=now,
+        )
         self.test_id = uuid4()
         self.url = f"/api/v2/internal/audio-tests/{self.test_id}"
         result = self.client.put(self.url, {"scenario": "neutral", "samples": 16000},
@@ -228,6 +231,17 @@ class RealAudioUploadBoundaryTests(TransactionTestCase):
         status, _, receiver = await self.request(token=self.token)
         self.assertEqual(status, 401)
         receiver.assert_not_awaited()
+
+    async def test_audio_test_is_accepted_during_a_clinical_upload(self):
+        with reserve_fragment_upload(self.agent.box) as reserved:
+            self.assertTrue(reserved)
+            status, payload, _ = await self.request(token=self.token)
+
+        self.assertEqual(status, 201, payload)
+        self.assertEqual(payload["data"]["session_id"], str(self.test_id))
+        await sync_to_async(self.clinical_session.refresh_from_db)()
+        self.assertEqual(self.clinical_session.state, SessionState.ACTIVE)
+        self.assertEqual(self.clinical_session.next_sequence, 0)
 
     async def test_authorized_real_asgi_upload_is_idempotent(self):
         first, one, receiver = await self.request(token=self.token)

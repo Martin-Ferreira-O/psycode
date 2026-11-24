@@ -52,16 +52,18 @@ la plantilla permite 3 GiB solo en la ruta v2, suficiente para una jornada
 clínica de hasta 25 h por cambio horario, con margen para WAV y multipart. Ajustar ese límite finito a la ventana
 institucional máxima. Una configuración instalada que conserve 26 MiB puede
 rechazar un WAV largo. ASGI verifica la credencial antes de leer el cuerpo.
-`CAPTURE_V2_MAX_CONCURRENT_UPLOADS` limita las cargas simultáneas a cinco en
-total por defecto. Los procesos ASGI del mismo servidor comparten los cupos en
-el volumen de fragmentos. Cada box puede ocupar un cupo, incluso cuando varios
-boxes salen por la misma IP. Si no hay cupo, el servidor devuelve un 503
-temporal. El agente conserva el WAV y reintenta mediante su cola local. Los
-cupos se liberan al terminar o interrumpirse una carga.
+`CAPTURE_V2_MAX_CONCURRENT_UPLOADS` limita cada tipo de carga a cinco
+simultáneas por defecto. Los procesos ASGI comparten los cupos en el volumen de
+fragmentos. Cada box puede ocupar un cupo clínico y uno de prueba a la vez,
+incluso cuando varios boxes salen por la misma IP. Si falta un cupo del tipo
+solicitado, el servidor devuelve un 503 temporal. Para cargas clínicas, el
+agente conserva el WAV y reintenta mediante su cola local. Los cupos se liberan
+al terminar o interrumpirse una carga.
 
-Con el máximo del proxy de 3 GiB y cinco cargas, presupuestar hasta 15 GiB en
-el temporal de ASGI. El volumen de fragmentos también necesita espacio para
-la recepción, la copia durante la validación y los archivos ya retenidos.
+Con cinco cupos por tipo y los límites del proxy, presupuestar en el temporal
+de ASGI hasta 15 GiB para cargas clínicas y 130 MiB para cargas de prueba.
+El volumen de fragmentos también necesita espacio para la recepción, la copia
+durante la validación y los archivos ya retenidos.
 No se despliega ni recarga nginx automáticamente al cambiar esta preferencia.
 
 Speechmatics transcribe cada WAV completo. En las sesiones operativas nuevas,
