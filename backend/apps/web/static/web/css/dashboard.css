@@ -117,25 +117,19 @@
 .resumen-alertas-pendientes {
     --estado-alerta: var(--ambar);
     --estado-alerta-fondo: var(--ambar-claro);
+    --segmento: #D9902F;
 }
 
 .resumen-alertas-revisadas {
-    --estado-alerta: var(--verde);
-    --estado-alerta-fondo: var(--verde-claro);
-}
-
-.resumen-alertas :is(.resumen-alertas-pendientes, .resumen-alertas-revisadas) {
-    --segmento: color-mix(in srgb, var(--estado-alerta) 75%, var(--estado-alerta-fondo));
+    --estado-alerta: var(--azul);
+    --estado-alerta-fondo: var(--azul-claro);
+    --segmento: var(--azul);
 }
 
 .resumen-alertas-segmento {
     stroke: var(--segmento);
     pointer-events: visibleStroke;
     cursor: pointer;
-}
-
-.resumen-alertas-segmento[data-active="true"] {
-    stroke: var(--estado-alerta);
 }
 
 .resumen-alertas-centro {
@@ -400,7 +394,7 @@
 .actividad-barra {
     position: relative;
     border-radius: 5px 5px 1px 1px;
-    background: linear-gradient(to bottom, var(--foco), var(--azul));
+    background: var(--azul);
     transform-origin: bottom;
     animation: actividad-barra-entrada .24s ease-out both;
 }
