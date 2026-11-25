@@ -1,4 +1,3 @@
-"""Aceptación durable: el archivo precede al commit de secuencia, trabajo y evento."""
 import re
 from dataclasses import dataclass
 from datetime import datetime
@@ -62,8 +61,6 @@ class FragmentIngestionService:
             limit = byte_limit(session, self.storage.max_bytes)
             with self.storage.stage(upload, checksum, max_bytes=limit) as stored:
                 received_at = _instant(now)
-                # Vuelve a evaluar vencimiento tras el I/O, fuera de la transacción
-                # de aceptación para conservar la recuperación aunque se rechace.
                 if test_agent is None:
                     self.control._recover_one(box, session_id, received_at)
                 with transaction.atomic(durable=True):
@@ -94,8 +91,6 @@ class FragmentIngestionService:
                                                      checksum=stored.checksum, format=format, size=stored.size, temporal=temporal or {})
                     _event(session, "fragment.queued", received_at, sequence=number)
                     result = receipt(job, session, sequence)
-                    # Si el commit tiene un resultado incierto, conservar el archivo
-                    # para reintento/limpieza; nunca borrar un trabajo ya confirmado.
                     stored.keep = True
                 return result, True
         except CaptureError as exc:

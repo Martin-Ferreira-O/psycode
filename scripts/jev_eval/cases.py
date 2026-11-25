@@ -1,9 +1,3 @@
-"""Entrevistas sintéticas independientes del audio de diagnóstico.
-
-Cada turno contiene la etiqueta observada, el texto y, cuando difiere, la voz real.
-P es paciente, E entrevistador y X otro interlocutor. None indica voz no asignada.
-Las etiquetas gold apuntan a índices de turnos actuales, empezando en cero.
-"""
 
 
 def case(name, turns, gold=None, *, previous=(), roles=None, diagnostic=False):
@@ -66,7 +60,6 @@ CASES = [
 ]
 
 
-# Segunda batería escrita para comprobar la variante de respuesta previa.
 EXTENSION_CASES = [
     case("previa_pasivo_afirmacion", [("P", "Sí, algunas noches.")], {1: [0]},
          previous=[("E", "¿Has deseado que tu vida acabe por sí sola?")]),

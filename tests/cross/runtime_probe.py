@@ -1,4 +1,3 @@
-"""CLI autónoma instalada con PCM sintético; transporte y archivos reales."""
 import json
 import sys
 import threading
@@ -50,8 +49,6 @@ def finish():
     try:
         assert started.wait(10),'START_TIMEOUT'
         assert stopped.wait(15),'STOP_TIMEOUT'
-        # El cierre físico y el envío terminan independientemente. Mantener el
-        # runtime disponible hasta observar también los recibos durables.
         for _ in range(200):
             manifests=[json.loads(p.read_text()) for p in (Path(root)/'fragments').glob('*/*.json')]
             ends=[json.loads(p.read_text()) for p in (Path(root)/'box-3'/'session-state').glob('*.json')]

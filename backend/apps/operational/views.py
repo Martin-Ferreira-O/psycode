@@ -53,9 +53,7 @@ class IsActiveAdmin(BasePermission):
 
 
 class OperationalConfigView(APIView):
-    """
-    Configuración operativa general del sistema.
-    """
+
 
     permission_classes = [
         IsAuthenticated,
@@ -92,16 +90,7 @@ class SpeechmaticsCatalogView(APIView):
 
 
 class AgentRegistrationListCreateView(APIView):
-    """
-    Gestión administrativa del registro central de PCs.
 
-    GET:
-        Lista PCs registrados y su estado operativo.
-
-    POST:
-        Registra un PC y devuelve su API key solamente
-        en la respuesta de creación.
-    """
 
     permission_classes = [
         IsAuthenticated,
@@ -130,7 +119,6 @@ class AgentRegistrationListCreateView(APIView):
             last_audio = AcceptedSequence.objects.filter(agent_id__in=historical_ids(agent)).order_by(
                 "-accepted_at", "-pk",
             ).values("captured_at", "accepted_at").first()
-            # La sesión/pipeline pertenece al box; la telemetría y audio al PC.
             if agent.box not in pipelines:
                 session = CaptureSession.objects.filter(box=agent.box, audiotest__isnull=True).order_by(
                     "-scheduled_start", "-authorized_at", "-session_id",
@@ -160,8 +148,6 @@ class AgentRegistrationListCreateView(APIView):
                 "connection": "online" if connected else "offline",
                 "last_seen_at": agent.last_seen_at,
                 "status_reported_at": diagnostics.get("status_reported_at"),
-                # Conservar tipos/defaults de la API anterior. Los campos reportados
-                # permiten distinguir un cero real de un dato aún desconocido.
                 "capturing": diagnostics.get("capturing", False),
                 "pending": diagnostics.get("pending", 0), "free_bytes": diagnostics.get("free_bytes"),
                 "telemetry_fields": sorted(diagnostics),
@@ -207,9 +193,6 @@ class AgentRegistrationListCreateView(APIView):
             "box": agent.box,
             "active": agent.is_active,
             "created_at": agent.created_at,
-
-            # La API key completa se entrega
-            # solamente en este momento.
             "api_key": api_key,
         }
 
@@ -247,11 +230,6 @@ class AgentRegistrationRenameView(APIView):
 
 
 class AgentRegistrationRevokeView(APIView):
-    """
-    Revoca la credencial actual de un PC sin eliminar
-    su identidad ni su historial.
-    """
-
     permission_classes = [
         IsAuthenticated,
         IsActiveAdmin,
@@ -280,14 +258,6 @@ class AgentRegistrationRevokeView(APIView):
 
 
 class AgentRegistrationRenewView(APIView):
-    """
-    Renueva la credencial de un PC manteniendo
-    el mismo agent_id.
-
-    La nueva API key se devuelve solamente
-    en esta respuesta.
-    """
-
     permission_classes = [
         IsAuthenticated,
         IsActiveAdmin,
@@ -309,8 +279,6 @@ class AgentRegistrationRenewView(APIView):
             "box": agent.box,
             "active": agent.is_active,
             "revoked_at": agent.revoked_at,
-
-            # Solo se muestra al renovar.
             "api_key": api_key,
         }
 
@@ -320,7 +288,6 @@ class AgentRegistrationRenewView(APIView):
         )
 
 class AgentConnectivityHistoryView(APIView):
-    """Incidentes completos, filtrados por inicio (detección si es desconocido)."""
     permission_classes = [IsAuthenticated, IsActiveAdmin]
     DEFAULT_PAGE_SIZE = 20
     MAX_PAGE_SIZE = 100
@@ -357,7 +324,6 @@ class AgentConnectivityHistoryView(APIView):
         grouped = defaultdict(list)
         for event in events:
             if event.kind.endswith((".disconnected", ".reconnected")):
-                # No mezclar canales ni boxes aunque compartan outage_id.
                 key = (event.box, event.kind.split(".")[0], str(event.outage_id or event.event_id))
                 grouped[key].append(event)
         history, now = [], timezone.now()
@@ -395,7 +361,6 @@ class AgentConnectivityHistoryView(APIView):
                 "start_time_quality": outage.start_time_quality,
                 "recovery_time_quality": outage.recovery_time_quality, "received_at": outage.detected_at,
             })
-        # Filtrar DESPUÉS de emparejar; una recuperación fuera del rango no desaparece.
         def in_range(item):
             day = timezone.localdate(item["started_at"] or item["received_at"])
             return ((not dates["desde"] or day >= dates["desde"]) and

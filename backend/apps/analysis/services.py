@@ -1,4 +1,3 @@
-"""Reglas y coordinación interna. Sin rutas HTTP, colas auxiliares ni notificaciones."""
 from dataclasses import asdict
 import re
 from threading import Lock
@@ -29,7 +28,6 @@ BLOCK_TURN_GAP = 1.2
 
 
 def redact_for_jev(text, fragment, secrets=(), terms=()):
-    # Identificadores/rutas/secretos pueden aparecer también dentro del texto.
     forbidden = (fragment.session_id, str(fragment.path), *secrets, *terms)
     text = redact(text, tuple(t for t in forbidden if t))
     for pattern in (r"https?://\S+", r"[A-Za-z]:[\\/][^\s]+",
@@ -40,7 +38,6 @@ def redact_for_jev(text, fragment, secrets=(), terms=()):
 
 
 class AnalysisService:
-    """Instancia por trabajador, secuencial. Contexto acotado y aislado por UUID."""
     def __init__(self, transcriptor: Transcriptor, analyzer: AnalizadorDeSenales,
                  ledger: FragmentLedger, alerts, audit: TechnicalAudit, *,
                  redact_terms=(), secrets=(), max_sessions=32, threshold_loader=None):
@@ -59,7 +56,6 @@ class AnalysisService:
             self.evidence.pop(session_id, None)
 
     def process(self, fragment: Fragment, *, roles: dict[str, str] | None = None) -> AnalysisResult:
-        # No background process/stdout pipes to deadlock under Windows spawn.
         with self._lock:
             try:
                 return self._process(fragment, roles or {})
@@ -125,8 +121,6 @@ class AnalysisService:
         ]
 
     def _prepare_block(self, fragment, words):
-        # Orden estable y recorrido lineal tras ordenar. El bloque de una hora
-        # no necesita comparar cada palabra con todas las demás ni ventanas de 15 s.
         words = sorted(words, key=lambda word: (word["start"], word["end"]))
         items = []
         previous_end = -1
@@ -204,8 +198,6 @@ class AnalysisService:
             levels = unattributed_levels(item["text"])
             if not levels:
                 continue
-            # Una voz que cambia a mitad de la frase puede separar una negación
-            # de lo que sigue. Las fronteras dudosas se conservan como contexto.
             if index:
                 previous = utterances[index - 1]
                 if requests_non_literal_speech(previous["text"]):
@@ -279,7 +271,6 @@ class AnalysisService:
                     verified.append(Signal(candidate["category_id"], level, severity, text,
                                            item["start"], item["end"], item["speaker"], decision.values[level], threshold))
             if verified:
-                # A falta de voz identificable, conservar los intervalos por separado.
                 voice = item["speaker"] if item["speaker"] is not None else item["start"]
                 key = (voice, " ".join(text.casefold().split()))
                 best = max(verified, key=lambda signal: signal.matrix_level)
@@ -303,8 +294,6 @@ class AnalysisService:
         plain = questions_version == PLAIN_TEXT_VERSION
         model_roles = roles
         if fragment.audio_test and not plain:
-            # Convención ficticia exclusiva del diagnóstico sintético autorizado.
-            # Las sesiones clínicas y voces sin atribución conservan unknown.
             roles = dict(roles)
             speakers = {item["speaker"] for item in utterances
                         if item["attribution"] == "assigned" and item["speaker"] is not None}
@@ -381,8 +370,6 @@ class AnalysisService:
             except ProviderError as exc:
                 code = "JEV_SUBMISSION_UNCERTAIN" if isinstance(exc, SubmissionUncertain) else "JEV_FAILED"
                 if checkpoint is not None:
-                    # Solo un rechazo confirmado permite repetir el mismo bloque.
-                    # Conserva su request_id para trazabilidad entre intentos.
                     if not isinstance(exc, SubmissionUncertain):
                         checkpoint.data["jev_retry_request_id"] = checkpoint.data.pop("jev_pending")["request_id"]
                         checkpoint.save()
@@ -409,8 +396,6 @@ class AnalysisService:
                 "review_issues": [asdict(issue) for issue in result.review_issues],
             }
             checkpoint.save()
-            # El resultado y la respuesta ya están persistidos. La recuperación
-            # posterior usa result, sin conservar otra copia del bloque completo.
             for key in ("utterances", "roles", "jev_response", "jev_pending", "jev_retry_request_id",
                         "plain_prepared", "plain_context_prepared"):
                 checkpoint.data.pop(key, None)
@@ -502,7 +487,6 @@ class AnalysisService:
             history[:] = [h for h in history if h["end"] >= utterance["start"] - 60]
             while history and sum(len(h["text"]) for h in history) + len(text) > 12000:
                 history.pop(0)
-            # Roles solo confirmados por un llamador interno, nunca inferidos de S1/S2.
             role = "patient" if fragment.audio_test and utterance["attribution"] == "assigned" else roles.get(
                 utterance["speaker"], "unknown")
             role = role if role in {"patient", "professional", "unknown"} else "unknown"
@@ -535,7 +519,6 @@ class AnalysisService:
                 if not evaluable:
                     errors.append("CONTEXT_NOT_EVALUABLE")
                 elif not candidates and any(v >= threshold for v in decision.values[1:]):
-                    # Las puertas léxicas pueden abstenerse ante una puntuación alta.
                     errors.append("TEXT_NOT_EVALUABLE")
                 else:
                     for candidate in candidates:
@@ -590,7 +573,6 @@ class AnalysisService:
         return threshold
 
     def register_signals(self, fragment: Fragment, result: AnalysisResult, *, checkpoint=None) -> None:
-        """Se puede reintentar esta entrega interna sin volver a llamar a proveedores."""
         if (result.contract_version != "1.0" or result.session_id != fragment.session_id
                 or result.sequence != fragment.sequence):
             raise FragmentRejected("Resultado no corresponde al fragmento")

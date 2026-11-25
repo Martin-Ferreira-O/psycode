@@ -1,6 +1,4 @@
 #!/usr/bin/python3 -I
-"""Activa pares inmutables de GitHub Releases y permite revertirlos localmente."""
-
 import argparse
 import fcntl
 import hashlib

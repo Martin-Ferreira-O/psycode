@@ -1,4 +1,3 @@
-"""SMTP aislado; configuración por stdin, sin salidas con secretos."""
 import json
 import smtplib
 import sys

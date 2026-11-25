@@ -1,5 +1,3 @@
-"""Authenticate large audio uploads before Django spools their bodies."""
-
 import hashlib
 import logging
 import os
@@ -49,7 +47,6 @@ def _try_lock_slot(path, reservations):
 
 @contextmanager
 def reserve_fragment_upload(box, *, audio_test=False):
-    """Reserve one upload per box and enforce the limit for its upload type across workers."""
     root = Path(settings.CAPTURE_FRAGMENT_ROOT) / ".upload-slots"
     box_key = hashlib.sha256(box.encode("ascii")).hexdigest()
     prefix = "audio-test-" if audio_test else ""

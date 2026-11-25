@@ -1,4 +1,3 @@
-"""Adaptadores HTTP. No instancian procesos ni cargan archivos de entorno."""
 import json
 import re
 import time
@@ -48,7 +47,6 @@ class JevAnalizador:
             headers={"Authorization": f"Bearer {settings.analysis_key}"},
             timeout=30, trust_env=False, follow_redirects=False)
         try:
-            # Solo contenido redactado y etiquetas técnicas locales. Sin metadatos de sesión.
             headers = {"X-Request-Id": request_id} if request_id else {}
             deadline = time.monotonic() + settings.timeout
             evidence_turns = [turn["id"] for turn in current.get("turns", ()) if "id" in turn]
@@ -73,7 +71,6 @@ class JevAnalizador:
             response = send()
             context_rejected = not response.is_success and self._context_limit(response)
             if unit == "fragment" and settings.analysis_provider == "typesafe" and context_rejected:
-                # El rechazo de contexto es definitivo. Reintentar el mismo bloque completo una vez.
                 headers["TypeSafe-Danger-Zone-Long-Context"] = "true"
                 response = send()
             if not response.is_success:
@@ -102,7 +99,6 @@ class JevAnalizador:
 
     @staticmethod
     def _context_limit(response):
-        # Inspección en memoria; nunca propagar cuerpos ni texto libre al journal/log.
         try:
             data = json_body(response)
         except ProviderError:

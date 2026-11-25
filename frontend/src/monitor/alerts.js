@@ -50,7 +50,6 @@ export async function saveEvaluation(id, option) {
             const evaluation = await apiGetDatos(url);
             return { evaluation: validateEvaluation(id, evaluation), conflict: true };
         } catch (lookupError) {
-            // The server confirmed that the alert has already been reviewed.
             lookupError.evaluationConflict = true;
             throw lookupError;
         }

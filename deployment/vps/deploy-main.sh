@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Installed root-owned at /usr/local/sbin/psycode-deploy-main.
 set -Eeuo pipefail
 umask 022
 export PATH=/opt/psycode-node/bin:/usr/local/bin:/usr/bin:/bin
@@ -67,7 +66,6 @@ else
   .venv/bin/python scripts/check_boundaries.py
   .venv/bin/python manage.py test --settings=backend.config.test_settings --noinput
   .venv/bin/python manage.py makemigrations --check --dry-run --settings=backend.config.test_settings
-  # Tests use an isolated .local directory; production journals persist outside releases.
   rm -rf "$release/.local"
   ln -s "$HOME/shared/runtime" .local
   ln -sfn "$HOME/shared/server.env" .env
@@ -90,7 +88,6 @@ if [[ ! -r "$HOME/shared/control-probe.json" || ! -r "$probe_script" ]]; then
   exit 1
 fi
 
-# Preparation above leaves the running release available. Drain in this order.
 coordinator_stopped=0
 services_touched=0
 resume_on_error() {
@@ -127,8 +124,6 @@ trap resume_on_error ERR
 coordinator_stopped=1
 sudo /usr/bin/systemctl stop psycode-coordinator.service
 if [[ -n "$previous" && -f "$HOME/shared/db.sqlite3" ]]; then
-  # The previous web (HTTP/WSS) and worker stay up during the drain.
-  # The new release checks evidence against the existing schema without writing.
   for ((attempt=0; attempt<60; attempt++)); do
     open_sessions=$(.venv/bin/python manage.py recover_capture_sessions --check-drain)
     [[ "$open_sessions" == 0 ]] && break

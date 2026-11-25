@@ -33,14 +33,11 @@ CONFIG_ERRORS = {"CONFIG_APPLY_FAILED", "CONFIG_VERSION_CONFLICT", "CONFIG_RECOV
 
 
 def configuration(value, *, effective=False):
-    """Per-PC control only; audio belongs to the global session profile."""
     legacy = {"audio_chunk_duration", "audio_chunk_overlap"} if effective else set()
     if not isinstance(value, dict) or value.keys() - CONFIG_KEYS - legacy:
         raise ValueError("INVALID_CONFIGURATION")
     value = {key:item for key,item in value.items() if key in CONFIG_KEYS}
     for key, item in value.items():
-        # Legacy reports may include audio; discard those fields rather than
-        # present a local default as the effective global/session profile.
         if effective and key == "heartbeat_interval":
             if type(item) not in (int, float) or not math.isfinite(item) or item <= 0:
                 raise ValueError("INVALID_CONFIGURATION")

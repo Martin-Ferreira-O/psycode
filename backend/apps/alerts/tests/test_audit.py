@@ -78,8 +78,6 @@ class MongoAuditIntegrationTests(SimpleTestCase):
         close_client()
         self.repo = AlertsRepository()
         self.repo.ensure_schema()
-        # BSON redondea a milisegundos; usar instantes distintos para probar rangos
-        # sin confundirlos con el desempate documentado por event_id.
         start, ticks = datetime.now(timezone.utc), count()
         clock = patch('backend.apps.alerts.audit.timezone.now',
                       side_effect=lambda: start + timedelta(milliseconds=next(ticks)))

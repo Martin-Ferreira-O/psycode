@@ -484,7 +484,6 @@ class CaptureLifecycleTests(CaptureFixtures, TestCase):
 
 
 class CaptureConcurrencyTests(CaptureFixtures, TransactionTestCase):
-    """Conexiones SQL independientes y barrera de arranque; sin mocks de ORM."""
     def race(self, *functions):
         barrier = Barrier(len(functions))
 

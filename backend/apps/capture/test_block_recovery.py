@@ -1,4 +1,3 @@
-"""Una decisión conjunta no se repite al recuperar su entrega."""
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path

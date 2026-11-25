@@ -1,4 +1,3 @@
-"""Permisos reales de pantalla/API y CSRF de las operaciones con credenciales."""
 from datetime import timedelta
 from hashlib import sha256
 from pathlib import Path

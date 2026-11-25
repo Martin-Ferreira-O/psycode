@@ -1,4 +1,3 @@
-"""Archivos privados locales, con leases compartidas con la limpieza."""
 import hashlib
 import os
 import re
@@ -32,7 +31,6 @@ STORED_KEY = re.compile(r"[0-9a-f]{32}\.blob")
 
 
 def validate_wav(stream, size):
-    """RIFF completo: PCM lineal, mono, 16 kHz, 16 bits; sin decodificar audio."""
     stream.seek(0)
     header = stream.read(12)
     if len(header) != 12:
@@ -112,12 +110,12 @@ class FragmentStorage:
                 lock_file(fd, blocking=False)
                 path.unlink(missing_ok=True)
             finally: os.close(fd)
-            
+
             try:lock_path.unlink(missing_ok=True)
-            
+
             except OSError:
                 pass
-                
+
 
     @contextmanager
     def allocation_lock(self, *, cleanup=False):
@@ -132,7 +130,6 @@ class FragmentStorage:
             os.close(fd)
 
     def incoming(self):
-        """El parser cierra y elimina este archivo, incluso si interrumpe la carga."""
         from .encryption import require_encrypted_storage
         require_encrypted_storage()
         with self.allocation_lock():

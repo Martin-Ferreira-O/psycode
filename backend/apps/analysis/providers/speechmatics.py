@@ -1,4 +1,3 @@
-"""Speechmatics Batch adaptado; sin ejecutores ni procesos auxiliares."""
 import io
 import hashlib
 import json
@@ -69,7 +68,6 @@ def parse_transcript(data, chunk, job_id):
             label = None if getattr(chunk, "analysis_unit", None) == "fragment" else alt.get("speaker")
             if label is not None and (not isinstance(label, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", label)):
                 raise ProviderError("Hablante inválido")
-            # Batch speaker IDs only have meaning inside this job.
             speaker = f"batch-{chunk.id}-{label}" if label and label != "UU" else None
             words.append({"start": round(start, 3), "end": round(end, 3),
                           "text": " " + prefix + content, "speaker": speaker,

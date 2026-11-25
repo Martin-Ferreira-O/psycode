@@ -1,4 +1,3 @@
-"""El reproductor del agente respeta el perfil operativo usando multipart real."""
 import hashlib
 from datetime import timedelta
 from pathlib import Path
@@ -28,7 +27,6 @@ class AudioTestProfileIntegrationTests(TestCase):
         elapsed, posts, reports = [0.0], [], []
         def server(request):
             if request.method == "GET":
-                # Solo simula el análisis; recepción y fragmentación son reales.
                 FragmentJob.objects.update(state=FragmentJob.State.COMPLETED, result=FragmentJob.Result.NO_RISK_DETECTED)
             response = self.client.generic(
                 request.method, request.url.raw_path.decode(), data=request.content,
@@ -57,7 +55,6 @@ class AudioTestProfileIntegrationTests(TestCase):
             self.assertEqual(run.session.audio_profile["chunk_samples"], duration * 16000)
             self.assertEqual(run.session.final_sequence, expected - 1)
             self.assertEqual(posts[0][0], duration)
-            # Multipart boundaries may change; durable job identity remains one per sequence.
             self.assertEqual(len(posts), expected + 1)
             self.assertIn(f"Duración configurada de fragmentos: {duration} s", final)
             self.assertIn("Prueba completada", final)

@@ -10,7 +10,6 @@ const santiagoClock = new Intl.DateTimeFormat("en-CA", {
     hourCycle: "h23",
 });
 
-// UTC dates here are calendar labels for Santiago, not instants used as API bounds.
 const calendarFormatter = (options) => new Intl.DateTimeFormat("es-CL", { ...options, timeZone: "UTC" });
 const fullDay = calendarFormatter({ weekday: "long", day: "numeric", month: "long" });
 const shortDay = calendarFormatter({ day: "numeric", month: "short" });
@@ -50,7 +49,6 @@ export async function loadRecentActivity(signal) {
         }
 
         for (const { alerta_id, fecha_hora } of data.items) {
-            // New alerts can shift items onto the next page while it is loading.
             if (seen.has(alerta_id)) continue;
             seen.add(alerta_id);
             const instant = Date.parse(fecha_hora);

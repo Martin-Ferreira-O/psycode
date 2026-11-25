@@ -1,5 +1,3 @@
-"""Public Batch list rates. A failed refresh never replaces verified prices."""
-
 from datetime import datetime, timezone
 import json
 import logging
@@ -113,7 +111,6 @@ def batch_catalog():
     now = int(time())
     if _refresh_due(snapshot, now):
         try:
-            # Workers share the snapshot. Recheck after acquiring the lock.
             with path.with_suffix(".lock").open("a+b") as lock:
                 lock_file(lock)
                 snapshot = _read(path)

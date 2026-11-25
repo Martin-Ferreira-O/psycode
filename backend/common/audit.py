@@ -1,4 +1,3 @@
-"""Auditoría con lista permitida: nunca aceptar cuerpos, emails ni tokens."""
 import json
 import logging
 import uuid

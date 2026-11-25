@@ -1,4 +1,3 @@
-"""Tests aislados de credenciales reales y sin correos de red."""
 import os
 from unittest.mock import patch
 
@@ -10,7 +9,7 @@ os.environ["FRONTEND_ORIGIN"] = "http://localhost:5173"
 os.environ["FRONTEND_BASE_URL"] = "http://localhost:5173"
 
 with patch("dotenv.load_dotenv"):
-    from .settings import *  # noqa: E402,F403
+    from .settings import *
 
 DEBUG = False
 SECURE_SSL_REDIRECT = False
@@ -18,8 +17,6 @@ MONGODB_URI = os.getenv("PSYCODE_TEST_MONGODB_URI", "").strip()
 MONGODB_DATABASE = "psycode_test"
 ALLOWED_HOSTS = ["testserver", "localhost", "127.0.0.1"]
 DATABASES["default"]["TEST"] = {"NAME": os.getenv("PSYCODE_TEST_SQLITE_PATH", str(BASE_DIR / ".local/test-auth.sqlite3"))}
-# Los usuarios de prueba son sintéticos. Las pruebas de seguridad de login
-# seleccionan explícitamente los hashers habituales.
 PASSWORD_HASHERS = [
     "django.contrib.auth.hashers.MD5PasswordHasher",
     *global_settings.PASSWORD_HASHERS,
@@ -36,7 +33,6 @@ SMILE_DEFAULT_URL = ""
 NOTIFICATION_EMAIL_TO = "primary@example.test"
 NOTIFICATION_EMAIL_BACKUP_TO = "backup@example.test"
 
-# Las suites usan exclusivamente fixtures sintéticos y directorios temporales.
 SENSITIVE_STORAGE_ENCRYPTION_REQUIRED = False
 SENSITIVE_STORAGE_EXTRA_ROOTS = []
 SENSITIVE_STORAGE_KEY_FILES = []

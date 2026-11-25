@@ -52,7 +52,7 @@ finally:
         finally:
             incoming.close()
         self.assertFalse(Path(incoming.name).exists())
-        incoming.close()  # También lo cierra Django al finalizar el request.
+        incoming.close()
 
         path = self.root / "released.blob"
         fd = open_private(path, os.O_RDWR | os.O_CREAT | os.O_EXCL)
@@ -89,7 +89,6 @@ finally:
         self.assertEqual(path.read_bytes(), b"new")
 
     def test_django_check_and_migrate_import_without_fcntl(self):
-        # Reproduce el traceback original sin requerir Windows en la máquina local.
         code = """
 import importlib.abc, os, sys
 os.environ['DJANGO_SETTINGS_MODULE'] = 'backend.config.test_settings'

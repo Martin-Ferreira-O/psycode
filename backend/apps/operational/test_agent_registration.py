@@ -49,7 +49,6 @@ class AgentRegistrationAPITests(APITestCase):
         self.url = "/api/v1/pcs"
 
     def record_pc_status(self, *, box, seen_at, diagnostics):
-        # La telemetría del PC tiene identidad propia; AgentStatus sigue siendo por box.
         agent = AgentRegistration.objects.get(box=box)
         agent.last_seen_at, agent.diagnostics = seen_at, diagnostics
         agent.save(update_fields=["last_seen_at", "diagnostics"])
@@ -77,15 +76,12 @@ class AgentRegistrationAPITests(APITestCase):
         self.assertEqual(data["name"], "PC Box 3")
         self.assertEqual(data["box"], "box-3")
         self.assertTrue(data["active"])
-
-        # La API key se entrega al crear el PC.
         self.assertIn("api_key", data)
-
         agent = AgentRegistration.objects.get(
             agent_id=data["agent_id"]
         )
 
-        # El secreto completo nunca se guarda en BD.
+
         self.assertNotEqual(
             agent.token_sha256,
             data["api_key"],
@@ -95,10 +91,8 @@ class AgentRegistrationAPITests(APITestCase):
             len(agent.token_sha256),
             64,
         )
-
     def test_api_key_no_se_muestra_al_listar(self):
         self.client.force_authenticate(user=self.admin)
-
         create_response = self.client.post(
             self.url,
             {
@@ -107,33 +101,21 @@ class AgentRegistrationAPITests(APITestCase):
             },
             format="json",
         )
-
         self.assertEqual(
             create_response.status_code,
             status.HTTP_201_CREATED,
         )
-
         api_key = create_response.data["data"]["api_key"]
-
         response = self.client.get(self.url)
-
         self.assertEqual(
             response.status_code,
             status.HTTP_200_OK,
         )
-
         agents = response.data["data"]
-
         self.assertEqual(len(agents), 1)
-
         listed_agent = agents[0]
-
-        # Ni el secreto ni su huella deben exponerse.
         self.assertNotIn("api_key", listed_agent)
         self.assertNotIn("token_sha256", listed_agent)
-
-        # Confirmamos que la API key de creación tampoco
-        # aparece accidentalmente en la respuesta.
         self.assertNotIn(
             api_key,
             str(response.data),
@@ -248,7 +230,6 @@ class AgentRegistrationAPITests(APITestCase):
 
         header = f"Agent {api_key}".encode("ascii")
 
-        # Antes de revocar debe autenticar.
         identity = authenticate_agent_header(header)
 
         self.assertEqual(
@@ -260,8 +241,6 @@ class AgentRegistrationAPITests(APITestCase):
             identity.box,
             "box-3",
         )
-
-        # Revocamos el PC.
         response = self.client.post(
             f"/api/v1/pcs/{agent_id}/revocar"
         )
@@ -296,8 +275,6 @@ class AgentRegistrationAPITests(APITestCase):
         old_hash = agent.token_sha256
 
         old_header = f"Agent {old_api_key}".encode("ascii")
-
-        # La credencial inicial funciona.
         old_identity = authenticate_agent_header(
             old_header
         )
@@ -306,8 +283,6 @@ class AgentRegistrationAPITests(APITestCase):
             old_identity.agent_id,
             agent_id,
         )
-
-        # Renovamos la credencial.
         response = self.client.post(
             f"/api/v1/pcs/{agent_id}/renovar"
         )
@@ -328,12 +303,8 @@ class AgentRegistrationAPITests(APITestCase):
         self.assertNotEqual(agent.token_sha256, old_hash)
         self.assertTrue(agent.is_active)
         self.assertIsNone(agent.revoked_at)
-
-        # La clave anterior deja de funcionar.
         with self.assertRaises(AuthenticationFailed):
             authenticate_agent_header(old_header)
-
-        # La nueva credencial sí funciona.
         new_header = f"Agent {new_api_key}".encode(
             "ascii"
         )
@@ -535,7 +506,6 @@ class AgentRegistrationAPITests(APITestCase):
 
         pc = response.data["data"][0]
 
-        # Los tres estados deben existir por separado.
         self.assertEqual(
             pc["capture_status"],
             "active",
@@ -551,7 +521,6 @@ class AgentRegistrationAPITests(APITestCase):
             "pending",
         )
 
-        # Además conservamos el detalle completo.
         self.assertIsNotNone(
             pc["pipeline"],
         )
@@ -618,9 +587,6 @@ class AgentRegistrationAPITests(APITestCase):
             duration_ms=300000,
             cause="",
         )
-
-        # Simulamos que actualmente el PC volvió a estar conectado
-        # para que el servidor no agregue una caída inferida.
         RuntimeLease.objects.create(
             name="control:box-3",
             owner=uuid.uuid4(),
@@ -709,8 +675,6 @@ class AgentRegistrationAPITests(APITestCase):
             box="box-4",
             managed=True,
         )
-
-        # El servidor detecta e informa una caída persistente.
         outage = register_server_disconnect(
             identity,
             cause="UNKNOWN",
@@ -822,8 +786,6 @@ class AgentRegistrationAPITests(APITestCase):
         agent_id = create_response.data["data"]["agent_id"]
 
         now = timezone.now()
-
-        # Evento antiguo: no debería aparecer.
         AgentConnectivityEvent.objects.create(
             event_id=uuid.uuid4(),
             agent_id=agent_id,
@@ -836,8 +798,6 @@ class AgentRegistrationAPITests(APITestCase):
             duration_ms=None,
             cause="OLD_EVENT",
         )
-
-        # Evento reciente: sí debería aparecer.
         recent_outage_id = uuid.uuid4()
 
         AgentConnectivityEvent.objects.create(
@@ -852,9 +812,6 @@ class AgentRegistrationAPITests(APITestCase):
             duration_ms=None,
             cause="RECENT_EVENT",
         )
-
-        # Simulamos conexión activa para evitar
-        # que se agregue una caída inferida.
         RuntimeLease.objects.create(
             name="control:box-6",
             owner=uuid.uuid4(),
@@ -903,8 +860,6 @@ class AgentRegistrationAPITests(APITestCase):
         agent_id = create_response.data["data"]["agent_id"]
 
         now = timezone.now()
-
-        # Creamos 5 caídas diferentes.
         for index in range(5):
             AgentConnectivityEvent.objects.create(
                 event_id=uuid.uuid4(),
@@ -922,8 +877,6 @@ class AgentRegistrationAPITests(APITestCase):
                 duration_ms=None,
                 cause=f"EVENT_{index}",
             )
-
-        # Evita caída inferida adicional.
         RuntimeLease.objects.create(
             name="control:box-7",
             owner=uuid.uuid4(),
@@ -1007,8 +960,6 @@ class AgentRegistrationAPITests(APITestCase):
         )
 
         self.assertIsNotNone(first)
-
-        # La segunda detección no debe crear otra caída.
         self.assertEqual(
             first.outage_id,
             second.outage_id,
@@ -1114,9 +1065,6 @@ class AgentRegistrationAPITests(APITestCase):
         self.assertFalse(
             recovered.is_active,
         )
-
-        # Seguimos teniendo una sola caída,
-        # ahora cerrada.
         self.assertEqual(
             ServerConnectivityOutage.objects.count(),
             1,
@@ -1156,24 +1104,17 @@ class AgentRegistrationAPITests(APITestCase):
             box="box-3",
             managed=True,
         )
-
-        # El servidor detecta una caída.
         outage = register_server_disconnect(
             identity,
             cause="CONNECTION_LOST",
         )
 
         self.assertIsNotNone(outage)
-
-        # Después el PC vuelve a conectarse.
         recovered = register_server_reconnect(
             identity,
         )
 
         self.assertIsNotNone(recovered)
-
-        # La caída debe seguir existiendo en BD,
-        # pero ahora cerrada.
         self.assertEqual(
             ServerConnectivityOutage.objects.count(),
             1,
@@ -1188,9 +1129,6 @@ class AgentRegistrationAPITests(APITestCase):
         self.assertIsNotNone(
             recovered.recovered_at,
         )
-
-        # Consultamos el historial después
-        # de haberse recuperado.
         response = self.client.get(
             f"/api/v1/pcs/{agent_id}/historial"
         )

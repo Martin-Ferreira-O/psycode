@@ -1,4 +1,3 @@
-"""Verificación de volúmenes cifrados. Permisos 0700/0600 no son cifrado."""
 import json
 import os
 from pathlib import Path
@@ -39,7 +38,6 @@ def _windows_encrypted(path):
     drive = Path(path).drive
     if not re.fullmatch(r"[A-Za-z]:", drive):
         return False
-    # El único valor interpolado es una letra de unidad validada.
     script = f"Get-BitLockerVolume -MountPoint '{drive}' | Select-Object ProtectionStatus,EncryptionPercentage | ConvertTo-Json -Compress"
     volume = _json_command(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script])
     return volume["ProtectionStatus"] in (1, "On") and volume["EncryptionPercentage"] == 100
@@ -62,12 +60,9 @@ def _key_protected(path, roots):
     if any(resolved == root or root in resolved.parents for root in forbidden):
         return False
     if os.name == "nt":
-        # La ACL de claves debe verificarse institucionalmente en Windows;
-        # no inferir protección a partir de los bits POSIX emulados.
         return False
     if info.st_uid not in {0, os.getuid()} or stat.S_IMODE(info.st_mode) & 0o077:
         return False
-    # No aceptar un ancestro escribible por otros (reemplazo de clave).
     return all(not (parent.stat().st_mode & 0o022) for parent in resolved.parents)
 
 
@@ -98,7 +93,6 @@ def require_encrypted_storage():
     global _CACHE
     if not settings.SENSITIVE_STORAGE_ENCRYPTION_REQUIRED:
         return
-    # No ejecutar utilidades de disco por cada bloque de una carga.
     signature = (str(settings.CAPTURE_FRAGMENT_ROOT), str(settings.DATABASES["default"]["NAME"]),
                  str(settings.ANALYSIS_STATE_ROOT), tuple(settings.SENSITIVE_STORAGE_EXTRA_ROOTS), tuple(settings.SENSITIVE_STORAGE_KEY_FILES))
     if _CACHE is None or _CACHE[0] != signature or time.monotonic() - _CACHE[1] > 60:

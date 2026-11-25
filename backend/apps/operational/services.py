@@ -57,7 +57,6 @@ class OperationalService:
         }
 
     def update_config(self, actor, data):
-        # Criterio: Solo los administradores pueden modificar la configuración.
         if not (actor.is_authenticated and actor.is_active and getattr(actor, "is_admin", False)):
             raise ServiceError("AUTH_FORBIDDEN", "No tienes permisos para modificar la configuración operativa.", 403)
 
@@ -117,18 +116,15 @@ class OperationalService:
         return self._serialize_config(config)
 
     def validate_current_operation(self, check_time: datetime | None = None) -> dict:
-        """Valida centralmente si el sistema está operando dentro del horario habilitado."""
         current_dt = (check_time or datetime.now(SANTIAGO_TZ)).astimezone(SANTIAGO_TZ)
         config = OperationalConfiguration.load()
-
-        # Si no hay correos configurados o datos básicos, se considera no autorizado
         if not config.primary_email and not config.open_time:
             return {
                 "authorized": False,
                 "reason": "La captura y el procesamiento no están autorizados: no existe configuración operativa vigente.",
             }
 
-        weekday = current_dt.weekday()  # 0 = Lunes, 6 = Domingo
+        weekday = current_dt.weekday()
         current_t = current_dt.time().replace(second=0, microsecond=0)
 
         try:
@@ -154,7 +150,6 @@ class OperationalService:
         }
 
     def authorize_box_capture(self, box: str | int, check_time: datetime | None = None) -> BoxCaptureAuthorization:
-        """SCRUM-70: Evalúa autorización de captura para un box combinando agenda y horario clínico."""
         if self._durable_agenda:
             from backend.apps.agenda.persistence import refresh
             refresh(self._capture_auth.agenda)
@@ -164,7 +159,6 @@ class OperationalService:
         return authorization
 
     def authorize_box_transition(self, box: str | int, check_time: datetime | None = None) -> BoxCaptureAuthorization | None:
-        """SCRUM-70: Devuelve la autorización solo cuando ocurre una transición de estado."""
         if self._durable_agenda:
             from backend.apps.agenda.persistence import refresh
             refresh(self._capture_auth.agenda)

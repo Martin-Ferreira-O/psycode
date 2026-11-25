@@ -1,4 +1,3 @@
-"""Outbox SQL idempotente para bitácora Mongo; se conserva si Mongo cae."""
 from django.utils import timezone
 
 from backend.apps.alerts.audit import STORAGE_AUDIT_COUNTS, STORAGE_PROVIDER_AUDIT_COUNTS
@@ -11,7 +10,6 @@ def flush_storage_audit(collection=None):
     sent = 0
     counts = STORAGE_AUDIT_COUNTS + STORAGE_PROVIDER_AUDIT_COUNTS
     pending = StorageCleanupRun.objects.filter(finished_at__isnull=False, audit_sent_at__isnull=True)
-    # Resolver las pasadas vacías en SQL, aun si MongoDB no está disponible.
     pending.filter(source="automatic", outcome="success", error_code="", **dict.fromkeys(counts, 0)).update(
         audit_sent_at=timezone.now(),
     )
@@ -40,5 +38,5 @@ def flush_storage_audit(collection=None):
             StorageCleanupRun.objects.filter(pk=run.pk).update(audit_sent_at=timezone.now())
             sent += 1
         except Exception:
-            break  # Un reinicio repite el mismo UUID, nunca pierde ni duplica el evento.
+            break
     return sent

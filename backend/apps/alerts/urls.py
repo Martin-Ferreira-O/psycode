@@ -1,7 +1,7 @@
 from django.urls import path
 
 from .audit_api import AuditExportView, AuditListView
-from .views import AlertDetailView, AlertEvaluationView,  AlertExportView, AlertListView 
+from .views import AlertDetailView, AlertEvaluationView,  AlertExportView, AlertListView
 
 app_name = "alerts"
 

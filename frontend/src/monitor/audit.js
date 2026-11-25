@@ -55,7 +55,6 @@ export function todayInChile() {
         timeZone: "America/Santiago", year: "numeric", month: "2-digit", day: "2-digit",
     }).formatToParts(new Date());
     const { year, month, day } = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
-    // UTC represents a calendar date so week navigation is independent of daylight saving time.
     return fromDateInput(`${year}-${month}-${day}`);
 }
 

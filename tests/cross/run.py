@@ -1,4 +1,3 @@
-"""Suite explícita: --agent-wheel identifica el paquete, sin depender de carpetas hermanas."""
 import argparse
 import hashlib
 import io
@@ -45,14 +44,11 @@ def main():
         from django.db import connections
         resources.callback(connections.close_all)
         call_command('migrate',verbosity=0,interactive=False)
-        # Datos de agenda sintéticos por HTTP; otro proceso coordina desde SQL.
         agent_env=root/'agent-env'
         subprocess.run(['uv','venv',str(agent_env),'--python',sys.executable],check=True,capture_output=True)
         apython=agent_env/('Scripts/python.exe' if os.name=='nt' else 'bin/python')
         subprocess.run(['uv','pip','install','--reinstall-package','psycode-agent',
                         '--python',str(apython),str(wheel)],check=True,capture_output=True)
-        # CA y certificado de loopback exclusivos de este ensayo; se verifica
-        # certificado y nombre del servidor igual que con HTTPS/WSS reales.
         key, cert = root / "key.pem", root / "cert.pem"
         openssl_config = root / "openssl.cnf"
         openssl_config.write_text("""[req]
@@ -148,12 +144,10 @@ basicConstraints=critical,CA:true
             first_session = CaptureSession.objects.get(pk=sid)
             assert first_session.capture_chunk_config == {"audio_chunk_mode": "fixed", "audio_chunk_duration": 60, "audio_chunk_overlap": 0, "analysis_unit": "fragment"}
             assert first_session.audio_profile["chunk_samples"] == 60 * 16000
-            # Cambiar el ajuste no modifica la sesión activa; la siguiente toma 600 s.
             OperationalConfiguration.objects.filter(pk=1).update(audio_chunk_duration=600)
             coordinate()
             first_session.refresh_from_db()
             assert first_session.capture_chunk_config["audio_chunk_duration"] == 60
-            # Simula cambio de agenda en el receptor y reinicio del coordinador.
             from backend.apps.agenda.models import AgendaBoxRevision
             AgendaBoxRevision.objects.filter(box='box-3').update(appointments=[])
             coordinate()
@@ -164,7 +158,6 @@ basicConstraints=critical,CA:true
             assert CaptureSession.objects.get(pk=sid).state=='completada'
             assert FragmentJob.objects.filter(sequence__session_id=sid).count()==1
             assert FragmentJob.objects.filter(sequence__session_id=sid).get().state=='pendiente'
-            # Procesamiento central con proveedores simulados, conserva unknown.
             from backend.apps.capture.processing import FragmentJobProcessor
             from backend.config.composition import fragment_storage
             from backend.apps.analysis.domain import AnalysisResult,AnalysisState
@@ -178,7 +171,6 @@ basicConstraints=critical,CA:true
             FragmentJobProcessor(fragment_storage(),SimulatedAnalysis()).process_next()
             job=FragmentJob.objects.get(sequence__session_id=sid)
             assert job.state=='completado' and job.result=='indeterminado'
-            # Un segundo ciclo usa el runtime autónomo real, con PCM sintético.
             from backend.apps.agenda.persistence import issue
             from backend.apps.capture.authentication import AgentIdentity
             identity=AgentIdentity('cross-agent','box-3')
@@ -216,8 +208,6 @@ basicConstraints=critical,CA:true
             assert second_session.capture_chunk_config['audio_chunk_duration'] == 600
             assert second_session.audio_profile['chunk_samples'] == 600 * 16000
             assert FragmentJob.objects.filter(sequence__session_id=sid2).count()==1
-            # Ejecutar también la cobertura HTTP v2 y los ACK históricos, fuera de la suite ordinaria.
-            # Esta instalación temporal del servidor admite el agente solo para esas pruebas.
             result=subprocess.run(['uv','run','--with',str(wheel),'--reinstall-package','psycode-agent','--no-editable','python','manage.py','test','tests/cross',
                 '--settings=backend.config.test_settings','--noinput'],cwd=ROOT,env=env,capture_output=True,text=True)
             if result.returncode:raise RuntimeError(result.stdout+result.stderr)

@@ -1,4 +1,3 @@
-"""Presentación HTTP de alerts; pendiente de implementación."""
 import uuid
 from datetime import datetime, timezone
 
@@ -220,7 +219,7 @@ class AlertExportView(APIView):
                 ]
             )
 
-        # Estilo del encabezado igual al Excel de Bitácora
+
         relleno_encabezado = PatternFill(
             fill_type="solid",
             fgColor="198754",
@@ -243,14 +242,14 @@ class AlertExportView(APIView):
         hoja.auto_filter.ref = hoja.dimensions
 
         anchos = [
-            38,  # Alerta
-            14,  # Box
-            28,  # Tipo
-            12,  # Nivel
-            16,  # Semáforo
-            14,  # Fecha
-            14,  # Hora
-            20,  # Estado
+            38,
+            14,
+            28,
+            12,
+            16,
+            14,
+            14,
+            20,
         ]
 
         for indice, ancho in enumerate(anchos, start=1):
@@ -297,7 +296,7 @@ class AlertExportView(APIView):
         )
 
         return response
-    
+
 
 class AlertDetailView(APIView):
     permission_classes = [IsAuthenticated]

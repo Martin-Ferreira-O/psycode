@@ -1,4 +1,3 @@
-"""Audio sintético: negociación, snapshot y recepción grande, sin proveedores."""
 import asyncio
 import json
 from datetime import timedelta
@@ -42,14 +41,13 @@ class ChunkSnapshotTests(CaptureFixtures, TestCase):
                 self.service.acknowledge(box, start.command_id, now=NOW)
                 config.audio_chunk_mode = "session"
                 config.save()
-                # Updating the global setting never rewrites a running session.
                 current = CaptureSession.objects.get(pk=first.session_id)
                 self.assertEqual(current.capture_chunk_config["audio_chunk_mode"], "fixed")
                 self.assertEqual(duration(current), 120)
                 denied = replace(authorization, authorized=False, inicio=None, termino=None)
                 self.service.apply_authorization(denied, now=NOW + timedelta(seconds=1))
                 stop, = self.service.commands(box, now=NOW + timedelta(seconds=2), configuration_pending=True)
-                self.assertEqual(stop.kind, "detencion")  # STOP is never blocked by configuration.
+                self.assertEqual(stop.kind, "detencion")
                 self.service.acknowledge(box, stop.command_id, last_sequence=-1,
                                          now=NOW + timedelta(seconds=2))
                 later = NOW + timedelta(seconds=3)
@@ -137,7 +135,7 @@ class ConfiguredIngestionTests(IngestionFixtures, TestCase):
         from .processing import FragmentJobProcessor
         from .test_processing import FakeAnalysis
         self.configure()
-        data = wav_bytes(b"\0\0" * (900 * 16000))  # >25 MiB
+        data = wav_bytes(b"\0\0" * (900 * 16000))
         args = dict(content=data, temporal=self.timeline(900), now=NOW + timedelta(seconds=910))
         first, created = self.receive(**args)
         self.assertTrue(created)
@@ -182,7 +180,6 @@ class ConfiguredIngestionTests(IngestionFixtures, TestCase):
         self.assertFalse(self.blobs())
 
 
-# Reuse API fixtures without inheriting the legacy test methods.
 class ConfiguredUploadTests(IngestionFixtures, TransactionTestCase):
     payload = api_tests.FragmentAPITests.payload
 
@@ -236,8 +233,6 @@ class ConfiguredUploadTests(IngestionFixtures, TransactionTestCase):
 
 
     def test_other_negotiated_session_does_not_raise_legacy_acceptance_limit(self):
-        # Otra sesión del mismo box eleva la cota preliminar del parser; la
-        # sesión destinataria sigue sometida a su límite legacy exacto.
         other = CaptureSession.objects.get()
         other.pk = uuid4()
         other.state = "completada"
@@ -298,8 +293,6 @@ class ChunkHandshakeTests(CaptureFixtures, TransactionTestCase):
         self.assertEqual(CaptureSession.objects.get().diagnostic_code, "CAPABILITIES_CHANGED")
         self.assertIs(CaptureSession.objects.get().capture_chunk_negotiated, True)
 
-        # Revocar cancela el inicio pendiente: aun sin capacidad debe entregarse
-        # la detención para apagar una captura que pudo comenzar sin ACK.
         from dataclasses import replace
         denied = replace(self.authorization, authorized=False, inicio=None, termino=None)
         self.service.apply_authorization(denied, now=NOW + timedelta(seconds=30))

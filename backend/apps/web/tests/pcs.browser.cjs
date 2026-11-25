@@ -1,4 +1,3 @@
-// Integración en navegador con base local sintética; no ejecutar en producción.
 const assert = require('node:assert/strict');
 const { createHash } = require('node:crypto');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
@@ -158,7 +157,6 @@ const ok = data => ({ status: 200, contentType: 'application/json', body: JSON.s
         await freeBox.getByRole('button', { name: 'Cancelar instalación de PC pendiente' }).click();
         await page.locator('#confirmarAccionPC').click();
         await createInBox.waitFor();
-        // El sidebar usa exactamente los estilos compartidos con Configuración operativa.
         const sidebarStyle = await page.locator('.barra-lateral').evaluate(el => {
             const s = getComputedStyle(el); return [s.width, s.backgroundColor, s.padding, s.position];
         });
@@ -168,7 +166,6 @@ const ok = data => ({ status: 200, contentType: 'application/json', body: JSON.s
             const s = getComputedStyle(el); return [s.width, s.backgroundColor, s.padding, s.position];
         }), sidebarStyle);
         await other.close();
-        // Catálogo real recibido por la API del colector; no se inventan IDs desde el nombre.
         await page.evaluate(async () => {
             const headers={'Content-Type':'application/json',Authorization:'Agent collector-test.'+'S'.repeat(43)};
             const issued=await (await fetch('/api/v2/internal/agenda-collections',{method:'POST',headers,body:JSON.stringify({source:'smile'})})).json();
@@ -255,7 +252,6 @@ finally: c.close()
         const current = await page.evaluate(async () => (await fetch('/api/v1/pcs')).json());
         assert.equal(current.data.find(pc => pc.name === 'Box 18').agent_id, id);
         fs.rmSync(privateRoot, { recursive: true, force: true });
-        // Permisos con cookies reales: el supervisor no obtiene HTML ni puede operar las APIs.
         const supervisor = await browser.newContext({ ignoreHTTPSErrors: true });
         const supervisorPage = await supervisor.newPage();
         await login(supervisorPage, 'pcs-supervisor');
@@ -263,7 +259,6 @@ finally: c.close()
         assert.equal(denied.status(), 403);
         assert.equal(await supervisorPage.locator('#crearPC').count(), 0);
         await supervisor.close();
-        // Estados de carga/error/reintento y telemetría con respuestas sintéticas controladas.
         let mode = 'hold', release, roomsFailed = false;
         const pcs = [3, 4, 5, 6, 7].map((n, i) => ({ agent_id: `00000000-0000-4000-8000-00000000000${n}`, name: `PC Consulta · Box ${n}`, box: `box-${n}`, active: i !== 4,
             smile_room_id: `room-${n}`, room_available:true, version: '1.0.0', connection: n === 3 || n === 5 ? 'online' : 'offline',
@@ -313,7 +308,6 @@ finally: c.close()
         await page.getByText('No hay salas o equipos que coincidan con los filtros.').waitFor();
         await page.locator('#buscarPC').fill('');
         if (output) await page.screenshot({ path: `${output}/pcs-desktop.png`, fullPage: true });
-        // Los nombres son texto; nunca se interpretan como HTML ejecutable.
         pcs[0].name = '<img src=x onerror="window.pcXss=true">';
         await page.locator('#actualizarPCs').click();
         await page.getByRole('heading', { name: pcs[0].name, exact: true }).waitFor();
@@ -322,7 +316,6 @@ finally: c.close()
         pcs[0].name = 'PC Consulta · Box 3';
         await page.locator('#actualizarPCs').click();
         await page.getByRole('heading', { name: pcs[0].name, exact: true }).waitFor();
-        // Diagnóstico de Smile: el botón queda bloqueado mientras hay una solicitud en curso.
         pcs[0].smile_sources = ['smile'];
         pcs[0].smile_check_supported = true;
         await page.route(`**/api/v1/pcs/${pcs[0].agent_id}/smile/prueba`, async route => {
@@ -338,7 +331,6 @@ finally: c.close()
         await page.locator('#actualizarPCs').click();
         await page.getByText('Acceso a Smile y selector de salas verificados.', { exact: true }).waitFor();
         assert.equal(await smileButton.isEnabled(), true);
-        // Historial: página 2, filtros y recuperación estimada/desconocida, sin confundir procedencia.
         let historyMode = 'data', historyRequests = [];
         await page.route('**/historial?*', async route => {
             const params = new URL(route.request().url()).searchParams;
@@ -391,7 +383,6 @@ finally: c.close()
                 'Paginación accesible al desplazar el diálogo');
         }
         await page.setViewportSize({ width: 1440, height: 1100 });
-        // Escape y restitución del foco en el botón de origen.
         await page.keyboard.press('Escape');
         assert.equal(await historyButton.evaluate(x => x === document.activeElement), true);
         for (const width of [375, 768, 1024, 1440]) {

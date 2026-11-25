@@ -1,4 +1,3 @@
-// Prueba de integración opcional: requiere Playwright y el servidor Django local.
 const assert = require('node:assert/strict');
 const { join } = require('node:path');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');

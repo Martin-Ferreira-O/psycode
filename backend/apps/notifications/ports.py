@@ -1,4 +1,3 @@
-"""Interfaces de canales de envío pendientes de SCRUM-41."""
 from abc import ABC, abstractmethod
 from .domain import AttemptResult, NotificationPayload, NotificationResult
 

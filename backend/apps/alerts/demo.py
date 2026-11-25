@@ -1,14 +1,11 @@
-"""Alertas sintéticas de desarrollo. Sin audio, pacientes ni datos clínicos reales."""
-
 from datetime import datetime, timezone
-
 from .domain import EstadoEvaluacion
 
 ORIGEN = "datos_sinteticos"
 EVALUADOR_ID = "22222222-2222-4222-8222-222222222222"
 EVALUADOR_USUARIO = "autonoma"
 
-# UUIDs estables para que el seed sea idempotente y las pruebas los reconozcan.
+
 DEMO_ALERTS = (
     {
         "alerta_id": "11111111-1111-4111-8111-111111111111",

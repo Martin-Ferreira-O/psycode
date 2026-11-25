@@ -1,1 +1,0 @@
-"""Contratos técnicos compartidos."""

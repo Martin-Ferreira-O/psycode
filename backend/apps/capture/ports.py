@@ -1,4 +1,3 @@
-"""Interfaz interna: el adaptador de transporte debe autenticar el box."""
 from datetime import datetime
 from typing import Protocol
 from uuid import UUID

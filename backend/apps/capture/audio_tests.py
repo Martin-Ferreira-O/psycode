@@ -1,5 +1,3 @@
-"""Recepción de clips ficticios, autenticada por PC y separada de captura."""
-
 from datetime import timedelta
 from math import ceil
 
@@ -175,7 +173,6 @@ class AudioTestView(APIView):
             return success_response(self._status(request, run, now), "Prueba autorizada")
         if CaptureSession.objects.filter(pk=test_id).exists():
             raise FragmentError("AUDIO_TEST_CONFLICT", 409)
-        # Cerrar la recepción habilita otro tramo mientras se analiza lo aceptado.
         for previous in AudioTest.objects.filter(agent=agent, expires_at__gt=now).select_related("session"):
             if status_data(previous, now)["state"] in {"receiving", "analyzing"}:
                 raise FragmentError("AUDIO_TEST_ALREADY_RUNNING", 409)

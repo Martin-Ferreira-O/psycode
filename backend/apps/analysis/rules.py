@@ -1,4 +1,3 @@
-"""Experimental, reviewable signals. Scores are not clinical probabilities."""
 import json
 from pathlib import Path
 import re
@@ -14,7 +13,6 @@ HYPOTHESES = [
 
 
 def review_priority(level):
-    """Prioridad operativa de revisión. La matriz conserva sus ocho categorías."""
     return (0, 1, 2, 2, 3, 3, 3, 3)[level]
 
 
@@ -42,7 +40,6 @@ def context_flags(text):
 
 
 def literal_candidates(text):
-    """High-specificity lexical evidence only; ambiguous matrix examples need NLI."""
     t = normalize(text)
     patterns = {
         1: r"(?:ojala|quisiera|preferiria).{0,30}(?:no despert|no estar vivo|no existir)|(?:quiero|quisiera) dejar de existir|no (?:quiero|deseo) (?:seguir )?vivir",
@@ -64,15 +61,10 @@ _PASSIVE_WISH = re.compile(
     r"(?:estar|seguir) muert[oa]|morir(?:me)?)|(?:quiero|quisiera) dejar de (?:existir|vivir)|"
     r"(?:quiero|deseo) (?:morir(?:me)?|estar muert[oa])|no (?:quiero|deseo) (?:seguir )?viv(?:ir|iendo))\b"
 )
-# Formulaciones inequívocas de Gradiente clínico, filas 3 y 4.
-# El "no" pertenece a la expresión afirmativa de estas filas.
 _AFFIRMATIVE_THOUGHT = re.compile(r"\bno dejo de pensar en (?:suicidarme|quitarme la vida|matarme)\b")
 _ACTIVE_THOUGHT = r"(?:pienso|he pensado|estoy pensando|sigo pensando) (?:en )?"
 _ACTIVE_INTENT = r"(?:voy a|he decidido|estoy decidid[oa] a|tengo (?:la )?intencion de) "
-# Ayer, hoy y las franjas de ambos días son recientes. Un pasado sin fecha
-# no establece que el episodio sea remoto.
 _RECENT_TIME = r"(?:hoy|ayer|anoche|esta (?:manana|tarde|noche)|ayer (?:en la|por la) (?:manana|tarde|noche))"
-# El inicio en primera persona evita tomar "que intente ..." como un intento propio.
 _ATTEMPT_REPORT = re.compile(
     rf"^\s*(?:si,\s*)?(?:yo\s+)?(?:{_RECENT_TIME}[, ]+)?(?:intente|empece a) {_SELF_HARM_ACTION}\b"
 )
@@ -121,17 +113,14 @@ _REVIEW_QUOTE_REQUEST = re.compile(
 
 
 def requests_non_literal_speech(text):
-    """Recognize an explicit request to quote, repeat, or simulate speech."""
     return bool(_REVIEW_QUOTE_REQUEST.search(normalize(text)))
 
 
 def unattributed_levels(text):
-    """High-specificity self-statements that can be checked without a role."""
     return tuple(sorted({level for claim in block_claims(text) for level in _claim_levels(claim)}))
 
 
 def _without_affirmative_negations(claim):
-    # A negation inside an affirmative passive wish is part of the evidence.
     remaining = _AFFIRMATIVE_THOUGHT.sub(" ", _PASSIVE_WISH.sub(" ", claim))
     if _ATTEMPT_REPORT.match(claim) or _REVIEW_PATTERNS[7].search(claim):
         remaining = _UNSUCCESSFUL_ATTEMPT.sub(" ", remaining)
@@ -139,12 +128,10 @@ def _without_affirmative_negations(claim):
 
 
 def block_claims(text):
-    """Keep the clauses that can contain a current own claim in a block turn."""
     normalized = normalize(text.strip())
     if not normalized or _REVIEW_QUOTE_REQUEST.search(normalized):
         return ()
     flags = {"pregunta", "cita", "referencia_a_terceros", "antecedente_temporal"}
-    # Quotes and questions can span a contrast or a sentence boundary.
     if re.search(r"['‘’‹›:]", normalized) or set(context_flags(normalized)).intersection({"pregunta", "cita"}):
         return ()
     claims = []
@@ -152,7 +139,6 @@ def block_claims(text):
     for clause in _CLAUSE_BOUNDARY.split(normalized):
         excluded_context = _REVIEW_EXCLUDED_CONTEXT.search(clause)
         if excluded_context and _REPORT_TIME_QUALIFIER.match(clause) and claims:
-            # Una aclaración posterior puede fechar la afirmación inmediatamente anterior.
             claims.pop()
         if (excluded_context or set(context_flags(clause)).intersection(flags)
                 or re.search(r"\bsi\b", re.sub(r"^si,\s*", "", clause))
@@ -162,7 +148,6 @@ def block_claims(text):
                                   _ATTEMPT_REPORT.match(clause) or _PASSIVE_WISH.search(clause))
             continue
         claims.append(clause)
-    # An unrelated sentence in a denial or historical report cannot inherit its signal.
     if excluded_risk:
         claims = [claim for claim in claims if _claim_levels(claim)]
     return tuple(claims)
@@ -188,7 +173,6 @@ def explicit_denial(text):
 
 
 def expressed_time(text):
-    """Solo un plazo contiguo a la declaración de intención verificada."""
     timing = r"(?:ahora(?: mismo)?|hoy|manana|esta noche)"
     intent = _REVIEW_PATTERNS[4].pattern
     normalized = normalize(text)
@@ -200,11 +184,6 @@ def expressed_time(text):
 
 
 def evidence_dimensions(text, context=""):
-    """Do not let generic NLI invent a method, intention, plan, or action.
-
-    These conservative lexical gates are experimental, not a clinical instrument.
-    Missing explicit evidence means abstention, even for a high model score.
-    """
     t = normalize(text)
     domain = bool(re.search(r"suicid|quitar.{0,12}vida|matarme|(?:dejar de|no quiero) vivir|morir|muert", normalize(text + " " + context)))
     intent = bool(re.search(r"intencion|(?:voy|quiero|decidido) a (?:hacerlo|actuar)|decidid[oa]|voy a terminar haciendolo|podria hacerlo|poder detenerme|siento que voy a actuar", t))
@@ -223,19 +202,15 @@ def evidence_dimensions(text, context=""):
 
 
 def jev_candidates(text, values, matrix, context="", *, threshold=JEV_DEFAULT_THRESHOLD):
-    """Experimental review cutoff; a Noul value is never a clinical probability."""
     return _candidates(text, values, [v >= threshold for v in values],
                        matrix, context, "JEV Noul sin calibración clínica")
 
 
 def _candidates(text, values, supported_values, matrix, context, score_kind):
     flags = context_flags(text)
-    # A denial is not evidence of affirmative ideation. Mixed/contrasting utterances
-    # remain reviewable rather than letting one negation cancel a later disclosure.
     denied = explicit_denial(text) and not re.search(r"\b(?:pero|aunque|ahora|sin embargo)\b", normalize(text))
     direct = unattributed_levels(text)
     literal = set(literal_candidates(text)).union(direct)
-    # A denial of active ideation can coexist with a passive death wish.
     if denied:
         literal = [level for level in literal if level == 1]
     dimensions = evidence_dimensions(text, context)
@@ -252,19 +227,16 @@ def _candidates(text, values, supported_values, matrix, context, score_kind):
                        "basis": "regla y modelo" if level in literal else "modelo",
                        "context_flags": flags, "review": "pending", "correction": None,
                        "interpretation": "Requiere contexto" if flags else "Hipótesis para revisión",
-                       # Do not duplicate potentially operational method details into summaries.
                        "evidence": "Revisar la transcripción y el audio del intervalo indicado."})
     return result
 
 
 def align_words(words, turns):
-    """Midpoint alignment; preserve overlap/unknown and bound utterances to 15 s."""
     utterances = []
     for word in words:
         midpoint = (word["start"] + word["end"]) / 2
         active = [t for t in turns if t["start"] <= midpoint < t["end"]]
         labels = {t["speaker"] for t in active}
-        # Multiple original turns are retained, even if both have unknown identity.
         overlap = len(active) > 1
         speaker = next(iter(labels)) if len(labels) == 1 and not overlap else None
         state = "overlap" if overlap else "assigned" if speaker else "unknown"

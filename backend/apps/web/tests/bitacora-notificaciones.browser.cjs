@@ -1,4 +1,3 @@
-// Bitácora real con eventos sintéticos: no conecta MongoDB ni envía mensajes.
 const assert = require('node:assert/strict');
 const { randomUUID } = require('node:crypto');
 const { join } = require('node:path');
@@ -120,7 +119,6 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         const bounds = await page.getByRole('dialog').boundingBox();
         assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 391, JSON.stringify(bounds));
 
-        // SCRUM-86: presentación del nombre del actor.
         const usuarioId = randomUUID(), eliminadoId = randomUUID();
         const usuarioLiteralId = randomUUID(), sinActorId = randomUUID();
         const maliciosoId = randomUUID();

@@ -1,4 +1,3 @@
-"""Configuración congelada de captura y cotas por sesión; sin estado global mutable."""
 from math import ceil
 
 CAPABILITY = "audio.chunk-config.v1"
@@ -21,13 +20,10 @@ def duration(session):
 
 
 def overlap(session):
-    """La ausencia del campo conserva el contrato v1 ya publicado."""
     return session.capture_chunk_config.get("audio_chunk_overlap", 1)
 
 
 def byte_limit(session, legacy_limit):
     if session.capture_chunk_negotiated is not True:
         return legacy_limit
-    # PCM de la duración solicitada más cabecera WAV acotada. La línea temporal
-    # comprueba además la ventana efectiva (incluidas revocaciones y detenciones).
     return duration(session) * 32000 + 65536

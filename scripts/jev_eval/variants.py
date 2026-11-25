@@ -1,4 +1,3 @@
-"""Candidatos de evaluación fuera del trabajador de producción."""
 
 import re
 
@@ -53,7 +52,6 @@ DEFINITIONS = {
 
 
 def revise(payload, variant):
-    """Modifica únicamente el contenido de preguntas con las mismas claves y opciones."""
     if variant == FOLLOWUP:
         if payload["state"]["history"]:
             for key, question in payload["questions"].items():
@@ -114,7 +112,6 @@ def revise(payload, variant):
 
 
 def previous_context(previous, roles, *, boundary=None):
-    """Hasta dos turnos asignados, últimos 12 s y máximo 480 caracteres de diálogo."""
     aliases = {}
     context = []
     remaining = 480
@@ -123,7 +120,6 @@ def previous_context(previous, roles, *, boundary=None):
         if boundary is not None and not boundary - 12 <= turn["end"] <= boundary:
             continue
         if not speaker or turn["attribution"] != "assigned":
-            # Un hueco de atribución impide tratar los turnos como adyacentes.
             break
         if len(turn["text"]) > remaining:
             break
@@ -136,7 +132,6 @@ def previous_context(previous, roles, *, boundary=None):
 
 
 def response_context(case, history):
-    """Expone la pregunta anterior cuando los dos roles tienen confirmación externa."""
     if not case["utterances"] or not history:
         return []
     first = case["utterances"][0]

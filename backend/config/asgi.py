@@ -40,8 +40,6 @@ async def application(scope, receive, send):
     path = scope.get("path", "").removeprefix(scope.get("root_path", ""))
     audio_test = AUDIO_TEST_FRAGMENT_PATH.fullmatch(path) is not None
     if scope["type"] == "http" and (path == "/api/v2/internal/fragments" or audio_test):
-        # Django spools the body before running middleware or view authentication.
-        # Workers share upload slots on the fragment volume. Never queue upload bodies.
         header = b",".join(value for name, value in scope["headers"] if name == b"authorization")
         if not header.strip():
             response = JsonResponse(

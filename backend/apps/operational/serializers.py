@@ -54,7 +54,6 @@ class OperationalConfigSerializer(StrictSerializer):
     open_time = StrictStringField(max_length=5, required=False)
     close_time = StrictStringField(max_length=5, required=False)
     notification_mode = serializers.ChoiceField(choices=NotificationMode.choices, required=False)
-    # El formato de correo se valida únicamente si el destino está activo.
     primary_email = StrictStringField(max_length=254, allow_blank=True, required=False)
     backup_enabled = StrictBooleanField(required=False)
     backup_email = StrictStringField(max_length=254, allow_blank=True, required=False)

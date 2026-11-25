@@ -1,4 +1,3 @@
-"""Puertos consumidos por el trabajador interno de análisis."""
 from typing import Protocol
 from .domain import Fragment, JevDecision, Transcription
 

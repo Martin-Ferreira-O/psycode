@@ -1,5 +1,3 @@
-"""Persistencia PyMongo de alertas y bitácora. Sin tipos HTTP ni ObjectId en la API del puerto."""
-
 from __future__ import annotations
 
 import json
@@ -17,7 +15,6 @@ from .mongo import ensure_alert_schema, schema_path
 from .ports import AlertQueryFilters, AlertQueryPort, AlertWritePort
 
 
-# Etiquetas de utils.js que representan códigos distintos del texto visible.
 RISK_LABEL_ALIASES = {
     "Riesgo suicida": (
         "sin_ideacion_identificable",

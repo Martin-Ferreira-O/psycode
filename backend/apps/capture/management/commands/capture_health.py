@@ -15,8 +15,6 @@ class Command(BaseCommand):
         def counts(model):return dict(model.objects.values_list('state').annotate(n=Count('pk')))
         now = timezone.now()
         service = CaptureSessionService()
-        # Incluir captura/recepción sin resolver y sesiones cuya recepción ya
-        # terminó pero aún tienen trabajos centrales pendientes.
         sessions = CaptureSession.objects.filter(
             Q(state__in=OPEN_STATES)
             | Q(state=SessionState.FAILED, actual_end__isnull=True)

@@ -1,4 +1,3 @@
-"""Contrato de vinculación y salas dinámicas, sin secretos ni servicios reales."""
 from datetime import timedelta
 from unittest.mock import patch
 

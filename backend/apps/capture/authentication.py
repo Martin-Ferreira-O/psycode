@@ -1,5 +1,3 @@
-"""Identidades de agentes por box, sin sesiones ni permisos de profesionales."""
-
 import hashlib
 import hmac
 import re
@@ -23,12 +21,7 @@ class AgentIdentity:
     agent_id: str
     box: str
     is_authenticated: bool = True
-
-    # True cuando el PC proviene del registro administrable en BD.
     managed: bool = False
-
-    # Huella de la credencial con la que abrió la conexión.
-    # Permite detectar renovación/revocación en conexiones WSS activas.
     credential_hash: str = ""
     registration_id: str = ""
 
@@ -59,13 +52,6 @@ class BoxAgentAuthentication(BaseAuthentication):
 
 
 def _managed_registration(agent_id):
-    """
-    Busca un PC administrado en BD.
-
-    Los agentes antiguos pueden tener IDs que no son UUID,
-    por eso un ID legacy inválido como UUID simplemente continúa
-    hacia CAPTURE_AGENTS.
-    """
     try:
         key = UUID(agent_id)
     except (TypeError, ValueError, AttributeError):
@@ -87,14 +73,7 @@ def _managed_registration(agent_id):
 
 
 def _consume_failed_agent_auth(*, agent_id="", source_ip=""):
-    """
-    Consume presupuesto de intentos fallidos de autenticación.
-
-    Se limita tanto por IP como por identidad del agente.
-    Las identidades se almacenan mediante hash en AuthRateLimit.
-    """
     identity = agent_id or "malformed"
-
     if source_ip:
         consume_auth_attempt(
             "capture.agent.ip",
@@ -112,8 +91,6 @@ def _consume_failed_agent_auth(*, agent_id="", source_ip=""):
 
 
 def authenticate_agent_header(header, *, source_ip=""):
-    """Mismas reglas de identidad para HTTP y handshake WebSocket."""
-
     try:
         scheme, token = header.decode("ascii").split()
         agent_id, secret = token.split(".")
@@ -138,7 +115,7 @@ def authenticate_agent_header(header, *, source_ip=""):
         token.encode("ascii")
     ).hexdigest()
 
-    # 1. PCs creados desde Gestión de PCs.
+
     registration = _managed_registration(agent_id)
 
     if registration is not None:
@@ -160,8 +137,6 @@ def authenticate_agent_header(header, *, source_ip=""):
             managed=True,
             credential_hash=token_hash,
         )
-
-    # La identidad lógica se conserva en BD; el token antiguo sigue siendo válido.
     from .legacy_registry import sync_legacy_registry
     if agent_id in settings.CAPTURE_AGENTS:
         sync_legacy_registry()
@@ -176,13 +151,6 @@ def authenticate_agent_header(header, *, source_ip=""):
 
 
 def ensure_agent_identity_current(identity):
-    """
-    Comprueba que una conexión administrada siga siendo válida.
-
-    Una revocación, renovación de credencial o cambio de box
-    invalida la conexión que utilizaba la credencial anterior.
-    """
-
     if identity.registration_id and not _legacy_credential_current(identity.agent_id, identity.box, identity.credential_hash):
         raise AuthenticationFailed()
     if not identity.managed:

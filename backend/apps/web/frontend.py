@@ -1,5 +1,3 @@
-"""Configuración pública de las pantallas que renderiza React."""
-
 from django.shortcuts import render
 from django.templatetags.static import static
 

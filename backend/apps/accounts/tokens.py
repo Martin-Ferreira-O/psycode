@@ -1,4 +1,3 @@
-"""Validación común de identidad y versión de credencial de JWT."""
 import uuid
 
 from django.utils.crypto import constant_time_compare
@@ -9,7 +8,6 @@ from backend.common.errors import ServiceError
 
 
 def credential_hash(user):
-    # Huella del hash Django, no se calcula sobre la contraseña en claro.
     return get_md5_hash_password(user.password)
 
 

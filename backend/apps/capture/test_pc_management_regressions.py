@@ -1,4 +1,3 @@
-"""Regresiones de SCRUM-96 sobre ASGI real e identidad, con datos sintéticos."""
 import asyncio
 import json
 from datetime import timedelta
@@ -234,7 +233,6 @@ class RegistryRegressionTests(APITestCase):
         self.assertIsNone(row["last_seen_at"])
 
     def test_shared_box_pcs_keep_individual_diagnostics(self):
-        # Fixture histórico: los registros duplicados anteriores siguen leyéndose sin mezclar datos.
         from .pc_registry import _generate_credential
         other = AgentRegistration(name="PC segundo", box="box-3")
         token, other.token_sha256 = _generate_credential(other.pk)

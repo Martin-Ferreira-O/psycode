@@ -425,8 +425,6 @@ class FragmentJobProcessor:
                             sequence__number__lt=job.sequence.number,
                             state__in=[FragmentJob.State.FAILED, FragmentJob.State.REVIEW]
                             if audio_test else [FragmentJob.State.FAILED]).exists():
-                        # Finalizar fuera de la transacción con la misma limpieza
-                        # de archivos y contextos que cualquier otro fallo.
                         error_code = "PREVIOUS_FRAGMENT_FAILED"
                     else:
                         continue
@@ -603,8 +601,6 @@ class FragmentJobProcessor:
         return FragmentJob.State.FAILED
 
     def _delete_final(self, storage_key):
-        # La retención durable elimina el WAV después de 24 h desde accepted_at.
-        # No borrar aquí: un fallo se recupera independientemente del análisis.
         return True
 
     def _close_session_if_finished(self, session_id):
@@ -612,9 +608,6 @@ class FragmentJobProcessor:
             pk=session_id,
             state__in=[SessionState.COMPLETED, SessionState.FAILED],
         ).first()
-        # Una captura fallida puede terminar de recibir archivos válidos después
-        # del cierre físico. El estado de captura no demuestra recepción completa.
-        # Tampoco lo demuestra que momentáneamente no queden trabajos en SQL.
         if (session is None or session.actual_end is None or session.final_sequence is None
                 or session.next_sequence != session.final_sequence + 1):
             return

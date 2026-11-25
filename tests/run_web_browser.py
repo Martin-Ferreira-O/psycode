@@ -1,4 +1,3 @@
-"""Ejecuta los flujos de navegador que solo requieren el servidor."""
 
 import argparse
 import os

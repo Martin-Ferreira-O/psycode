@@ -1,4 +1,3 @@
-"""Las plantillas deben admitir una jornada clínica completa sin cuerpo ilimitado."""
 from pathlib import Path
 import re
 
@@ -23,7 +22,6 @@ class ChunkProxyLimitsTests(SimpleTestCase):
                 self.assertIsNone(re.fullmatch(pattern, path.replace("11111111-", "invalid-", 1)))
 
     def test_v2_proxy_limit_covers_longest_clinical_day_with_multipart_margin(self):
-        # La autorización se acota al día clínico; DST puede añadir una hora.
         required = 25 * 3600 * 32000 + 2 * 65536
         for name in ("deployment/nginx-capture.conf", "deployment/vps/nginx.conf"):
             with self.subTest(config=name):

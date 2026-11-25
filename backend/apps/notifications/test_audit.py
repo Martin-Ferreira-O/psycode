@@ -141,7 +141,6 @@ class NotificationAuditTests(SimpleTestCase):
         self.assertIsNone(output['notification'])
         self.assertIsNone(output['sesion_id'])
         self.assertEqual(output['actor'], 'Sistema')
-        # El resolver real devuelve un motivo si no hay direcciones.
         self.resolver.resolve.return_value = RecipientResult('lista_distribucion', (), 'SIN_DESTINATARIOS_VALIDOS')
         self.notify()
         event = self.events()[-1]

@@ -171,7 +171,6 @@ class AudioDiagnosticTests(TestCase):
                     self.assertEqual(first.json()["data"], retry.json()["data"])
                     self.assertEqual(self.client.get(url).json()["data"]["state"], "analyzing")
                     if expected:
-                        # El worker perdió la confirmación final después de enviar el correo.
                         with patch.object(processor, "_finish_completed", return_value=None):
                             self.assertIsNone(processor.process_next())
                         self.assertEqual(len(mail.outbox), 1)

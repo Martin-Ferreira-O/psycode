@@ -7,7 +7,7 @@ from backend.apps.accounts.models import Role, User
 
 class AdminUserManagementTests(APITestCase):
     def setUp(self):
-        # 1. Admin con permisos
+
         self.admin_user = User.objects.create_user(
             username="admin_test",
             email="admin@test.cl",
@@ -18,7 +18,7 @@ class AdminUserManagementTests(APITestCase):
         refresh = RefreshToken.for_user(self.admin_user)
         self.admin_token = str(refresh.access_token)
 
-        # 2. Supervisor sin permisos de administración
+
         self.supervisor_user = User.objects.create_user(
             username="supervisor_test",
             email="supervisor@test.cl",
@@ -32,7 +32,7 @@ class AdminUserManagementTests(APITestCase):
         self.url_users = "/api/v1/auth/admin/users"
 
     def test_creacion_usuario_por_admin(self):
-        """Crear usuario con éxito y verificar rol supervisor por defecto."""
+
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.admin_token}")
         payload = {
             "usuario": "nuevo_psicologo",
@@ -46,7 +46,7 @@ class AdminUserManagementTests(APITestCase):
         self.assertTrue(res.data["data"]["activo"])
 
     def test_listado_usuarios_por_admin(self):
-        """Listar usuarios correctamente siendo admin."""
+
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.admin_token}")
         res = self.client.get(self.url_users)
         self.assertEqual(res.status_code, status.HTTP_200_OK)
@@ -106,7 +106,7 @@ class AdminUserManagementTests(APITestCase):
                 self.assertEqual([item["usuario"] for item in data["items"]], [esperado])
 
     def test_actualizacion_usuario(self):
-        """Actualizar nombre y rol de un usuario."""
+
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.admin_token}")
         url = f"{self.url_users}/{self.supervisor_user.id}"
         payload = {
@@ -119,27 +119,25 @@ class AdminUserManagementTests(APITestCase):
         self.assertEqual(res.data["data"]["rol"], Role.ADMIN)
 
     def test_activacion_y_desactivacion_toggle(self):
-        """Invertir estado activo de un usuario (toggle-active)."""
+
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.admin_token}")
         url = f"{self.url_users}/{self.supervisor_user.id}/toggle-active"
-        
-        # Desactivar
+
         res = self.client.patch(url)
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         self.assertFalse(res.data["data"]["activo"])
 
-        # Reactivar
         res2 = self.client.patch(url)
         self.assertEqual(res2.status_code, status.HTTP_200_OK)
         self.assertTrue(res2.data["data"]["activo"])
 
     def test_correo_duplicado_falla(self):
-        """Validar que no permita crear un usuario con un correo ya existente."""
+
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.admin_token}")
         payload = {
             "usuario": "otro_usuario",
             "nombre": "Otro Nombre",
-            "correo": "supervisor@test.cl",  # Ya existe
+            "correo": "supervisor@test.cl",
             "password": "Password-Segura-1234",
         }
         res = self.client.post(self.url_users, payload, format="json")
@@ -157,16 +155,15 @@ class AdminUserManagementTests(APITestCase):
         self.assertEqual(User.objects.count(), 2)
 
     def test_permisos_insuficientes_supervisor(self):
-        """Impedir que un usuario con rol supervisor administre cuentas."""
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.supervisor_token}")
-        
-        # Intentar listar
+
+
         res_get = self.client.get(self.url_users)
         self.assertEqual(res_get.status_code, status.HTTP_403_FORBIDDEN)
         res_paginado = self.client.get(self.url_users, {"limit": 10, "offset": 0})
         self.assertEqual(res_paginado.status_code, status.HTTP_403_FORBIDDEN)
 
-        # Intentar crear
+
         payload = {
             "usuario": "intruso",
             "nombre": "Intruso",
@@ -177,7 +174,6 @@ class AdminUserManagementTests(APITestCase):
         self.assertEqual(res_post.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_admin_no_puede_autodesactivarse(self):
-        """Impedir que un administrador se desactive a sí mismo."""
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.admin_token}")
         url = f"{self.url_users}/{self.admin_user.id}/toggle-active"
         res = self.client.patch(url)

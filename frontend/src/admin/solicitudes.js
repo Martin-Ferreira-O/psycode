@@ -15,7 +15,6 @@ export async function solicitarCambioAdministrativo(url, { method, payload, sign
         throw new ErrorSolicitud(0, "SIN_CONEXION");
     }
 
-    // Solo las validaciones de campos conocidos se muestran en los formularios.
     if (respuesta?.status === 400) {
         const cuerpo = await respuesta.json().catch(() => null);
         if (cuerpo?.success === false && cuerpo.error?.code === "VALIDATION_ERROR") {

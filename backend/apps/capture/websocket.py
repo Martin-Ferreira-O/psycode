@@ -298,8 +298,6 @@ class RemoteControl:
             return {"version": applied.version if applied else 0, "local_revision": revision}
         if applied and base_version < applied.version:
             raise ConfigurationConflict(applied, local)
-        # The first report records the initial baseline at revision zero. It
-        # must not obsolete a web request already waiting for that baseline.
         initial = local is None and revision == 0 and applied is None
         for pending in configs.filter(state__in=[ConfigurationState.PENDING, ConfigurationState.RECEIVED]):
             if pending.local_revision != revision:

@@ -1,4 +1,3 @@
-"""Salas reales, identidad estable, transición legacy y rechazos sin pérdida de agenda."""
 import io
 import json
 from datetime import datetime, timezone

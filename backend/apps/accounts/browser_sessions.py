@@ -1,4 +1,3 @@
-"""JWT de navegador en cookies inaccesibles a JavaScript; la API Bearer sigue vigente."""
 from django.conf import settings
 
 ACCESS_COOKIE = "psycode_access"

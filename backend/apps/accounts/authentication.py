@@ -16,7 +16,6 @@ class AccountJWTAuthentication(JWTAuthentication):
         raw = request.COOKIES.get(ACCESS_COOKIE)
         if not raw:
             return None
-        # DRF omite CsrfViewMiddleware: las cookies necesitan comprobación explícita.
         SessionAuthentication().enforce_csrf(request)
         token = self.get_validated_token(raw)
         user = self.get_user(token)

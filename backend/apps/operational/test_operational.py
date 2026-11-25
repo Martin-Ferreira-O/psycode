@@ -1,4 +1,4 @@
-﻿from datetime import datetime
+from datetime import datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
@@ -86,7 +86,7 @@ class OperationalConfigTests(APITestCase):
     def test_validacion_horaria_america_santiago(self):
         service = OperationalService()
         service.update_config(self.admin, {
-            "enabled_days": [0],  # Lunes
+            "enabled_days": [0],
             "open_time": "08:00",
             "close_time": "18:00",
             "primary_email": "c@c.cl",
@@ -103,8 +103,6 @@ class OperationalConfigTests(APITestCase):
 
 
 class CaptureAuthorizationIntegrationTests(APITestCase):
-    """Pruebas de aceptación para SCRUM-70: Integrar agenda y horario clínico."""
-
     def setUp(self):
         temp = TemporaryDirectory()
         self.addCleanup(temp.cleanup)
@@ -115,7 +113,7 @@ class CaptureAuthorizationIntegrationTests(APITestCase):
             username="admin_scrum70", email="admin70@clinica.cl", password="Password-Segura-123", role=Role.ADMIN
         )
         OperationalService().update_config(self.admin, {
-            "enabled_days": [0, 1, 2, 3, 4],  # Lunes a Viernes
+            "enabled_days": [0, 1, 2, 3, 4],
             "open_time": "08:00",
             "close_time": "18:00",
             "primary_email": "alertas@clinica.cl",
@@ -140,8 +138,6 @@ class CaptureAuthorizationIntegrationTests(APITestCase):
         self.assertEqual(result.inicio, datetime(2026, 10, 19, 9, 0, tzinfo=SANTIAGO))
         self.assertEqual(result.termino, datetime(2026, 10, 19, 10, 0, tzinfo=SANTIAGO))
         self.assertEqual(result.estado_autorizacion, "AUTORIZADO")
-
-        # Verifica contrato de salida para SCRUM-71 y ausencia de datos de pacientes o agenda_id
         payload = result.to_dict()
         self.assertEqual(
             set(payload.keys()),
@@ -156,19 +152,17 @@ class CaptureAuthorizationIntegrationTests(APITestCase):
             ("19/10/2026", "11:00", "01:00", "CANCELADA"),
             ("19/10/2026", "12:00", "01:00", "NO ASISTIO PACIENTE"),
         ])
-        # Sin cita a las 10:15
         res_libre = self.auth_service.evaluate_box("box-3", datetime(2026, 10, 19, 10, 15, tzinfo=SANTIAGO))
         self.assertFalse(res_libre.authorized)
         self.assertEqual(res_libre.origen, ORIGIN_AGENDA)
         self.assertIsNone(res_libre.inicio)
         self.assertIsNone(res_libre.termino)
 
-        # Cita cancelada a las 11:30
         res_cancelada = self.auth_service.evaluate_box("box-3", datetime(2026, 10, 19, 11, 30, tzinfo=SANTIAGO))
         self.assertFalse(res_cancelada.authorized)
         self.assertEqual(res_cancelada.origen, ORIGIN_AGENDA)
 
-        # Cita con inasistencia a las 12:30
+
         res_inasistencia = self.auth_service.evaluate_box("box-3", datetime(2026, 10, 19, 12, 30, tzinfo=SANTIAGO))
         self.assertFalse(res_inasistencia.authorized)
 
@@ -187,7 +181,7 @@ class CaptureAuthorizationIntegrationTests(APITestCase):
         self.assertEqual(event["action"], "capture.authorization.fallback")
         self.assertEqual(event["error_code"], "AGENDA_NOT_AVAILABLE")
 
-        # Si antes tenía agenda cargada y el proceso se reinicia (nueva instancia de servicio), vuelve a respaldo
+
         self._load_box(4, [("19/10/2026", "09:00", "01:00", "CONFIRMADA")])
         self.assertFalse(self.auth_service.evaluate_box(4, when).authorized)
 
@@ -199,17 +193,17 @@ class CaptureAuthorizationIntegrationTests(APITestCase):
     def test_deniega_si_no_existe_horario_clinico_vigente(self):
         self._load_box(3, [("19/10/2026", "20:00", "01:00", "CONFIRMADA")])
 
-        # Fuera de horario clínico (20:30, clínica cierra a las 18:00)
+
         res_fuera_hora = self.auth_service.evaluate_box(3, datetime(2026, 10, 19, 20, 30, tzinfo=SANTIAGO))
         self.assertFalse(res_fuera_hora.authorized)
         self.assertIsNone(res_fuera_hora.inicio)
         self.assertIsNone(res_fuera_hora.termino)
 
-        # Día domingo no habilitado (sin agenda tampoco autoriza respaldo)
+
         res_domingo = self.auth_service.evaluate_box(5, datetime(2026, 10, 25, 10, 0, tzinfo=SANTIAGO))
         self.assertFalse(res_domingo.authorized)
 
-        # Sin horario clínico configurado en base de datos
+
         OperationalConfiguration.objects.filter(pk=1).update(enabled_days=[], open_time="", close_time="")
         res_sin_config = self.auth_service.evaluate_box(5, datetime(2026, 10, 19, 10, 0, tzinfo=SANTIAGO))
         self.assertFalse(res_sin_config.authorized)
@@ -219,7 +213,7 @@ class CaptureAuthorizationIntegrationTests(APITestCase):
         OperationalConfiguration.objects.all().delete()
         when = datetime(2026, 10, 19, 9, 30, tzinfo=SANTIAGO)
 
-        # Box 3 tiene cita vigente; box 4 no tiene agenda disponible.
+
         for box in (3, 4):
             with self.subTest(box=box):
                 result = self.auth_service.evaluate_box(box, when)
@@ -229,7 +223,6 @@ class CaptureAuthorizationIntegrationTests(APITestCase):
                 self.assertFalse(OperationalConfiguration.objects.exists())
 
     def test_recorta_ventana_de_cita_a_limites_del_horario_clinico(self):
-        # Cita de 17:30 a 18:30, pero el horario clínico termina a las 18:00
         self._load_box(3, [("19/10/2026", "17:30", "01:00", "REALIZADA")])
         res = self.auth_service.evaluate_box(3, datetime(2026, 10, 19, 17, 45, tzinfo=SANTIAGO))
         self.assertTrue(res.authorized)
@@ -244,21 +237,21 @@ class CaptureAuthorizationIntegrationTests(APITestCase):
         t_10_15 = datetime(2026, 10, 19, 10, 15, tzinfo=SANTIAGO)
         t_10_30 = datetime(2026, 10, 19, 10, 30, tzinfo=SANTIAGO)
 
-        # Primera evaluación: emite transición inicial (AUTORIZADO)
+
         first = self.auth_service.evaluate_transition(3, t_9_00)
         self.assertIsNotNone(first)
         self.assertTrue(first.authorized)
 
-        # Segunda evaluación dentro de la misma cita: sin cambio -> None
+
         second = self.auth_service.evaluate_transition(3, t_9_30)
         self.assertIsNone(second)
 
-        # Tercera evaluación al terminar la cita: cambia a DENEGADO -> emite transición
+
         third = self.auth_service.evaluate_transition(3, t_10_15)
         self.assertIsNotNone(third)
         self.assertFalse(third.authorized)
 
-        # Cuarta evaluación que sigue sin cita: sin cambio -> None
+
         fourth = self.auth_service.evaluate_transition(3, t_10_30)
         self.assertIsNone(fourth)
 
@@ -342,6 +335,6 @@ class CaptureAuthorizationIntegrationTests(APITestCase):
         self.assertEqual(audit_emit.call_count, 1)
         self.assertEqual(audit_emit.call_args.args[0]["error_code"], "AGENDA_QUERY_FAILED")
 
-        # Un identificador inválido sigue rechazándose; salas 1/9 ahora son válidas.
+
         with self.assertRaises(AgendaError):
             self.auth_service.evaluate_box(0, when)

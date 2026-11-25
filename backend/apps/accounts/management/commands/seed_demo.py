@@ -1,4 +1,3 @@
-"""Puebla una instalación de desarrollo con un historial sintético relacionado."""
 
 import logging
 from datetime import timedelta

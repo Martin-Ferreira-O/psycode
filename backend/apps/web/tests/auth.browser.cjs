@@ -1,4 +1,3 @@
-// Intercepta la API para probar acceso y recuperación sin cuentas ni correo real.
 const assert = require('node:assert/strict');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 

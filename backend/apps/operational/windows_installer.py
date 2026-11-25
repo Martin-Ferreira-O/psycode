@@ -53,7 +53,6 @@ def _published_release():
             size = os.fstat(stream.fileno()).st_size
         if not 0 < size <= 512 * 1024 * 1024:
             return None
-        # El operador verifica el hash de los bytes al publicar. Aquí solo se valida el manifiesto.
         with checksum.open("r", encoding="ascii") as stream:
             manifest = stream.read(256)
         match = re.fullmatch(rf"([0-9a-fA-F]{{64}}) [ *]{re.escape(installer.name)}\n?", manifest)
@@ -65,7 +64,6 @@ def _published_release():
 
 
 def published_installer():
-    """Devuelve el .exe de la versión activa si el par de archivos está disponible."""
     release = _published_release()
     return release.path if release else None
 
@@ -81,7 +79,6 @@ def _download(request, path, content_type="application/octet-stream"):
     except OSError:
         return None
     response = FileResponse(stream, as_attachment=True, content_type=content_type)
-    # El VPS usa ASGI. Un iterador síncrono cargaría el archivo entero en memoria.
     if isinstance(request._request, ASGIRequest):
         response.streaming_content = _file_chunks(stream, 64 * 1024)
     return response

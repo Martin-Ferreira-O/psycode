@@ -1,4 +1,3 @@
-"""Congela los turnos de Speechmatics para comparar sobre WAV autorizados."""
 
 import argparse
 from concurrent.futures import ThreadPoolExecutor

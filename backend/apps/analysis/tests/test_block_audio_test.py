@@ -1,4 +1,3 @@
-"""El diagnóstico y el análisis clínico usan el mismo texto cronológico."""
 from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path

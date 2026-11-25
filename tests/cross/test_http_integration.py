@@ -30,11 +30,8 @@ from psycode_agent.domain import Command
 
 
 class AgentHTTPIntegrationTests(IngestionFixtures, TransactionTestCase):
-    """Integración real del agente con la API Django."""
 
     def active(self):
-        # Registrar el ciclo real de inicio: la cola autónoma exige un ACK local
-        # durable además de una sesión activa en el servidor.
         session = self.create()
         central, = self.service.commands('box-3', now=NOW)
         command = Command(**asdict(central))
@@ -102,7 +99,6 @@ class AgentHTTPIntegrationTests(IngestionFixtures, TransactionTestCase):
         self.json_path = self.folder / "000000.json"
 
     def test_backend_client_contra_api_django(self):
-        """Verifica HTTP 201, 200 e idempotencia."""
 
         statuses = []
 
@@ -192,8 +188,6 @@ class AgentHTTPIntegrationTests(IngestionFixtures, TransactionTestCase):
         CaptureSession.objects.filter(pk=self.session.session_id).update(
             actual_start=started_at,
         )
-        # Fixture independiente: un WAV publicado nunca se sobrescribe para
-        # representar otra captura o fecha.
         precision_folder = self.root / "precision" / str(self.session.session_id)
         metadata = save_fragment(
             folder=precision_folder,
@@ -214,9 +208,7 @@ class AgentHTTPIntegrationTests(IngestionFixtures, TransactionTestCase):
         self.assertEqual(result.sequence, 0)
 
 
-
     def test_upload_queue_contra_api_django(self):
-        """La cola envía y confirma el WAV mediante la API real."""
 
         store = FragmentStore(self.fragments_root)
         queue = UploadQueue(store, self.backend_client)

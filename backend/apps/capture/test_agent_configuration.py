@@ -310,7 +310,6 @@ class RemoteConfigurationAcceptanceTests(APITestCase):
         row2 = AgentConfiguration.objects.create(agent=self.agent, version=2, desired_config={'heartbeat_interval': 20})
         control.dispatch(envelope("config_ack", {"config_id":str(row2.pk),"success":True,"effective_config":{'heartbeat_interval': 20}}))
         self.assertEqual(control.commands()[0]["audio_chunk_duration"],60)
-        # A pending configuration must never delay a stop or extend authorization.
         AgentConfiguration.objects.create(agent=self.agent, version=3, desired_config={'heartbeat_interval': 25})
         service.apply_authorization(replace(window,authorized=False,inicio=None,termino=None),now=now)
         self.assertEqual(control.commands()[0]["kind"],"detencion")

@@ -1,4 +1,3 @@
-"""Solo integración sintética, nunca usar en producción."""
 from backend.config.test_settings import *
 from backend.common.errors import exception_handler
 import traceback

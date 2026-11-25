@@ -1,4 +1,3 @@
-"""Entorno de navegador aislado; no usa configuración privada ni bases de la clínica."""
 import argparse
 import sys
 from pathlib import Path

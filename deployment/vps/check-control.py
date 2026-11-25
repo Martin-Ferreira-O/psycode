@@ -1,4 +1,3 @@
-"""Comprueba WSS desde el proxy con la credencial de un box reservado para ensayo."""
 import asyncio
 import json
 import os
@@ -14,8 +13,6 @@ async def main():
     url = settings["url"]
     if not url.startswith("wss://"):
         raise ValueError("CONTROL_PROBE_REQUIRES_WSS")
-    # Conserva SNI, hostname y validación TLS de la URL pública. En una VPS
-    # detrás de NAT se conecta al mismo Nginx sin depender del retorno por IP.
     endpoint = {"host": "127.0.0.1", "port": 443} if os.environ.get("PSYCODE_PROBE_LOCAL") == "1" else {}
     async with asyncio.timeout(10), connect(url, proxy=None,
             additional_headers={"Authorization": "Agent " + settings["token"]},

@@ -24,7 +24,6 @@ class ClinicalReviewTests(TestCase):
         self.jev.evaluate.return_value = decision or self.decision
         service = AnalysisService(self.transcriber, self.jev, Mock(), self.alerts, Mock(),
                                   threshold_loader=lambda: threshold if threshold is not None else .55)
-        # Los predicados por voz siguen disponibles para recuperar solicitudes históricas.
         transcription = self.transcriber.transcribe.return_value
         turns = service._prepare_block(self.fragment, [asdict(word) for word in words])
         version = DIAGNOSTIC_QUESTIONS_VERSION if self.fragment.audio_test else BLOCK_QUESTIONS_VERSION

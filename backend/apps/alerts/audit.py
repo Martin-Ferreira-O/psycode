@@ -1,4 +1,3 @@
-"""Bitácora compartida de alertas. Solo metadatos estructurados permitidos."""
 import logging
 from uuid import UUID, uuid4
 
@@ -27,7 +26,6 @@ NOTIFICATION_COUNTS = ("primary_successes", "primary_failures", "backup_successe
 
 
 def notification_metadata(value, action):
-    """Rechaza campos libres antes de emitirlos tanto al logger como a MongoDB."""
     if not isinstance(value, dict):
         raise ValueError("Metadatos de notificación inválidos")
     common = {"id", "mode", "phase", "reason"}
@@ -93,7 +91,6 @@ class AlertAudit:
         try:
             self.events().insert_one(event.copy())
         except Exception:
-            # El evento original conserva su event_id en el logger si MongoDB cae.
             logging.getLogger("psycode.audit").error(
                 'audit_events.write failure event_id=%s error_code=AUDIT_UNAVAILABLE', event["event_id"])
         return event

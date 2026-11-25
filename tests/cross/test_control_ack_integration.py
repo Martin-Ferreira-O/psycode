@@ -1,4 +1,3 @@
-"""Respuestas perdidas después de guardar el ACK en SCRUM-71."""
 import tempfile
 from dataclasses import replace, asdict
 from psycode_agent.domain import Command

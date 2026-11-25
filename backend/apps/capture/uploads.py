@@ -1,4 +1,3 @@
-"""Carga multipart acotada y privada; nunca usar el nombre enviado por el agente."""
 from django.core.files.uploadedfile import UploadedFile
 from django.core.files.uploadhandler import FileUploadHandler
 from django.core.exceptions import RequestDataTooBig, TooManyFieldsSent, TooManyFilesSent
@@ -52,9 +51,6 @@ class FragmentMultiPartParser(MultiPartParser):
         from .models import CaptureSession
         storage = fragment_storage()
         limit = storage.max_bytes
-        # Antes de parsear no se conoce session_id (el multipart no exige orden).
-        # Acotar por sesiones negociadas DEL box autenticado, luego revalidar
-        # contra la sesión exacta antes de almacenar/aceptar el WAV.
         for session in CaptureSession.objects.filter(box=request.user.box, capture_chunk_negotiated=True):
             limit = max(limit, byte_limit(session, storage.max_bytes))
         handler = FragmentUploadHandler(request._request, storage, limit)
@@ -73,13 +69,10 @@ class FragmentMultiPartParser(MultiPartParser):
         except OSError:
             raise FragmentError("FRAGMENT_STORAGE_UNAVAILABLE", 503) from None
         finally:
-            # La vista necesita el archivo completo; en error el parser lo cierra.
-            # El finally de la vista cubre también errores previos a request.FILES.
             request._fragment_upload_handler = handler
 
 
 class MultipartStream:
-    """Acota el cuerpo leído y exige el cierre multipart completo, sin epílogo."""
     def __init__(self, stream, limit):
         self.stream, self.limit = stream, limit
         self.received = 0

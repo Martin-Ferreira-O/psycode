@@ -44,7 +44,6 @@ class AgentUpdateTests(APITestCase):
         try:
             self.current.symlink_to(self.release.name, target_is_directory=True)
         except OSError as exc:
-            # Windows puede impedir enlaces aunque el directorio de prueba sea privado.
             if getattr(exc, "winerror", None) not in (5, 1314):
                 raise
             self.enterContext(resolve_current(self.current, lambda: self.active_release))

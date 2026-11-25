@@ -1,5 +1,3 @@
-"""Pruebas de operación sobre una raíz temporal, aptas para Ubuntu sin Django."""
-
 from hashlib import sha256
 from importlib.util import module_from_spec, spec_from_file_location
 from io import BytesIO

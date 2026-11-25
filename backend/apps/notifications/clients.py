@@ -1,4 +1,3 @@
-"""Adaptadores desacoplados de correo y Teams (fuera del flujo activo)."""
 import json
 import logging
 import os
@@ -130,7 +129,6 @@ class TeamsClient(NotificationChannelClient):
 
 class EmailClient(NotificationChannelClient):
     def __init__(self, destinatarios=None, *, backup=False):
-        # Los destinatarios principales siempre provienen de la configuración operativa.
         if destinatarios is None:
             configured = settings.NOTIFICATION_EMAIL_BACKUP_TO if backup else ""
             destinatarios = [e.strip() for e in configured.split(",") if e.strip()]
@@ -157,7 +155,6 @@ class EmailClient(NotificationChannelClient):
                         recipient_list=recipients, fail_silently=False)
             try:
                 if settings.EMAIL_BACKEND == "django.core.mail.backends.smtp.EmailBackend":
-                    # Un proceso cancelable acota DNS, conexión y diálogo SMTP completos.
                     config = {key: getattr(settings, key) for key in (
                         "EMAIL_BACKEND", "EMAIL_HOST", "EMAIL_PORT", "EMAIL_HOST_USER",
                         "EMAIL_HOST_PASSWORD", "EMAIL_USE_TLS", "EMAIL_USE_SSL", "EMAIL_TIMEOUT")}

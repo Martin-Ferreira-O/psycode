@@ -1,1 +1,0 @@
-"""Apps Django del monolito."""

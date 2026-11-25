@@ -135,7 +135,7 @@ class RepositoryTests(SimpleTestCase):
         self.service = AlertsService(self.store)
 
     def test_inserta_consulta_y_conserva_campos(self):
-        alerta = alta_pendiente(descripcion="No quiero seguir sintiéndome así.")#Prueba de almacenamiento
+        alerta = alta_pendiente(descripcion="No quiero seguir sintiéndome así.")
         self.store.insert_alert(alerta)
         leida = self.store.get_alert(alerta.alerta_id)
         self.assertEqual(leida.box, "box-3")
@@ -145,16 +145,16 @@ class RepositoryTests(SimpleTestCase):
         self.assertIsNone(leida.evaluacion)
         self.assertEqual(leida.trazabilidad.origen, ORIGEN)
 
-        
+
         self.assertEqual(leida.descripcion,"No quiero seguir sintiéndome así.")
 
     def test_descripcion_normalizada_se_conserva_en_persistencia(self):
-        alerta = alta_pendiente(descripcion="  No   quiero\nseguir\t sintiéndome   así.  ") 
-        self.store.insert_alert(alerta) 
+        alerta = alta_pendiente(descripcion="  No   quiero\nseguir\t sintiéndome   así.  ")
+        self.store.insert_alert(alerta)
         leida = self.store.get_alert(alerta.alerta_id)
 
         self.assertEqual(leida.descripcion,"No quiero seguir sintiéndome así.")
-       
+
     def test_duplicado_y_ausente(self):
         alerta = alta_pendiente()
         self.store.insert_alert(alerta)
@@ -318,15 +318,13 @@ class MongoIntegrationTests(SimpleTestCase):
         self.assertEqual(lista.data["data"]["total"], 1)
         self.assertEqual(len(lista.data["data"]["items"]), 1)
 
-        
+
         self.assertNotIn("descripcion",lista.data["data"]["items"][0],)
         detalle_alerta = client.get(f"/api/v1/alerts/{spec['alerta_id']}")
         self.assertEqual(detalle_alerta.status_code,200,detalle_alerta.content,)
         self.assertIn("descripcion",detalle_alerta.data["data"],)
         self.assertEqual(detalle_alerta.data["data"]["descripcion"],spec["descripcion"],)
 
-        
-        
 
         response = client.post(f"/api/v1/alerts/{spec['alerta_id']}/evaluacion",{"evaluacion": "correcta"},
             format="json",
@@ -350,6 +348,6 @@ class AlertApiAccessTests(SimpleTestCase):
 
         response = client.get(
             "/api/v1/alerts/11111111-1111-4111-8111-111111111111")
-        
+
         self.assertEqual(response.status_code,401,response.content,)
         self.assertEqual(response.data["error"]["code"],"AUTH_REQUIRED",)

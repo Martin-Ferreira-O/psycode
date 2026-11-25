@@ -119,7 +119,6 @@ function wrapDialogFocus(event) {
     );
     if (backwards) controls.reverse();
 
-    // Native radio groups have one Tab stop and retain arrow-key navigation.
     const stops = controls.filter(control => {
         if (!control.matches("input[type=radio][name]")) return true;
         const group = controls.filter(radio =>

@@ -1,4 +1,3 @@
-"""Habilita recuperación adicional por decisión explícita del operador."""
 from datetime import timedelta
 
 from django.core.management.base import BaseCommand, CommandError

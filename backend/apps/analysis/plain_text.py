@@ -1,4 +1,3 @@
-"""Chronological evidence spans independent of acoustic speaker labels."""
 from bisect import bisect_right
 import re
 
@@ -20,7 +19,6 @@ TEXT_BOUNDARY = re.compile(
 
 
 def text_segments(words, origin, redact):
-    """Split at pauses and textual boundaries while retaining word timestamps."""
     segments, run, offsets = [], [], []
     length = 0
 
@@ -63,8 +61,6 @@ def join_previous(segments, previous, boundary):
         return segments
     last = previous[-1]
     first = segments[0]
-    # Only connect consecutive audio at the capture boundary. The prior span
-    # can be context or the unfinished beginning of the first new sentence.
     if not (last["end"] <= boundary <= first["start"]
             and first["start"] - last["end"] < PAUSE_SECONDS):
         return segments

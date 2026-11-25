@@ -1,4 +1,3 @@
-"""La interfaz del VPS debe poder publicarse sin el servidor estático de desarrollo."""
 from io import StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory

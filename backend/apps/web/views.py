@@ -45,7 +45,6 @@ def password_reset_confirm(request):
 
 
 def almacenamiento_entrada(request):
-    # El JWT HttpOnly tiene Path=/api/v1/: el HTML protegido vive en ese ámbito.
     return redirect("web:almacenamiento")
 
 
@@ -55,7 +54,6 @@ def pcs_entrada(request):
 
 @method_decorator(ensure_csrf_cookie, name="dispatch")
 class PCPanelView(APIView):
-    # La cookie JWT tiene Path=/api/v1/; el HTML también exige autorización real.
     permission_classes = [IsAuthenticated, IsActiveAdmin]
 
     def get(self, request):

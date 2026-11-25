@@ -1,4 +1,3 @@
-"""Solicitud acotada para el colector designado. No emite una recolección."""
 from datetime import timedelta
 from uuid import uuid4
 

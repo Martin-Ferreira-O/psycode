@@ -1,5 +1,3 @@
-// Prueba sobre servidor local con fixtures sintéticos, aislado de datos reales.
-// Ver docs/CONSERVACION-Y-ALMACENAMIENTO.md. Requiere Playwright y Chromium.
 const assert = require('node:assert/strict');
 const { tmpdir } = require('node:os');
 const { join } = require('node:path');
@@ -62,7 +60,6 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         assert.match(await protegidos.innerText(), /1 archivo/);
         await screenshot('desktop');
 
-        // Un fallo de transporte impide confirmar sin una vista previa válida.
         await page.route('**/api/v1/almacenamiento/vista-previa', route => route.fulfill({ status: 503, body: 'PRIVATE' }));
         await liberar.click();
         await page.getByRole('alert').filter({ hasText: /No se pudo/ }).waitFor();

@@ -1,4 +1,3 @@
-"""Fuente SQL compartida. Solo revisiones completas y válidas actualizan ocupación."""
 import hashlib
 import io
 import json
@@ -47,8 +46,6 @@ def receive(identity, metadata, upload):
         if issued is not None and issued.scope:
             scope = issued.scope
         elif issued is not None:
-            # Colecciones anteriores a la migración: conservar el contrato legacy,
-            # aunque el catálogo recién descubierto tenga otros IDs externos.
             from .catalogue import configured_source
             scope = {**configured_source(identity, m["source"]), "room_mapping": {}}
         date.fromisoformat(m["agenda_date"])

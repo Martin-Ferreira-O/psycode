@@ -53,7 +53,6 @@ class AccountsRepository:
         return PasswordReset.objects.select_related("user").filter(token_hash=digest).first()
 
     def discard_reset(self, digest):
-        # No eliminar una solicitud posterior si falla el envío de una anterior.
         PasswordReset.objects.filter(token_hash=digest).delete()
 
     def change_password(self, user, password):

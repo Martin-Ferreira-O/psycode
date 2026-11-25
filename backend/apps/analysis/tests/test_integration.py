@@ -1,4 +1,3 @@
-"""Pruebas sintéticas: toda la red se sustituye por httpx.MockTransport."""
 from dataclasses import replace
 from datetime import datetime, timezone
 from email import policy

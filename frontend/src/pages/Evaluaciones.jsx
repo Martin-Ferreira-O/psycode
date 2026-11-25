@@ -13,7 +13,6 @@ const views = [
     { value: "table", label: "Tabla", icon: "view_table" },
 ];
 const resultTones = { correcta: "success", falso_positivo: "danger", neutro: "neutral" };
-// Completa las filas de la cuadrícula, que admite de una a cuatro columnas.
 const EVALUATION_PAGE_SIZE = 12;
 
 function initialView() {
@@ -21,7 +20,6 @@ function initialView() {
         const saved = localStorage.getItem(viewKey);
         if (views.some(({ value }) => value === saved)) return saved;
     } catch {
-        // Los controles siguen disponibles si el navegador bloquea el almacenamiento.
     }
     return window.matchMedia("(max-width: 600px)").matches ? "cards" : "table";
 }
@@ -182,7 +180,6 @@ export default function Evaluaciones() {
         try {
             localStorage.setItem(viewKey, nextView);
         } catch {
-            // El cambio de vista no depende de guardar la preferencia.
         }
     }
 

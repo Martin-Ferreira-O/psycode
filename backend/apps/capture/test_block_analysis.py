@@ -1,4 +1,3 @@
-"""Regresión de unidad operativa: una hora produce seis análisis, o uno completo."""
 from datetime import timedelta
 from io import StringIO
 from unittest.mock import Mock
@@ -156,7 +155,7 @@ class BlockAnalysisPipelineTests(IngestionFixtures, TestCase):
         self.assertEqual(analyzer.evaluate.call_count, 2)
         self.assertEqual(FragmentJob.objects.get(sequence__number=1).state, FragmentJob.State.COMPLETED)
 
-        # Compatibilidad con trabajos en revisión guardados por el worker anterior.
+
         request_id = analyzer.evaluate.call_args_list[0].kwargs["request_id"]
         job.checkpoint.pop("jev_retry_request_id")
         job.checkpoint["jev_pending"] = {"analysis_unit": "fragment", "request_id": request_id}

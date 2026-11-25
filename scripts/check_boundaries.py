@@ -1,4 +1,3 @@
-"""Comprobar independencia de producción y hashes de contratos, sin servicios externos."""
 import ast
 import hashlib
 import json

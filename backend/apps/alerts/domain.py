@@ -1,7 +1,5 @@
-"""Tipos y reglas de alerts; sin dependencias de infraestructura."""
-
 from __future__ import annotations
-import unicodedata 
+import unicodedata
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -11,11 +9,10 @@ from uuid import UUID
 
 
 class DomainError(ValueError):
-    """Dato de dominio inválido. La capa de aplicación lo traduce al contrato HTTP."""
+    pass
 
 
 class Semaforo(StrEnum):
-    """Semáforo operativo derivado del nivel 1–3. No es una escala diagnóstica."""
 
     BAJO = "BAJO"
     MEDIO = "MEDIO"
@@ -23,7 +20,6 @@ class Semaforo(StrEnum):
 
 
 class EstadoEvaluacion(StrEnum):
-    """Estado persistido de la alerta. `pendiente` no es un valor de evaluación registrable."""
 
     PENDIENTE = "pendiente"
     CORRECTA = "correcta"
@@ -49,7 +45,7 @@ USUARIO_LONGITUD: Final[tuple[int, int]] = (1, 150)
 ORIGEN_PRUEBA_AUDIO: Final[str] = "analysis.audio-test/1.0"
 ORIGEN_HABLANTE_NO_CONFIRMADO: Final[str] = "analysis.speechmatics-jev/unattributed/1.0"
 
-# Escala operativa del proyecto: un nivel por cada semáforo.
+
 _SEMAFORO_POR_SEVERIDAD: Final[dict[int, Semaforo]] = {
     1: Semaforo.BAJO,
     2: Semaforo.MEDIO,
@@ -58,7 +54,6 @@ _SEMAFORO_POR_SEVERIDAD: Final[dict[int, Semaforo]] = {
 
 
 def semaforo_desde_severidad(nivel_severidad: int) -> Semaforo:
-    """Única fuente del semáforo. Un valor enviado por el llamador no es autoridad."""
     if isinstance(nivel_severidad, bool) or not isinstance(nivel_severidad, int):
         raise DomainError("nivel_severidad debe ser un entero 1–3, no un booleano ni otro tipo.")
     try:
@@ -72,7 +67,6 @@ def es_revisada(estado: EstadoEvaluacion) -> bool:
 
 
 def normalizar_uuid(valor: object, campo: str) -> str:
-    """UUID canónico en minúsculas con guiones. Es el identificador público, no un ObjectId."""
     if isinstance(valor, UUID):
         return str(valor)
     if not isinstance(valor, str) or not valor.strip():
@@ -134,8 +128,6 @@ class Evaluacion:
 
 @dataclass(frozen=True, slots=True)
 class Alerta:
-    """Documento de negocio de la colección `alerts`. `_id` de MongoDB no forma parte del dominio."""
-
     alerta_id: str
     box: str
     tipo_riesgo: str
@@ -199,7 +191,6 @@ def alerta_nueva(
     analisis: dict | None = None,
     registrada_en: object,
 ) -> Alerta:
-    """Alta interna: pendiente, sin evaluación, semáforo derivado. El llamador no aporta estado."""
     severidad = _severidad(nivel_severidad)
     identificador = normalizar_uuid(alerta_id, "alerta_id")
     momento_registro = _utc(registrada_en, "trazabilidad.registrada_en")
@@ -258,7 +249,6 @@ def alerta_rehidratada(
     trazabilidad: Trazabilidad,
     analisis: dict | None = None,
 ) -> Alerta:
-    """Reconstruye una alerta ya persistida. No cambia semáforo ni estado: solo valida invariantes."""
     alerta = Alerta(
         alerta_id=normalizar_uuid(alerta_id, "alerta_id"),
         box=_texto_obligatorio(box, "box", BOX_LONGITUD),
@@ -308,7 +298,6 @@ def alerta_con_evaluacion(alerta: Alerta, evaluacion: Evaluacion, actualizada_en
 
 
 def validar_alerta(alerta: Alerta) -> None:
-    """Invariantes que el validador de MongoDB no expresa por sí solo."""
     if alerta.semaforo != semaforo_desde_severidad(alerta.nivel_severidad):
         raise DomainError("semaforo debe derivarse de nivel_severidad; no se admite un valor contradictorio.")
     if alerta.estado_evaluacion == EstadoEvaluacion.PENDIENTE:

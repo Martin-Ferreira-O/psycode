@@ -1,4 +1,3 @@
-"""Contratos de validación de alerts; ver API_CONTRACTS.md."""
 import zoneinfo
 from datetime import date, datetime, time, timedelta, timezone
 
@@ -11,8 +10,6 @@ MAX_MONGO_OFFSET = 2**63 - 1
 
 
 class UTCDateTimeField(serializers.DateTimeField):
-    """Transporta el instante en UTC antes de añadir el sufijo Z."""
-
     def __init__(self, **kwargs):
         super().__init__(format="%Y-%m-%dT%H:%M:%SZ", default_timezone=timezone.utc, **kwargs)
 
@@ -62,8 +59,6 @@ class AlertQueryFilterSerializer(serializers.Serializer):
                 datetime.combine(desde, time.min, tzinfo=ZONA_SANTIAGO).astimezone(timezone.utc)
                 if desde else None
             )
-            # El último día representable no tiene un sucesor: el límite superior
-            # queda abierto y por tanto incluye todos sus instantes posibles.
             attrs["fecha_hasta_utc"] = (
                 datetime.combine(hasta + timedelta(days=1), time.min, tzinfo=ZONA_SANTIAGO).astimezone(timezone.utc)
                 if hasta and hasta != date.max else None

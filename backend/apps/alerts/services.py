@@ -1,5 +1,3 @@
-"""Casos de uso internos de persistencia. Sin HTTP público de alta de alertas."""
-
 from django.utils import timezone
 
 from backend.common.errors import PersistenceUnavailable, ServiceError
@@ -59,7 +57,6 @@ class AlertsService:
             except Exception:
                 if before_notify is not None:
                     raise
-                # La persistencia ya tuvo éxito: no indicar al productor que falló el alta.
                 self.store._audit("alerts.flow", "failure", alerta_id=stored.alerta_id,
                                   sesion_id=stored.sesion_id, error_code="NOTIFICATION_INTERNAL_ERROR")
             else:

@@ -30,15 +30,14 @@ SMILE_FIELDS = (
 
 
 class OperationalConfiguration(models.Model):
-    """Configuración operativa única de la clínica (garantizada por id = 1)."""
     id = models.IntegerField(primary_key=True, default=1, editable=False)
-    enabled_days = models.JSONField(default=list)  # Lista de enteros [0-6] (0 = Lunes)
-    open_time = models.CharField(max_length=5)     # Formato "HH:MM"
-    close_time = models.CharField(max_length=5)    # Formato "HH:MM"
+    enabled_days = models.JSONField(default=list)
+    open_time = models.CharField(max_length=5)
+    close_time = models.CharField(max_length=5)
     notification_mode = models.CharField(
         max_length=20, choices=NotificationMode.choices, default=NotificationMode.DISTRIBUTION_LIST,
     )
-    primary_email = models.EmailField(max_length=254, blank=True)  # Correo de la lista de distribución
+    primary_email = models.EmailField(max_length=254, blank=True)
     backup_enabled = models.BooleanField(default=False)
     backup_email = models.EmailField(max_length=254, blank=True)
     audio_chunk_duration = models.IntegerField(default=60, validators=[MinValueValidator(10)])
@@ -96,7 +95,7 @@ class OperationalConfiguration(models.Model):
         ]
 
     def save(self, *args, **kwargs):
-        self.pk = 1  # Forzar siempre a que sea la única fila
+        self.pk = 1
         super().save(*args, **kwargs)
 
     @classmethod
@@ -104,7 +103,7 @@ class OperationalConfiguration(models.Model):
         obj, _ = cls.objects.get_or_create(
             pk=1,
             defaults={
-                "enabled_days": [0, 1, 2, 3, 4],  # Lunes a Viernes por defecto
+                "enabled_days": [0, 1, 2, 3, 4],
                 "open_time": "08:00",
                 "close_time": "18:00",
                 "primary_email": "",
@@ -116,8 +115,6 @@ class OperationalConfiguration(models.Model):
 
 
 class AudioChunkConfigurationChange(models.Model):
-    """Auditoría SQL técnica; conserva solo el identificador del actor y ajustes de audio."""
-
     actor_id = models.CharField(max_length=128)
     before_duration = models.IntegerField()
     after_duration = models.IntegerField()

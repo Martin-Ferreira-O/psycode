@@ -1,4 +1,3 @@
-"""Administración de almacenamiento, sin edición web de la política."""
 from django.core import signing
 from django.views.decorators.cache import never_cache
 from django.utils.decorators import method_decorator

@@ -1,4 +1,3 @@
-"""Ciclo de procesos explícitos con exclusión SQL y renovación independiente."""
 import signal
 import threading
 import time

@@ -1,4 +1,3 @@
-"""Entrega de secretos Smile exclusivamente al colector autenticado vigente."""
 from django.conf import settings
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.renderers import JSONRenderer

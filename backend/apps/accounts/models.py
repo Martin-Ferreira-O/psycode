@@ -1,5 +1,4 @@
 import uuid
-
 from django.contrib.auth.models import AbstractUser, UserManager
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
@@ -55,7 +54,6 @@ class User(AbstractUser):
 
 
 class RefreshSession(models.Model):
-    """Solo identificador firmado, nunca el JWT completo; rotación atómica."""
     jti = models.CharField(max_length=255, primary_key=True)
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="refresh_sessions")
     expires_at = models.DateTimeField(db_index=True)
@@ -63,7 +61,6 @@ class RefreshSession(models.Model):
 
 
 class PasswordReset(models.Model):
-    """Un único token vigente por usuario, almacenado como digest SHA-256."""
     user = models.OneToOneField(User, on_delete=models.CASCADE, primary_key=True, related_name="password_reset")
     token_hash = models.CharField(max_length=64, unique=True)
     credential_hash = models.CharField(max_length=32)
@@ -71,14 +68,12 @@ class PasswordReset(models.Model):
 
 
 class PasswordResetRateLimit(models.Model):
-    """Contadores por huella de IP y correo, compartidos entre procesos."""
     key = models.CharField(max_length=64, primary_key=True)
     window_started_at = models.DateTimeField()
     count = models.PositiveIntegerField(default=0)
 
 
 class AuthRateLimit(models.Model):
-    """Presupuestos de autenticación compartidos; sin IP ni identidad en claro."""
     key = models.CharField(max_length=64, primary_key=True)
     expires_at = models.DateTimeField(db_index=True)
     count = models.PositiveIntegerField(default=0)

@@ -1,4 +1,3 @@
-"""Formato estable de salas; su número no está limitado al despliegue inicial."""
 import re
 
 BOX_PATTERN = r"box-[1-9][0-9]{0,11}"
@@ -10,7 +9,6 @@ def is_box(value):
 
 
 def known_boxes():
-    """Salas reales del registro, agenda y configuración; sin un catálogo fijo implícito."""
     from django.conf import settings
     from backend.apps.capture.models import AgentRegistration, CaptureSession
     from backend.apps.agenda.models import AgendaBoxRevision
@@ -28,7 +26,6 @@ def known_boxes():
 
 
 def registrable_boxes():
-    """Boxes del registro administrativo; no crean salas ni autorizan captura."""
     from django.conf import settings
     boxes = set(getattr(settings, 'PC_REGISTRY_BOXES', DEFAULT_PC_BOXES))
     boxes.update(known_boxes())

@@ -25,7 +25,7 @@ class FragmentCleanupTests(IngestionFixtures, TestCase):
 
     def orphan(self):
         with self.storage.stage(self._upload(), self._checksum()) as stored:
-            stored.keep = True  # Simular caída después de fsync y antes del commit.
+            stored.keep = True
             return self.root / stored.key
 
     @staticmethod

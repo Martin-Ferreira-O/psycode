@@ -1,4 +1,3 @@
-"""Contrato, leases y audio versionado; no importa el paquete del agente."""
 import asyncio
 import hashlib
 import json
@@ -223,7 +222,7 @@ class ControlTests(CaptureFixtures, TestCase):
         )
         control.open()
 
-        # Antes de revocar, la conexión funciona.
+
         self.assertEqual(
             control.poll(),
             [],
@@ -231,10 +230,10 @@ class ControlTests(CaptureFixtures, TestCase):
 
         revoke_agent(agent)
 
-        # La misma conexión ya autenticada debe quedar inválida.
+
         with self.assertRaises(AuthenticationFailed):
             control.poll()
-            
+
 class HandshakeTests(TransactionTestCase):
     @override_settings(CAPTURE_AGENTS=AGENTS)
     def test_incompatible_version_and_invalid_identity_have_no_domain_effect(self):

@@ -1,4 +1,3 @@
-"""Regresiones de la auditoría WSS con ASGI, SQL y datos sintéticos."""
 import asyncio
 import json
 from datetime import timedelta

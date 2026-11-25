@@ -1,4 +1,3 @@
-"""Entrega aislada y acotada; no deja un hilo enviando después del timeout."""
 import json
 import os
 import subprocess

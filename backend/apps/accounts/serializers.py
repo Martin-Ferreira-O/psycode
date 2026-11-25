@@ -41,7 +41,6 @@ class PasswordResetConfirmSerializer(StrictSerializer):
     nueva_password = StrictStringField(max_length=1024, trim_whitespace=False, write_only=True)
 
 
-
 class AdminUsersQuerySerializer(serializers.Serializer):
     limit = serializers.IntegerField(default=10, min_value=1, max_value=100)
     offset = serializers.IntegerField(default=0, min_value=0, max_value=2_147_483_647)

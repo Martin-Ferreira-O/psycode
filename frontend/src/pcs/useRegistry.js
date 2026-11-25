@@ -56,7 +56,6 @@ export function useRegistry({ paused, beforeCardsChange }) {
         setCargando(true);
         if (!automatica || !consultaExitosa.current) setEstado('carga');
 
-        // La disponibilidad de salas y el registro se actualizan por separado.
         const consultarSalas = apiGetDatos(`${PCS_URL}/salas`, { cache: 'no-store', signal: salasController.signal })
             .then(validarSalas)
             .then(data => {

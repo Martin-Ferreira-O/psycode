@@ -1,7 +1,3 @@
-"""Cinco sesiones ficticias en chileno para probar el análisis clínico con JEV.
-
-Ejemplo: python -m scripts.jev_eval.clinical_sessions --live --output .local/jev-eval/sesiones.json
-"""
 
 import argparse
 from collections import Counter

@@ -1,4 +1,3 @@
-"""Tipos y reglas de notifications; sin dependencias de infraestructura."""
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, time

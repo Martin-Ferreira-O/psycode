@@ -102,6 +102,5 @@ class StorageApiTests(IngestionFixtures, TestCase):
         response = client.post('/api/v1/auth/login', {'usuario': self.admin.username, 'password': 'Synthetic-2026!'},
                                format='json', HTTP_X_PSYCODE_BROWSER='1', HTTP_X_CSRFTOKEN=csrf)
         self.assertEqual(response.status_code, 200)
-        # El cliente Django no aplica Path de cookies; la prueba de navegador sí.
         self.assertEqual(client.cookies['psycode_access']['path'], '/api/v1/')
         self.assertEqual(client.get('/api/v1/almacenamiento/panel').status_code, 200)

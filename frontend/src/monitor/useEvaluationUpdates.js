@@ -16,9 +16,7 @@ function latestRecord(data) {
 }
 
 function hasNewRecord(previous, current) {
-    // Un registro histórico puede entrar tras ser evaluado sin cambiar la primera fila.
     if (current.total > previous.total) return true;
-    // El servidor ordena por detección descendente e identificador ascendente.
     return current.id !== previous.id && (current.timestamp > previous.timestamp
         || (current.timestamp === previous.timestamp && current.id < previous.id));
 }

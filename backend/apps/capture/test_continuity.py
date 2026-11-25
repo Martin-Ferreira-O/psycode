@@ -1,4 +1,3 @@
-"""Continuidad de recepción con reloj simulado; sin captura ni proveedores reales."""
 from dataclasses import replace
 from datetime import timedelta
 from io import StringIO

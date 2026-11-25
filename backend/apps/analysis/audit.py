@@ -1,4 +1,3 @@
-"""Fallos de integración sin texto libre ni respuestas de proveedores."""
 from backend.apps.alerts.audit import AlertAudit
 
 FAILURE_CODES = frozenset({"SPEECHMATICS_FAILED", "SPEECHMATICS_DELETE_PENDING",

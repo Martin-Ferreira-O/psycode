@@ -51,13 +51,10 @@ class AccountsService:
             "login.account", identity, limit=settings.AUTH_LOGIN_ACCOUNT_LIMIT,
             seconds=settings.AUTH_LOGIN_WINDOW_SECONDS,
         )
-        # El hash costoso no sostiene el bloqueo global de escritura de SQLite.
         if candidate is None:
             make_password(password)
         if candidate is None or not candidate.check_password(password):
             raise ServiceError("AUTH_INVALID_CREDENTIALS", "Credenciales incorrectas", 401)
-        # Revalidar la credencial dentro de la transacción evita emitir tokens si
-        # una recuperación/cambio de contraseña ocurrió mientras se verificaba.
         with self.repository.atomic():
             user = self.repository.find_by_id(candidate.pk)
             if user is None or not constant_time_compare(user.password, candidate.password):
@@ -148,13 +145,11 @@ class AccountsService:
             raise ServiceError("PASSWORD_RESET_RATE_LIMITED", "Demasiadas solicitudes. Intenta más tarde.", 429)
         if user is None or not user.is_active:
             return
-        # Nunca sostener el bloqueo de escritura de SQLite durante la red.
         link = settings.FRONTEND_BASE_URL + settings.PASSWORD_RESET_PATH + "?" + urlencode({"token": token})
         try:
             self.email_client.send_password_reset(user.email, link)
         except ServiceError:
             self.repository.discard_reset(digest)
-            # La respuesta pública no distingue la existencia ni el estado del transporte.
             return
 
     def confirm_password_reset(self, token, nueva_password):
@@ -179,7 +174,6 @@ class AccountsService:
                 ) from None
             self.repository.change_password(record.user, nueva_password)
 
-    # --- Módulo Administrativo de Usuarios ---
 
     def list_users(self, actor, *, limit=None, offset=0, activo=None):
         if not (actor.is_authenticated and actor.is_active and getattr(actor, "is_admin", False)):
@@ -268,7 +262,7 @@ class AccountsService:
             if target_user is None:
                 raise ServiceError("RESOURCE_NOT_FOUND", "Usuario no encontrado", 404)
 
-            # Impedir que un administrador se desactive a sí mismo o se quite permisos
+
             if str(target_user.pk) == str(actor.pk):
                 if "activo" in fields and not fields["activo"]:
                     raise ServiceError(

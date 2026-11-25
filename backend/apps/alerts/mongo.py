@@ -1,5 +1,3 @@
-"""Cliente PyMongo perezoso. No abre sockets al importar el módulo ni al arrancar Django."""
-
 from datetime import timezone
 from pathlib import Path
 from threading import RLock
@@ -23,7 +21,6 @@ def get_client():
         raise PersistenceUnavailable()
     with _CLIENT_LOCK:
         if _CLIENT is None:
-            # tz_aware: las fechas vuelven con tz UTC, como exige el dominio.
             _CLIENT = MongoClient(
                 uri,
                 tz_aware=True,

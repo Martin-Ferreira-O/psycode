@@ -1,4 +1,3 @@
-"""Regresiones de operación permanente: red, identidad antigua y activación durable."""
 from datetime import timedelta
 import hashlib
 from uuid import uuid4
@@ -79,7 +78,7 @@ class PermanentPCTests(APITestCase):
         agent, code, _ = issue_pairing_code(identity.registry_id)
         control.poll()
         data = self.prepare(code)
-        self.assertNotEqual(data['api_key'], f"{agent.pk}." + 'x' * 43)  # Clave generada por el servidor.
+        self.assertNotEqual(data['api_key'], f"{agent.pk}." + 'x' * 43)
         retried = self.prepare(code, installation=data['installation_id'])
         self.assertEqual(retried, data)
         self.assertEqual(authenticate_agent_header(('Agent ' + OLD).encode()).agent_id, 'installed-pc')
@@ -93,7 +92,7 @@ class PermanentPCTests(APITestCase):
             authenticate_agent_header(('Agent ' + OLD).encode())
         self.assertEqual(authenticate_agent_header(('Agent ' + data['api_key']).encode()).agent_id, str(agent.pk))
         PCPairingCode.objects.filter(agent=agent).update(expires_at=timezone.now() - timedelta(minutes=1))
-        self.assertEqual(self.confirm(data).status_code, 200)  # Confirmación perdida, aun después del vencimiento.
+        self.assertEqual(self.confirm(data).status_code, 200)
         agent.refresh_from_db()
         self.assertNotIn(data['api_key'], str(agent.__dict__))
         self.assertNotIn(data['api_key'], str(PCPairingCode.objects.get(agent=agent).__dict__))

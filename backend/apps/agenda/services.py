@@ -1,4 +1,3 @@
-"""Carga manual de citas.xlsx y consulta de ocupación, únicamente en memoria."""
 from contextlib import closing
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
@@ -27,15 +26,15 @@ NON_BLOCKING = {"CANCELADA", "ANULADA", "NO ASISTIO", "NO ASISTIO ALUMNO", "NO A
 
 
 class AgendaError(ValueError):
-    """Error operativo sin valores de celdas ni datos personales."""
+    pass
 
 
 class WorkbookFormatError(AgendaError):
-    """No se pudo interpretar el reporte; se conserva la agenda anterior."""
+    pass
 
 
 class AgendaNotLoaded(AgendaError):
-    """La ocupación no se conoce hasta cargar la primera planilla."""
+    pass
 
 
 @dataclass(frozen=True)
@@ -221,7 +220,7 @@ def _read_workbook(workbook, file_number=1):
         rows = iter(sheet.iter_rows())
         box, columns, box_column = _sheet_layout(rows)
         if is_box(box):
-            boxes.add(box)  
+            boxes.add(box)
         for row_number, row in enumerate(rows, 8):
             cells = [row[column] for column in columns]
             if all(_empty(cell.value) for cell in cells):
@@ -259,7 +258,6 @@ def _read_workbook(workbook, file_number=1):
 
 
 class AgendaService:
-    """Mantener una instancia en el proceso consumidor y recargarla manualmente."""
     def __init__(self):
         self._by_box: dict[str, tuple[Appointment, ...]] = {}
         self._lock = Lock()
@@ -270,7 +268,6 @@ class AgendaService:
         return tuple(item for box in sorted(by_box) for item in by_box[box])
 
     def load_excel(self, paths: str | Path | Iterable[str | Path]) -> LoadReport:
-        """Actualiza los boxes de uno o varios archivos, conservando los demás."""
         paths = (paths,) if isinstance(paths, (str, Path)) or hasattr(paths, "read") else tuple(paths)
         if not paths:
             raise AgendaError("Debe indicar al menos un archivo Excel.")
@@ -305,7 +302,6 @@ class AgendaService:
 
 
     def replace_boxes(self, by_box):
-        """Publicar una revisión durable sin sustituir la instancia inyectada."""
         if any(not is_box(box) for box in by_box):
             raise AgendaError("box_fuera_de_alcance")
         with self._lock:
@@ -313,7 +309,6 @@ class AgendaService:
 
 
     def load_smile_json(self, raw, *, boxes, agenda_date, smile_ids=None):
-        """Representación nativa del extractor entregado, sin conversión a Excel."""
         import json
         try:
             rows = json.loads(raw)

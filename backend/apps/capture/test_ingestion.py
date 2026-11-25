@@ -274,7 +274,7 @@ class FragmentConcurrencyTests(IngestionFixtures, TransactionTestCase):
             nonlocal calls
             calls += 1
             original()
-            if calls == 3:  # Recuperaciones previas y commit de aceptación.
+            if calls == 3:
                 raise OperationalError("Simulated lost commit acknowledgement")
 
         with patch.object(connection, "commit", side_effect=commit):

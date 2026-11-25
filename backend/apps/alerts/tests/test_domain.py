@@ -63,7 +63,7 @@ class DomainTests(SimpleTestCase):
     def test_descripcion_vacia_queda_null(self):
         self.assertIsNone(alta(descripcion="   ").descripcion)
 
-   
+
     def test_descripcion_normaliza_espacios(self):
         alerta = alta(descripcion="  No   quiero\nseguir\t sintiéndome   así.  ")
 

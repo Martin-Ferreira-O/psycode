@@ -1,4 +1,3 @@
-"""Contrato de salida Psycode 1.0; no depende de Django ni de proveedores."""
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from enum import StrEnum

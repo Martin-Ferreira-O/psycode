@@ -1,4 +1,4 @@
-"""Contrato HTTP de alertas: fechas UTC y filtros de consulta."""
+
 
 import re
 from datetime import datetime, timedelta, timezone

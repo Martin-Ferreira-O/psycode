@@ -11,9 +11,7 @@ class AgendaCollection(models.Model):
     checksum = models.CharField(max_length=64, blank=True)
     metadata = models.JSONField(default=dict)
     outcome = models.CharField(max_length=16, blank=True)
-    # Preservar el reporte original completo; la ocupación es una vista derivada.
     report = models.BinaryField(null=True)
-    # Alcance fijado al emitir/confirmar la recolección; conserva reintentos en vuelo.
     scope = models.JSONField(default=dict)
 
 class AgendaBoxRevision(models.Model):
@@ -23,7 +21,6 @@ class AgendaBoxRevision(models.Model):
 
 
 class SmileRoom(models.Model):
-    """Sala física verificada en el selector de Smile, independiente del PC."""
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     source = models.CharField(max_length=64)
     smile_box_id = models.CharField(max_length=12)
@@ -45,7 +42,6 @@ class SmileCatalogState(models.Model):
 
 
 class SmileCollectorCheck(models.Model):
-    """Última solicitud de diagnóstico por PC, sin datos de agenda ni secretos."""
     agent = models.OneToOneField("capture.AgentRegistration", on_delete=models.CASCADE, primary_key=True)
     request_id = models.UUIDField(default=uuid.uuid4, unique=True)
     source = models.CharField(max_length=64)

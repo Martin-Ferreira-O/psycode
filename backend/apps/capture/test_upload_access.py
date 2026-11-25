@@ -163,7 +163,6 @@ class AudioTestUploadAccessTests(UploadAccessTests):
 
 
 class RealAudioUploadBoundaryTests(TransactionTestCase):
-    """Real ASGI/Django/authentication and ingestion, without HTTP sockets."""
 
     def setUp(self):
         root = self.enterContext(TemporaryDirectory())

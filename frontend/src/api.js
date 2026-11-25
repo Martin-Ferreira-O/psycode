@@ -6,7 +6,6 @@ function cabecerasNavegador(iniciales = {}) {
     return headers;
 }
 
-// Traducción de transporte: nunca se muestra el cuerpo de error de la API.
 class ErrorSolicitud extends Error {
     constructor(estado = null, codigo = "RESPUESTA_INVALIDA") {
         super("No se pudo completar la solicitud.");
@@ -17,7 +16,6 @@ class ErrorSolicitud extends Error {
 }
 
 async function leerRespuesta(response) {
-    // apiRequest ya entregó el control al manejo de sesión.
     if (!response) throw new ErrorSolicitud(401, "SESION_FINALIZADA");
     if (!response.ok) throw new ErrorSolicitud(response.status);
     if (response.status === 204) return null;
@@ -70,7 +68,6 @@ function describirError(error, mensajes = {}) {
     };
 }
 
-// Las credenciales solo viajan en cookies HttpOnly; nunca se leen desde JavaScript.
 function retirarTokensAntiguos() {
     localStorage.removeItem("access_token");
     localStorage.removeItem("refresh_token");
@@ -188,7 +185,6 @@ async function cerrarSesion() {
     }
 }
 
-// Mantiene apiGet/apiPost compatibles con consumidores que necesitan Response.
 async function apiGetDatos(url, opciones = {}) {
     return solicitarJson(url, { ...opciones, method: "GET" }, apiRequest);
 }

@@ -1,4 +1,3 @@
-"""Caídas inferidas, separadas de los eventos originales del PC."""
 from django.db import transaction
 from django.utils import timezone
 
@@ -41,7 +40,6 @@ def register_server_reconnect(identity):
 
 @transaction.atomic
 def reconcile_connection(agent):
-    """Conserva caídas tras caída del proceso/lease vencido, sin inventar hora física."""
     from .authentication import AgentIdentity
     from . import leases
 

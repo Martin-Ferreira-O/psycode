@@ -1,4 +1,3 @@
-"""Explicit external-processing configuration, never serialized with secrets."""
 from dataclasses import dataclass, field
 import json
 import os
@@ -25,7 +24,6 @@ class Settings:
     timeout: float = 300.
     poll_interval: float = 2.
     redact_terms: tuple[str, ...] = field(default=(), repr=False)
-    # Cota de la aplicación en caracteres; no equivale a tokens del proveedor.
     jev_block_max_chars: int = 262144
 
     @classmethod

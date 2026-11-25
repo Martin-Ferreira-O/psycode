@@ -1,4 +1,3 @@
-"""Bounded HTTP retries; never expose response bodies or request payloads."""
 import time
 import math
 from datetime import datetime, timezone
@@ -30,8 +29,6 @@ def request(client, method, url, *, attempts=3, safe=True, sleep=time.sleep,
             if (response.is_success or response.status_code in accepted_statuses
                     or (method == "DELETE" and response.status_code in {404, 410})):
                 return response
-            # A rate-limit refusal did not create a job. Ambiguous 5xx POSTs
-            # must not be retried, because Batch has no idempotency guarantee.
             if not safe and (response.status_code == 408 or response.status_code >= 500):
                 raise SubmissionUncertain("Envío incierto; requiere reconciliación antes de repetir")
             if response.status_code not in {429, 500, 502, 503, 504, 529} or attempt == attempts - 1:

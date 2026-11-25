@@ -1,4 +1,3 @@
-"""Vinculación de un uso: un código humano breve nunca es la credencial de máquina."""
 from datetime import timedelta
 import re
 import json
@@ -54,13 +53,11 @@ def check_available_box(box):
 
 
 def code_digest(code):
-    # La sal/clave de aplicación impide recorrer el pequeño espacio de códigos con solo un volcado SQL.
     return salted_hmac("psycode.pc.pairing.v1", code, algorithm="sha256").hexdigest()
 
 
 def _issue_code(agent):
     expiry = timezone.now() + timedelta(seconds=settings.PC_PAIRING_TTL_SECONDS)
-    # También se evita reutilizar códigos consumidos: no pueden vincular a otro PC durante un reintento.
     for _ in range(20):
         code = ''.join(secrets.choice(ALPHABET) for _ in range(5))
         digest = code_digest(code)
@@ -80,8 +77,6 @@ def _issue_code(agent):
 
 def _confirmed_room(agent):
     from backend.apps.agenda.models import SmileRoom
-    # El registro del PC no depende de la disponibilidad de Smile. Una sala
-    # retirada explícitamente sí bloquea nuevas instalaciones.
     room = SmileRoom.objects.filter(box=agent.box).first()
     if room and not room.available:
         raise ServiceError("SMILE_ROOM_UNAVAILABLE", "La sala está deshabilitada. Solicita una revisión técnica.", 409)
@@ -134,7 +129,6 @@ def issue_pairing_code(agent_id):
 
 
 def consume_pairing_attempt(source_ip):
-    # Se cuentan éxitos y fallos; cambiar de IP o de código no elude el presupuesto global.
     consume_auth_attempt("pc.pair.ip", source_ip or "unknown", limit=settings.PC_PAIRING_IP_LIMIT,
                          seconds=settings.PC_PAIRING_WINDOW_SECONDS)
     consume_auth_attempt("pc.pair.global", "all", limit=settings.PC_PAIRING_GLOBAL_LIMIT,
@@ -175,7 +169,6 @@ def redeem_pairing_code(code, expected_box=None, installation_id=None, secret=No
                     raise ServiceError("PAIRING_INVALID", "Instalación no disponible.", 400)
                 return agent, token
             if grant.consumed_at is None:
-                # Compatibilidad con agentes anteriores: canje y activación en una respuesta.
                 token, digest = _generate_credential(agent.pk)
                 _activate(agent, digest)
                 grant.consumed_at, grant.activated_at = timezone.now(), timezone.now()
@@ -199,7 +192,6 @@ def confirm_pairing(token, installation_id):
     digest = hashlib.sha256(token.encode('ascii')).hexdigest()
     if not grant or not hmac.compare_digest(grant.pending_token_sha256, digest):
         raise ServiceError("PAIRING_INVALID", "Instalación no disponible.", 400)
-    # Confirmación perdida: solo la misma credencial ya activada puede repetirla.
     if grant.activated_at and agent.is_active and hmac.compare_digest(agent.token_sha256, digest):
         return agent
     if grant.expires_at <= timezone.now() or grant.activated_at:
@@ -230,7 +222,6 @@ def pairing_response(agent, code, expiry, status=200):
 
 class PCEnrollmentView(APIView):
     def get_permissions(self):
-        # Importación local: los endpoints administrativos existentes comparten el permiso.
         from backend.apps.operational.views import IsActiveAdmin
         return [IsAuthenticated(), IsActiveAdmin()]
 
@@ -278,11 +269,9 @@ class PCPairingExchangeView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        # No permitir que una configuración de proxy incorrecta convierta el enrolamiento en HTTP.
         if not request.is_secure():
             raise ServiceError("PAIRING_HTTPS_REQUIRED", "La vinculación requiere HTTPS.", 400)
         consume_pairing_attempt(request.META.get('REMOTE_ADDR', ''))
-        # Cuerpo pequeño, sin reflejar el código recibido en errores.
         data = request.data
         code = data.get('code') if isinstance(data, dict) else None
         if not isinstance(code, str) or len(code) != 5 or any(c not in ALPHABET for c in code):
@@ -323,8 +312,6 @@ class PCPairingConfirmView(PCPairingExchangeView):
         except (ValueError, KeyError, TypeError, AttributeError, UnicodeError):
             raise ServiceError("PAIRING_INVALID", "Instalación no disponible.", 400) from None
         agent = confirm_pairing(token, installation_id)
-        # Solo anuncia la ruta; los secretos requieren la credencial ya activada
-        # y la designación vigente como colector, nunca el código temporal.
         response = success_response({'agent_id': str(agent.pk), 'box': agent.box,
                                      'smile_credentials_version': '1'}, "Instalación confirmada")
         response['Cache-Control'] = 'no-store, private'

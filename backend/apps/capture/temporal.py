@@ -1,4 +1,3 @@
-"""Intervalos PCM de sesión; offsets de lectura permanecen locales al WAV."""
 import wave
 from datetime import timedelta
 from .models import AUDIO_TEST_ORIGIN, FragmentJob

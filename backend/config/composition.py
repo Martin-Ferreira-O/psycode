@@ -22,7 +22,6 @@ def alerts_service(store=None):
 
 
 def capture_authorization_service(agenda_service=None, config_loader=None):
-    """SCRUM-70: Construye el servicio de autorización de captura por box para SCRUM-71."""
     return CaptureAuthorizationService(
         agenda_service=agenda_service if agenda_service is not None else durable_agenda(),
         config_loader=config_loader,
@@ -30,7 +29,6 @@ def capture_authorization_service(agenda_service=None, config_loader=None):
 
 
 def capture_session_service(agenda_service=None, config_loader=None, **timeouts):
-    """Crear una vez en el coordinador, compartiendo la agenda de SCRUM-70."""
     from backend.apps.capture.services import CaptureSessionService
     return CaptureSessionService(
         capture_authorization_service(agenda_service, config_loader), **timeouts,
@@ -48,10 +46,6 @@ def fragment_ingestion_service():
     return FragmentIngestionService(fragment_storage())
 
 def analysis_worker(*, settings=None,directory=None, speechmatics_http=None, jev_http=None, alert_store=None, audit=None, ledger=None):
-    """Crear una vez dentro del trabajador interno. No iniciar en AppConfig/WSGI.
-
-    Construirlo no abre red ni crea subprocesos. No llamarlo desde una vista HTTP.
-    """
     from pathlib import Path
     from dataclasses import replace
     from django.conf import settings as django_settings

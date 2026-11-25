@@ -1,4 +1,3 @@
-"""Reintenta únicamente DELETE ya pendientes; nunca vuelve a enviar audio/texto."""
 from copy import deepcopy
 from datetime import timedelta
 import re
@@ -49,7 +48,6 @@ def cleanup_provider_jobs(now, *, delete=delete_provider_job):
                           delete_retry_at=(now + timedelta(seconds=min(3600, 30 * 2 ** min(attempts, 7)))).isoformat())
             failed += 1
         record["delete_attempts"] = attempts
-        # No sobrescribir un checkpoint escrito concurrentemente por el trabajador.
         FragmentJob.objects.filter(pk=job.pk, checkpoint=original).exclude(state=FragmentJob.State.PROCESSING).update(checkpoint=data)
         if removed + failed >= 3 or time.monotonic() >= deadline:
             break

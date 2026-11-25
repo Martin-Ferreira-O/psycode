@@ -1,4 +1,3 @@
-"""Ciclo de captura y bandeja de órdenes durable; sin I/O del agente dentro de SQL."""
 from datetime import datetime, timedelta
 from uuid import UUID
 
@@ -36,7 +35,6 @@ def _sessions_pending_stop():
 
 
 def _undelivered_start_sessions(now):
-    # El drenaje consulta también esquemas anteriores a las migraciones.
     delivery_evidence = CaptureEvent.objects.filter(
         session_id=OuterRef("session_id"), command_id=OuterRef("pk"),
         action__in=("capture.command.delivered", "capture.command.acknowledged"),
@@ -120,7 +118,6 @@ class CaptureSessionService:
         self.reception_grace = reception_grace
 
     def reconcile_box(self, box, *, now=None):
-        """Evaluar SCRUM-70 en cada tick, no solo sus transiciones en memoria."""
         if self.authorization_service is None:
             raise ValueError("Se requiere el servicio de autorización")
         now = _instant(now)
@@ -137,13 +134,7 @@ class CaptureSessionService:
                 raise CaptureError("INVALID_AUTHORIZATION_WINDOW")
             if authorization.origen not in {"agenda", "horario_clinico"}:
                 raise CaptureError("INVALID_AUTHORIZATION_ORIGIN")
-        # IMMEDIATE serializa escritores en SQLite; select_for_update protege
-        # filas existentes en motores con bloqueos de fila. Las restricciones
-        # únicas también cubren la carrera al insertar la primera sesión.
         with transaction.atomic():
-            # Una revocación o cambio de contexto termina la autorización
-            # incluso si su sesión ya falló. El marcador sobrevive reinicios
-            # y permite otra sesión en la misma ventana sin repetir ticks.
             ending = CaptureSession.objects.select_for_update().filter(box=box, authorization_ended_at=None)
             if authorization.authorized:
                 ending = ending.exclude(origin=authorization.origen, scheduled_start=start, scheduled_end=end)
@@ -164,8 +155,6 @@ class CaptureSessionService:
                 return _snapshot(current)
             if not authorization.authorized:
                 return None
-            # Una detención de una sesión fallida bloquea nuevos inicios
-            # hasta que el agente confirme que dejó de capturar.
             if _unconfirmed_stops().filter(session__box=box, session__actual_end=None).exists():
                 return None
             previous = CaptureSession.objects.filter(
@@ -175,8 +164,6 @@ class CaptureSessionService:
             if previous:
                 if previous.actual_end is None or previous.capture_end_reason not in {"RECOVERY_STOPPED", "SHUTDOWN"}:
                     return _snapshot(previous)
-                # Una ventana aún vigente puede tener un nuevo inicio central
-                # tras confirmar el cierre físico de la instalación anterior.
                 previous.authorization_ended_at = now
                 previous.save(update_fields=["authorization_ended_at"])
                 _event(previous, "authorization.ended", now)
@@ -188,8 +175,6 @@ class CaptureSessionService:
                         capture_chunk_config=chunk_config.snapshot(),
                     )
             except IntegrityError:
-                # Solo recuperar la carrera de inserción. Los errores en
-                # órdenes o bitácora deben revertir toda la operación.
                 existing = CaptureSession.objects.filter(box=box, state__in=OPEN_STATES, actual_end__isnull=True).first()
                 if existing is None:
                     existing = CaptureSession.objects.filter(
@@ -226,7 +211,6 @@ class CaptureSessionService:
         _event(session, "session.stopping", now)
 
     def _close_undelivered_start(self, session, now):
-        # El llamador ya bloqueó la sesión, igual que la entrega y el ACK.
         if (session.state not in (SessionState.STOPPING, SessionState.FAILED)
                 or session.actual_end is not None or session.stop_requested_at is None):
             return False
@@ -302,7 +286,6 @@ class CaptureSessionService:
             self._diagnose(session, "CONTROL_DISCONNECTED", now)
 
     def recover(self, *, now=None):
-        """Una pasada recuperable tras reinicio; ejecutar periódicamente."""
         now, changed = _instant(now), 0
         ids = list(CaptureSession.objects.filter(
             Q(state__in=OPEN_STATES) | _failed_with_pending_stop(),
@@ -322,7 +305,6 @@ class CaptureSessionService:
         return changed
 
     def count_pending_drain(self, *, now=None):
-        """Cuenta capturas que requieren confirmación en el esquema previo al despliegue."""
         proven_closed = _undelivered_start_sessions(_instant(now)).values("pk")
         return _sessions_pending_stop().exclude(pk__in=proven_closed).count()
 
@@ -336,8 +318,6 @@ class CaptureSessionService:
     def commands(self, box, *, now=None, chunk_config_supported=None, chunk_config_v2_supported=False,
                  limit=None, reconcile=True, redelivery_seconds=0, configuration_pending=False):
         now, box = _instant(now), _box(box)
-        # Recuperación y entrega comparten la transacción: no se publica un
-        # inicio vencido, incluso si el programador externo dejó de ejecutar ticks.
         with transaction.atomic():
             sessions = list(_sessions_pending_stop().select_for_update().filter(box=box).order_by("pk"))
             if reconcile:
@@ -346,7 +326,6 @@ class CaptureSessionService:
             pending = AgentCommand.objects.filter(
                 session_id__in=[session.pk for session in sessions], session__actual_end=None, cancelled_at=None,
             ).exclude(succeeded=True)
-            # Fallos de inicio no se reejecutan; las detenciones sí se reintentan.
             pending = pending.exclude(kind=CommandKind.START, acknowledged_at__isnull=False)
             stops = pending.filter(kind=CommandKind.STOP)
             if stops.exists():
@@ -397,7 +376,6 @@ class CaptureSessionService:
             raise CaptureError("COMMAND_NOT_FOUND")
         self._recover_one(box, reference.session_id, now)
         with transaction.atomic():
-            # Siempre bloquear sesión antes de orden, igual que los demás métodos.
             session = self._load(box, reference.session_id)
             command = AgentCommand.objects.select_for_update().get(pk=reference.pk)
             if command.delivered_at is None:
@@ -414,7 +392,6 @@ class CaptureSessionService:
                              and command.error_code == code and (occurred is None or command.occurred_at == occurred))
                 if identical:
                     return _snapshot(session)
-                # Una detención fallida puede confirmarse tras reentregarla.
                 if not (command.kind == CommandKind.STOP and command.succeeded is False and success):
                     raise CaptureError("CONFIRMATION_CONFLICT")
             occurred = occurred or now
@@ -475,7 +452,6 @@ class CaptureSessionService:
             return self._accept_sequence(session, number, captured_at, now)
 
     def _accept_sequence(self, session, number, captured_at, now):
-        """Registra bajo el bloqueo de sesión y la transacción del llamador."""
         existing = AcceptedSequence.objects.filter(session=session, number=number).first()
         if existing:
             if existing.captured_at != captured_at:
@@ -504,8 +480,6 @@ class CaptureSessionService:
         return True
 
     def _recover_one(self, box, session_id, now):
-        # Confirmaciones o secuencias tardías no reviven una sesión vencida.
-        # La recuperación se confirma aunque la operación posterior se rechace.
         with transaction.atomic():
             self._expire(self._load(box, session_id), now)
 
@@ -522,7 +496,6 @@ class CaptureSessionService:
             return _snapshot(session)
 
     def resume_reception(self, box, session_id, *, now=None, until=None):
-        """Intervención explícita del operador; nunca modifica autorización ni captura."""
         now = _instant(now)
         until = _instant(until) if until is not None else now + self.reception_grace
         if until <= now:
@@ -533,8 +506,6 @@ class CaptureSessionService:
             if session.state == SessionState.FAILED and session.error_code in {
                 "AGENT_UNAVAILABLE", "SESSION_ABANDONED", "FINAL_SEQUENCE_TIMEOUT",
             }:
-                # Recuperación explícita de cierres por red de versiones anteriores.
-                # No convertir fallos reales de OBS/captura en sesiones recuperables.
                 if session.actual_end is None and CaptureSession.objects.filter(
                     box=session.box, state__in=OPEN_STATES, actual_end__isnull=True,
                 ).exclude(pk=session.pk).exists():
@@ -556,7 +527,6 @@ class CaptureSessionService:
             return _snapshot(session)
 
     def confirm_capture_ended(self, box, session_id, *, ended_at, last_sequence=None, reason_code, now=None):
-        """Evidencia física separada del ACK: no inventa una secuencia desconocida."""
         now, ended_at = _instant(now), _instant(ended_at)
         if reason_code not in {"AUTHORIZATION_ENDED", "AGENT_STOPPED", "AGENT_INTERRUPTED", "RECOVERY_STOPPED", "DISK_LOW", "SHUTDOWN"}:
             raise CaptureError("INVALID_TECHNICAL_ERROR")
@@ -580,8 +550,6 @@ class CaptureSessionService:
                     raise CaptureError("CONFIRMATION_CONFLICT")
             if reason_code in {"AGENT_INTERRUPTED", "DISK_LOW"}:
                 if session.state == SessionState.COMPLETED:
-                    # El reporte HTTPS puede llegar después del ACK legado y
-                    # acredita un fallo real aunque ya esté toda la recepción.
                     session.state = SessionState.FAILED
                     session.error_code = "AGENT_INTERRUPTED"
                     session.save(update_fields=["state", "error_code"])
@@ -611,7 +579,6 @@ class CaptureSessionService:
             return _snapshot(session)
 
     def inspection(self, box, session_id, *, now=None):
-        """Proyección operativa independiente del DTO y estados del protocolo legado."""
         now = _instant(now)
         with transaction.atomic():
             session = self._load(box, session_id)

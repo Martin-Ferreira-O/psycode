@@ -1,4 +1,3 @@
-"""Límites persistentes, atómicos y con vencimiento fijo (no bloqueo permanente)."""
 import math
 from datetime import timedelta
 
@@ -14,7 +13,6 @@ from .models import AuthRateLimit
 
 def consume_auth_attempt(scope, identity, *, limit, seconds):
     key = salted_hmac("psycode.auth.rate-limit", f"{scope}:{identity}", algorithm="sha256").hexdigest()
-    # IMMEDIATE en SQLite; select_for_update en motores con bloqueo de filas.
     with transaction.atomic():
         now = timezone.now()
         counter, _ = AuthRateLimit.objects.select_for_update().get_or_create(
@@ -28,7 +26,6 @@ def consume_auth_attempt(scope, identity, *, limit, seconds):
             counter.count += 1
             counter.save(update_fields=["count", "expires_at"])
         retry_after = max(1, math.ceil((counter.expires_at - now).total_seconds()))
-    # Fuera de atomic: un rechazo no revierte los intentos anteriores.
     if limited:
         AuditWriter.record("auth.rate_limit", "failure", error_code="AUTH_RATE_LIMITED")
         raise ServiceError(

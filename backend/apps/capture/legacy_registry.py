@@ -1,4 +1,3 @@
-"""Incorpora identidades existentes sin cambiar claves ni atribuir datos por sala."""
 from uuid import UUID
 
 from django.conf import settings
@@ -13,7 +12,7 @@ def sync_legacy_registry():
     registration_lock()
     for identity, configured in settings.CAPTURE_AGENTS.items():
         if AgentRegistration.objects.filter(legacy_agent_id=identity).exists():
-            continue  # Nunca reactivar una clave retirada, ni sobrescribir la BD con el entorno.
+            continue
         try:
             key = UUID(identity)
         except ValueError:

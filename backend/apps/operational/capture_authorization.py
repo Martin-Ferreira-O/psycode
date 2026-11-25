@@ -1,5 +1,4 @@
-﻿"""SCRUM-70: Integración de agenda (SCRUM-61) y horario clínico (SCRUM-67) para autorizar captura."""
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, time, timezone
@@ -30,7 +29,6 @@ ORIGIN_NONE = "ninguno"
 
 @dataclass(frozen=True)
 class BoxCaptureAuthorization:
-    """Contrato de salida hacia SCRUM-71 con estado de autorización por box."""
     box: str
     authorized: bool
     inicio: datetime | None
@@ -58,12 +56,10 @@ class BoxCaptureAuthorization:
 
 
 def _load_clinical_config() -> OperationalConfiguration | None:
-    """Consulta el horario existente sin crear una configuración que autorice captura."""
     return OperationalConfiguration.objects.filter(pk=1).first()
 
 
 def _resolve_clinical_window(config, current_dt: datetime) -> tuple[datetime, datetime] | None:
-    """Calcula la ventana [apertura, cierre) del horario clínico para la fecha local de current_dt."""
     if config is None:
         return None
     enabled_days = getattr(config, "enabled_days", None)
@@ -95,8 +91,6 @@ def _resolve_clinical_window(config, current_dt: datetime) -> tuple[datetime, da
 
 
 def _find_active_appointment(agenda: AgendaService, box_name: str, current_dt: datetime):
-    """Obtiene la cita vigente del box en memoria sin usar datos de pacientes."""
-    # Verifica primero ocupación mediante el contrato público de AgendaService (valida box y carga)
     if not agenda.is_busy(box_name, current_dt):
         return None
 
@@ -112,14 +106,11 @@ def _find_active_appointment(agenda: AgendaService, box_name: str, current_dt: d
 
 
 class CaptureAuthorizationService:
-    """Combina el horario clínico con la ocupación en memoria de la agenda por box."""
-
     def __init__(
         self,
         agenda_service: AgendaService | None = None,
         config_loader: Callable[[], OperationalConfiguration | None] | None = None,
     ):
-        # Si se reinicia el proceso, una instancia nueva de AgendaService inicia vacía (no disponible)
         self.agenda = agenda_service if agenda_service is not None else AgendaService()
         self.config_loader = config_loader if config_loader is not None else _load_clinical_config
         self._last_states: dict[str, bool] = {}
@@ -150,7 +141,6 @@ class CaptureAuthorizationService:
                 self._logged_conditions.pop(box_name, None)
 
     def evaluate_box(self, box: str | int, when: datetime | None = None) -> BoxCaptureAuthorization:
-        """Determina si el box está autorizado para capturar en el instante indicado."""
         box_name = self._normalize_box(box)
         current_dt = self._normalize_when(when)
         from backend.apps.agenda.models import SmileRoom
@@ -174,9 +164,6 @@ class CaptureAuthorizationService:
                 termino=None,
                 origen=ORIGIN_NONE,
             )
-
-        # Una lectura exitosa termina el incidente, incluso fuera de horario.
-        # Conserva la deduplicación de los registros de respaldo de la agenda.
         self._clear_audit_condition(box_name, "config_error")
         clinical_window = _resolve_clinical_window(config, current_dt)
         if clinical_window is None:
@@ -193,7 +180,6 @@ class CaptureAuthorizationService:
         try:
             appointment = _find_active_appointment(self.agenda, box_name, current_dt)
         except AgendaNotLoaded:
-            # Respaldo automático con el horario clínico cuando la agenda del box no está cargada
             self._record_audit_once(
                 box_name,
                 f"fallback_not_loaded:{sched_start.date().isoformat()}",
@@ -209,7 +195,6 @@ class CaptureAuthorizationService:
                 origen=ORIGIN_CLINICAL_SCHEDULE,
             )
         except Exception:
-            # Fallo inesperado al consultar la agenda: registrar fallo y usar horario clínico de respaldo
             self._record_audit_once(
                 box_name,
                 f"fallback_error:{sched_start.date().isoformat()}",
@@ -257,7 +242,6 @@ class CaptureAuthorizationService:
         )
 
     def evaluate_transition(self, box: str | int, when: datetime | None = None) -> BoxCaptureAuthorization | None:
-        """Informa el estado inicial y cada cambio entre autorizado y denegado."""
         current = self.evaluate_box(box, when)
         with self._lock:
             previous = self._last_states.get(current.box)
@@ -271,11 +255,9 @@ class CaptureAuthorizationService:
         return current
 
     def evaluate_all_boxes(self, when: datetime | None = None) -> tuple[BoxCaptureAuthorization, ...]:
-        """Evalúa las salas conocidas del registro y de la agenda."""
         return tuple(self.evaluate_box(box, when) for box in known_boxes())
 
     def evaluate_all_transitions(self, when: datetime | None = None) -> tuple[BoxCaptureAuthorization, ...]:
-        """Devuelve únicamente los boxes que cambiaron su estado de autorización."""
         transitions = []
         for box in known_boxes():
             change = self.evaluate_transition(box, when)

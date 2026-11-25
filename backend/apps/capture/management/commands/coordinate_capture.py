@@ -43,7 +43,6 @@ class Command(BaseCommand):
                 if options["once"] or options["stop_all"]:
                     return
                 stop.wait(options["interval"])
-            # No nuevos inicios; receptores siguen atendiendo ACK/uploads.
             self.stop_all(service, owner)
 
     @staticmethod

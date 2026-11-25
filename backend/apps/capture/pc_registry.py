@@ -1,4 +1,3 @@
-"""Identidades estables y credenciales individuales; nunca persistir el secreto."""
 import hashlib
 import secrets
 
@@ -69,7 +68,6 @@ def renew_agent(agent):
     return agent, token
 
 
-# Compatibilidad con los consumidores del servicio original.
 def revoke_credential(agent):
     revoke_agent(agent)
 

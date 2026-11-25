@@ -1,4 +1,3 @@
-"""Entrega de secretos sintéticos; sin Smile institucional ni claves reales."""
 from uuid import uuid4
 
 from django.test import override_settings
@@ -61,7 +60,6 @@ class SmileCredentialsTests(APITestCase):
     def test_browser_admin_and_operational_profile_never_receive_secrets(self):
         admin = User.objects.create_user(username="secret-admin", email="secret@example.test", role="admin")
         self.client.force_authenticate(admin)
-        # La sesión web no es una credencial de máquina.
         browser = APIClient()
         browser.credentials(HTTP_AUTHORIZATION="Bearer " + str(RefreshToken.for_user(admin).access_token))
         self.assertEqual(browser.get(self.url, secure=True).status_code, 401)

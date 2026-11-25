@@ -1,4 +1,3 @@
-"""Política única automática/manual. Solo archivos propios, SQL disponible y leases libres."""
 import os
 import shutil
 import stat
@@ -32,7 +31,6 @@ def reception_closed(session, now):
 
 
 def expired_session(session, now):
-    """Todo el tramo recuperable vence junto, nunca debajo de un consumidor activo."""
     if not reception_closed(session, now):
         return False
     jobs = FragmentJob.objects.filter(sequence__session=session)
@@ -48,13 +46,12 @@ def protection(job, info, now):
     if job.state == FragmentJob.State.PROCESSING:
         return "analisis_activo"
     if job.state != FragmentJob.State.COMPLETED and job.sensitive_expired_at is None:
-        return "recuperable"  # La expiración se confirma primero en SQL.
+        return "recuperable"
     return None
 
 
 @contextmanager
 def file_guard(storage, key, *, close_file=False):
-    """Mismo orden de locks que recepción/borrado; nunca esperar una carga viva."""
     with storage.allocation_lock(cleanup=True):
         lease = open_private(storage.root / f".{key}.lock", os.O_CREAT | os.O_RDWR)
         try:
@@ -90,7 +87,6 @@ def fingerprint(info):
 
 def inventory(storage, *, now=None):
     now = now or timezone.now()
-    # Consulta obligatoria: SQL caído nunca se interpreta como ausencia de trabajos.
     jobs = {j.storage_key: j for j in FragmentJob.objects.select_related("sequence__session")}
     totals = {"managed_bytes": 0, "reclaimable_bytes": 0, "protected_bytes": 0,
               "protected_files": 0, "reclaimable_files": 0, "reasons": {}, "candidates": []}
@@ -164,12 +160,10 @@ def purge_checkpoints(now):
         if not expired and any(job.state != FragmentJob.State.COMPLETED for job in jobs):
             continue
         for job in jobs:
-            # Conservar la identidad técnica del proveedor mientras quede pendiente su borrado.
             speech = job.checkpoint.get("speechmatics", {})
             keep = {"speechmatics": speech} if speech.get("state") not in (None, "deleted") else {}
             if (session.origin == AUDIO_TEST_ORIGIN and job.state == FragmentJob.State.COMPLETED
                     and job.result == FragmentJob.Result.RISK_DETECTED and job.checkpoint.get("test_alerts")):
-                # El estado de la prueba muestra estos resultados sin texto ni audio.
                 keep["test_alerts"] = job.checkpoint["test_alerts"]
             if (session.origin == AUDIO_TEST_ORIGIN and job.state == FragmentJob.State.COMPLETED
                     and job.result == FragmentJob.Result.INDETERMINATE):
@@ -203,8 +197,6 @@ def _remove(storage, key, expected, run, now):
         return
     try:
         with file_guard(storage, key, close_file=True) as info:
-            # Todos los locks siguen tomados, pero ningún descriptor mantiene el
-            # WAV abierto durante unlink en Windows.
             if expected is not None and fingerprint(info) != expected:
                 run.protected += 1
                 return
@@ -221,7 +213,6 @@ def _remove(storage, key, expected, run, now):
                     return
                 debt.attempts += 1
                 debt.save(update_fields=["attempts"])
-            # La intención ya está confirmada; una caída deja deuda recuperable.
             os.unlink(storage.root / key)
             _sync_directory(storage.root)
             run.freed_bytes += info.st_size
@@ -252,7 +243,6 @@ def _sync_directory(root):
 
 def cleanup(storage, *, now=None, source="automatic", actor_id=None, candidates=None):
     now = now or timezone.now()
-    # El lock dura hasta terminar o morir el proceso: no vence debajo de unlink.
     storage.root.mkdir(mode=0o700, parents=True, exist_ok=True)
     fd = open_private(storage.root / ".retention.lock", os.O_CREAT | os.O_RDWR)
     try:
@@ -268,7 +258,6 @@ def cleanup(storage, *, now=None, source="automatic", actor_id=None, candidates=
                 _remove(storage, key, expected, run, now)
                 if run.removed + run.failures >= MAX_FILES:
                     break
-            # Reconciliar una caída entre unlink y confirmación SQL.
             for debt in StorageDeletion.objects.exclude(state="deleted"):
                 if not (storage.root / debt.key).exists():
                     _sync_directory(storage.root)

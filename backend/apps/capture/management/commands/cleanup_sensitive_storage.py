@@ -56,5 +56,4 @@ class Command(BaseCommand):
                 continue
             if not options["continuous"]:
                 break
-            # Reconsultar SQL permite respetar una limpieza manual y los reinicios.
             stop.wait(1)

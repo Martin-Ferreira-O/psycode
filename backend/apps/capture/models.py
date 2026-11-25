@@ -1,4 +1,3 @@
-"""Metadatos técnicos de captura; archivos privados referenciados por claves opacas."""
 import uuid
 
 from django.db import models
@@ -88,7 +87,6 @@ class AcceptedSequence(models.Model):
     number = models.PositiveBigIntegerField()
     captured_at = models.DateTimeField()
     accepted_at = models.DateTimeField()
-    # Vacío para audio anterior a la trazabilidad por PC; no inferir su emisor.
     agent_id = models.CharField(max_length=64, blank=True, default="", db_index=True)
 
     class Meta:
@@ -96,7 +94,6 @@ class AcceptedSequence(models.Model):
 
 
 class CaptureEvent(models.Model):
-    """Bitácora durable, guardada en la misma transacción que el cambio."""
     event_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     session = models.ForeignKey(CaptureSession, on_delete=models.PROTECT, related_name="events")
     timestamp = models.DateTimeField()
@@ -110,7 +107,6 @@ class CaptureEvent(models.Model):
         ordering = ["timestamp", "event_id"]
 
 class FragmentJob(models.Model):
-    """Cola SQL durable. Una secuencia aceptada solo puede tener un trabajo."""
     class State(models.TextChoices):
         PENDING = "pendiente"
         PROCESSING = "procesando"
@@ -161,13 +157,11 @@ class FragmentJob(models.Model):
 
 
 class RuntimeLease(models.Model):
-    """Exclusión SQL entre procesos; un propietario por box o trabajador."""
     name = models.CharField(max_length=100, primary_key=True)
     owner = models.UUIDField()
     expires_at = models.DateTimeField()
 
 class AgentRegistration(models.Model):
-    """PC autorizado para operar como agente de captura."""
 
     agent_id = models.UUIDField(
         primary_key=True,
@@ -215,12 +209,6 @@ class AudioTest(models.Model):
     expires_at = models.DateTimeField()
 
 class ServerConnectivityOutage(models.Model):
-    """
-    Caída de conectividad inferida por el servidor.
-
-    Se mantiene separada de AgentConnectivityEvent porque
-    ese modelo representa eventos informados por el propio PC.
-    """
 
     class TimeQuality(models.TextChoices):
         ESTIMATED = "estimated", "Estimado"
@@ -238,27 +226,19 @@ class ServerConnectivityOutage(models.Model):
         related_name="server_connectivity_outages",
     )
 
-    # Se guarda también el box como fotografía histórica.
-    # Así el historial no cambia si posteriormente el PC
-    # es reasignado a otro box.
     box = models.CharField(
         max_length=16,
     )
 
-    # Momento estimado en que comenzó la caída.
-    # Puede ser desconocido.
     started_at = models.DateTimeField(
         null=True,
         blank=True,
     )
 
-    # Momento en que el servidor detectó el problema.
     detected_at = models.DateTimeField(
         auto_now_add=True,
     )
 
-    # Se completa cuando el servidor observa
-    # que el PC vuelve a conectarse.
     recovered_at = models.DateTimeField(
         null=True,
         blank=True,
@@ -311,7 +291,6 @@ class AgentStatus(models.Model):
 
 
 class AgentConnectivityEvent(models.Model):
-    """Eventos locales inmutables, deduplicados por identidad autenticada y UUID."""
     event_id = models.UUIDField()
     agent_id = models.CharField(max_length=64)
     box = models.CharField(max_length=16)
@@ -329,7 +308,6 @@ class AgentConnectivityEvent(models.Model):
 
 
 class StorageDeletion(models.Model):
-    """Intención durable antes de unlink; reintentos sobreviven a caídas."""
     key = models.CharField(max_length=100, unique=True)
     state = models.CharField(max_length=12, default="pending")
     attempts = models.PositiveIntegerField(default=0)
@@ -340,7 +318,6 @@ class StorageDeletion(models.Model):
 
 
 class StorageCleanupRun(models.Model):
-    """Bitácora SQL y outbox hacia la bitácora común, sin texto clínico."""
     run_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     started_at = models.DateTimeField()
     finished_at = models.DateTimeField(null=True)
@@ -359,7 +336,6 @@ class StorageCleanupRun(models.Model):
 
 
 class PCRegistryAllocation(models.Model):
-    """Fila única para serializar la asignación de salas entre procesos."""
     id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
 
 
@@ -380,7 +356,6 @@ class ConfigurationState(models.TextChoices):
     FAILED = "fallido"
 
 class AgentConfiguration(models.Model):
-    """Configuraciones versionadas por equipo solicitadas por administradores."""
     config_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     agent = models.ForeignKey(AgentRegistration, on_delete=models.CASCADE, related_name="configurations")
     requested_by = models.UUIDField(null=True)

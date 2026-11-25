@@ -682,7 +682,6 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   }
 }
 
-/* Recuperación de acceso: comparte estructura y controles con el login. */
 .password-reset-card .password-requirements {
   margin: 0 0 22px;
   padding: 16px 18px;

@@ -1,4 +1,3 @@
-"""Proceso hijo de correo; stdin privado, sin salida ni excepciones con secretos."""
 import json
 import os
 import sys

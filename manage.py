@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-"""Punto de entrada Django, ejecutado desde la raíz del repositorio."""
 import os
 import sys
 

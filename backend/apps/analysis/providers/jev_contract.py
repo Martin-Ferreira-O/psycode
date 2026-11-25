@@ -1,4 +1,3 @@
-"""Typed JEV questions, validation and bounded session-local context."""
 import math
 import re
 from datetime import datetime
@@ -198,7 +197,6 @@ def evidence_groups(evidence_turns, review_turns, evidence_texts):
         dimensions = [evidence_dimensions(claim) for claim in block_claims(text)]
         for level in direct_groups:
             if level in direct:
-                # Verifica por separado afirmaciones propias de un mismo nivel.
                 direct_groups[level].append([turn_id])
             elif (level in EVIDENCE_CRITERIA and not direct) or any(d.get(level) for d in dimensions):
                 contextual_groups[level].append(turn_id)

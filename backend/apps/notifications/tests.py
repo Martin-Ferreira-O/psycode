@@ -236,7 +236,6 @@ class NotificationsTestCase(TestCase):
                 from backend.apps.alerts.domain import semaforo_desde_severidad
                 self.alert = replace(self.alert, nivel_severidad=level,
                                      semaforo=semaforo_desde_severidad(level), fecha_hora=captured_at)
-                # La fuente de verdad es la alerta confirmada en el repositorio.
                 with patch.object(self.store, 'get_alert', return_value=self.alert):
                     self.assertTrue(self.notify().enviado)
                 message = mail.outbox[-1]
@@ -288,7 +287,6 @@ class EmailClientTests(SimpleTestCase):
 
 
 class LocalSMTPTests(TestCase):
-    """Ejercita el proceso real SMTP contra un servidor local sin credenciales."""
     def test_rejected_supervisor_does_not_prevent_next_smtp_delivery(self):
         config = OperationalConfiguration.load()
         config.notification_mode = 'supervisores_activos'
@@ -403,7 +401,6 @@ class RecipientResolutionTests(TestCase):
     def test_invalid_registered_emails_are_excluded(self):
         for index, email in enumerate(('', 'invalid', 'bad\r\n@example.test')):
             user = self.create_user(f'invalid{index}')
-            # Simular datos heredados que no pasaron por la validación del modelo.
             self.users.filter(pk=user.pk).update(email=email)
         self.assertEqual(self.resolver.resolve().reason, 'SIN_DESTINATARIOS_VALIDOS')
 

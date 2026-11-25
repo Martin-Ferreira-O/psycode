@@ -1,4 +1,3 @@
-"""Comparación con TypeSafe real y entrega de alertas simulada. Ejecutar como módulo."""
 
 import argparse
 from copy import deepcopy
@@ -48,7 +47,6 @@ def synthetic_cases(cases=CASES, source="synthetic"):
 
 
 class ObservedClient:
-    """Mismo transporte y validador que producción, con captura de respuestas para la prueba."""
 
     def __init__(self, client, variant):
         self.client, self.variant = client, variant
@@ -194,7 +192,6 @@ def metric(rows, level):
 def summarize(rows, variants=VARIANTS, *, model):
     successful = [row for row in rows if row["usage"] and row["model"] == model and not set(row["errors"]).intersection(
         {"JEV_CONTEXT_LIMIT", "JEV_SUBMISSION_UNCERTAIN", "JEV_FAILED"})]
-    # Solo pares completos, para que los fallos de transporte no beneficien a una variante.
     groups = {}
     for row in successful:
         groups.setdefault((row["source"], row["case"], row["repetition"]), set()).add(row["variant"])
@@ -224,7 +221,6 @@ def summarize(rows, variants=VARIANTS, *, model):
                 "no_choice_offered": sum(not any(k.startswith(("evidencia_", "verificar_", "revision_"))
                                                  for k in row["answers"]) for row in items),
                 "simulated_alerts": sum(row["simulated_alerts"] for row in items),
-                # Un solo clip diagnóstico, cortes solapados y roles de audio inciertos.
                 **({"levels": {str(level): metric(items, level) for level in range(len(MATRIX["categories"]))}}
                    if source.startswith("synthetic") else {}),
             }
@@ -257,7 +253,6 @@ def main():
     rows = []
     selected = tuple(dict.fromkeys(args.variant or VARIANTS))
     rng = random.Random(1414)
-    # Un cliente y una solicitud a la vez. Alternar el orden reduce sesgo de calentamiento.
     args.output.touch(mode=0o600, exist_ok=False)
     with args.output.open("w", encoding="utf-8") as output, httpx.Client(
             headers={"Authorization": f"Bearer {key}"}, timeout=30, trust_env=False) as client:

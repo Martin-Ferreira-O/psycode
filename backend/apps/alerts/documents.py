@@ -1,5 +1,3 @@
-"""Mapeo Alerta ↔ documento MongoDB. Sin cliente ni cursores."""
-
 from .domain import (
     Alerta,
     Evaluacion,

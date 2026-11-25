@@ -26,7 +26,7 @@ from .serializers import (
 
 
 class AccountsView(APIView):
-    service_factory = None  # Inyectada por config; no importar composición desde la app.
+    service_factory = None
     query_methods = ()
 
     def initial(self, request, *args, **kwargs):
@@ -141,9 +141,6 @@ class PasswordResetConfirmView(PublicAccountsView):
 
     def post(self, request):
         return self.perform("confirm_password_reset", PasswordResetConfirmSerializer, "Contraseña actualizada")
-
-
-# --- Vistas Administrativas ---
 
 
 class ProtectedAccountsView(AccountsView):

@@ -1,4 +1,3 @@
-"""Configuración compartida. El modo local debe habilitarse explícitamente."""
 import json
 import os
 import re
@@ -100,7 +99,6 @@ TEMPLATES = [
 ]
 
 STATIC_URL = "/static/"
-# Nginx sirve este directorio después de ejecutar collectstatic.
 STATIC_ROOT = local_path("STATIC_ROOT", "staticfiles")
 ROOT_URLCONF = "backend.config.urls"
 WSGI_APPLICATION = "backend.config.wsgi.application"
@@ -143,11 +141,9 @@ SIMPLE_JWT = {
 }
 MONGODB_URI = os.getenv("MONGODB_URI", "").strip()
 MONGODB_DATABASE = os.getenv("MONGODB_DATABASE", "psycode").strip() or "psycode"
-# Un proceso Django de clínica, baja concurrencia: pool por defecto de PyMongo.
-# 5s para fallar rápido y responder 503 en lugar de colgar el request.
 MONGODB_SERVER_SELECTION_TIMEOUT_MS = 5000
 
-# Rotación propia transaccional en RefreshSession; no combinar con blacklist app.
+
 PASSWORD_RESET_LIFETIME = timedelta(hours=1)
 def positive_int(name, default):
     try:
@@ -213,13 +209,13 @@ LOGGING = {
     "loggers": {"psycode.audit": {"handlers": ["console"], "level": "INFO", "propagate": False}},
 }
 
-# SCRUM-67: destinatarios, sin credenciales de las cuentas receptoras.
+
 NOTIFICATIONS_ENABLED = env_bool("NOTIFICATIONS_ENABLED", False)
 NOTIFICATION_EMAIL_TO = os.getenv("NOTIFICATION_EMAIL_TO", "").strip()
 NOTIFICATION_EMAIL_BACKUP_TO = os.getenv("NOTIFICATION_EMAIL_BACKUP_TO", "").strip()
-TEAMS_ENABLED = False  # Webhook y continuidad pendientes de decisión.
+TEAMS_ENABLED = False
 
-# Ingesta interna: credenciales independientes del JWT de profesionales.
+
 CAPTURE_FRAGMENT_ROOT = local_path("CAPTURE_FRAGMENT_ROOT", ".local/capture-fragments")
 CAPTURE_FRAGMENT_MAX_BYTES = positive_int("CAPTURE_FRAGMENT_MAX_BYTES", 25 * 1024 * 1024)
 CAPTURE_ORPHAN_MAX_AGE_SECONDS = positive_int("CAPTURE_ORPHAN_MAX_AGE_SECONDS", 3600)
@@ -237,7 +233,7 @@ try:
 except (TypeError, ValueError):
     raise ImproperlyConfigured("CAPTURE_AGENTS debe contener identidades, boxes y hashes SHA-256 válidos.") from None
 
-# Los procesos se inician mediante comandos explícitos, nunca desde ASGI.
+
 CAPTURE_COMMAND_INTERVAL_SECONDS = positive_int("CAPTURE_COMMAND_INTERVAL_SECONDS", 1)
 CAPTURE_COORDINATOR_INTERVAL_SECONDS = positive_int("CAPTURE_COORDINATOR_INTERVAL_SECONDS", 5)
 CAPTURE_HEARTBEAT_SECONDS = positive_int("CAPTURE_HEARTBEAT_SECONDS", 30)
@@ -246,10 +242,10 @@ CAPTURE_INACTIVITY_TIMEOUT_SECONDS = positive_int("CAPTURE_INACTIVITY_TIMEOUT_SE
 if max(CAPTURE_HEARTBEAT_SECONDS, CAPTURE_COMMAND_INTERVAL_SECONDS) >= CAPTURE_INACTIVITY_TIMEOUT_SECONDS:
     raise ImproperlyConfigured("El heartbeat y el poll de captura deben ser menores que la inactividad WSS.")
 CAPTURE_FINALIZATION_TIMEOUT_SECONDS = positive_int("CAPTURE_FINALIZATION_TIMEOUT_SECONDS", 300)
-# Plazo de recepción, independiente de la ventana autorizada para capturar.
+
 CAPTURE_RECEPTION_GRACE_SECONDS = positive_int("CAPTURE_RECEPTION_GRACE_SECONDS", 7 * 24 * 60 * 60)
 
-# Audio, checkpoints SQL y journals deben residir en volúmenes cifrados.
+
 ANALYSIS_STATE_ROOT = local_path("ANALYSIS_STATE_ROOT", ".local/analysis")
 SENSITIVE_STORAGE_ENCRYPTION_REQUIRED = env_bool("SENSITIVE_STORAGE_ENCRYPTION_REQUIRED", not DEBUG)
 try:
@@ -261,7 +257,7 @@ try:
 except (ValueError, TypeError):
     raise ImproperlyConfigured("Las rutas de cifrado deben ser listas JSON de rutas absolutas.") from None
 
-# Vinculación inicial: código corto, un uso y presupuesto global contra ataques distribuidos.
+
 try:
     PC_REGISTRY_BOXES = json.loads(os.getenv('PC_REGISTRY_BOXES', json.dumps(DEFAULT_PC_BOXES)))
     if (not isinstance(PC_REGISTRY_BOXES, list) or not PC_REGISTRY_BOXES
@@ -271,11 +267,10 @@ try:
 except (ValueError, TypeError):
     raise ImproperlyConfigured('PC_REGISTRY_BOXES debe ser una lista de boxes válidos sin duplicados.') from None
 
-# Ruta absoluta y privada. Sin configuración no se ofrece la descarga.
+
 PC_WINDOWS_INSTALLER_DIR = os.getenv("PC_WINDOWS_INSTALLER_DIR", "").strip()
 
-# Secretos solo en el entorno privado del VPS, nunca en perfiles operativos/SQL.
-# PASSWORD en el nombre permite que el filtro de errores de Django lo oculte.
+
 SMILE_USERNAME = os.getenv("SMILE_USERNAME", "")
 SMILE_PASSWORD = os.getenv("SMILE_PASSWORD", "")
 SMILE_DEFAULT_URL = os.getenv("SMILE_DEFAULT_URL", "").strip()

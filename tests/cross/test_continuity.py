@@ -1,4 +1,3 @@
-"""Cinco agentes, dos sesiones por raíz, recepción tardía y respuesta perdida."""
 import hashlib
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
@@ -66,8 +65,6 @@ class FiveAgentContinuityTests(TransactionTestCase):
                             path = folder / f"{sequence:06d}.wav"
                             original_hashes[str(path)] = hashlib.sha256(path.read_bytes()).hexdigest()
                         if index == 0:
-                            # Desconexión supera ampliamente 120/300 s; captura ya cerrada,
-                            # todos sus WAV siguen locales mientras se autoriza la sesión B.
                             service.confirm_capture_ended(box, session.session_id,
                                 ended_at=start + timedelta(seconds=20), last_sequence=1,
                                 reason_code="AUTHORIZATION_ENDED", now=start + timedelta(hours=2))
@@ -90,7 +87,6 @@ class FiveAgentContinuityTests(TransactionTestCase):
                     with httpx.Client(transport=httpx.WSGITransport(app=application)) as client:
                         response = client.post(url, **kwargs)
                     attempts.append(response.status_code)
-                    # El commit ocurrió, pero cada agente pierde su primera respuesta.
                     if not getattr(thread, "lost", False):
                         thread.lost = True
                         self.assertEqual(response.status_code, 201, response.text)
@@ -102,7 +98,6 @@ class FiveAgentContinuityTests(TransactionTestCase):
                     close_old_connections()
                     try:
                         barrier.wait(timeout=10)
-                        # Nuevas instancias representan reapertura de cola/journal tras reinicio.
                         queue = UploadQueue(FragmentStore(Path(config.agent_state_root) / "fragments"), BackendClient(config))
                         self.assertEqual(queue.process_pending(), 3)
                         self.assertEqual(queue.store.pending(), [])

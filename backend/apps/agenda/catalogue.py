@@ -1,4 +1,3 @@
-"""Catálogo Smile y asociación explícita con PCs; ninguna sala nace del nombre del PC."""
 import hashlib
 import json
 import re
@@ -110,7 +109,6 @@ def publish(identity, data):
         return descriptor(collection)
     if collection.received_at:
         raise FragmentError('SMILE_CATALOG_CONFLICT', 409)
-    # No cambiar identidades ni reasignar un box si Smile devuelve IDs distintos.
     for item in rooms:
         by_id = SmileRoom.objects.filter(source=source, smile_box_id=item['smile_box_id']).first()
         by_box = SmileRoom.objects.filter(box=item['box']).first()

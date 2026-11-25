@@ -34,7 +34,6 @@ else
     "${contact[@]}" --webroot -w /var/www/letsencrypt "${identity[@]}" --cert-name "$lineage"
 fi
 
-# Si el certificado ya existe pero la activación se interrumpió, completar Nginx.
 if [[ -s "$template" ]] && ! cmp -s "$template" "$site"; then
   backup=$(mktemp)
   trap 'rm -f -- "$backup"' EXIT

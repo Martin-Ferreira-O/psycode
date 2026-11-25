@@ -1,4 +1,3 @@
-"""Recepción aditiva e idempotente de eventos técnicos producidos sin conexión."""
 import json
 from datetime import timedelta
 
@@ -81,7 +80,6 @@ class AgentEventsView(APIView):
         if not serializer.is_valid():
             raise FragmentError("VALIDATION_ERROR", 400)
         ids = []
-        # Confirmar el lote únicamente después del commit de todos sus eventos.
         with transaction.atomic():
             for event in serializer.validated_data["events"]:
                 if event["session_id"] is not None and not CaptureSession.objects.filter(
