@@ -3,7 +3,6 @@
 from datetime import datetime, timezone
 import json
 import logging
-import os
 from pathlib import Path
 import re
 from tempfile import NamedTemporaryFile
@@ -12,10 +11,7 @@ from time import monotonic, time
 import httpx
 from django.conf import settings
 
-if os.name == "nt":
-    import msvcrt
-else:
-    import fcntl
+from backend.apps.capture.filesystem import lock_file
 
 
 logger = logging.getLogger(__name__)
@@ -119,11 +115,7 @@ def batch_catalog():
         try:
             # Workers share the snapshot. Recheck after acquiring the lock.
             with path.with_suffix(".lock").open("a+b") as lock:
-                if os.name == "nt":
-                    lock.seek(0)
-                    msvcrt.locking(lock.fileno(), msvcrt.LK_LOCK, 1)
-                else:
-                    fcntl.flock(lock, fcntl.LOCK_EX)
+                lock_file(lock)
                 snapshot = _read(path)
                 now = int(time())
                 if _refresh_due(snapshot, now):
