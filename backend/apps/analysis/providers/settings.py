@@ -4,7 +4,9 @@ import json
 import os
 import re
 
-from backend.common.processing_models import JevVersion, SpeechmaticsModel
+from backend.common.processing_models import (
+    SPEECHMATICS_MODEL_ID_MAX_LENGTH, SPEECHMATICS_MODEL_ID_PATTERN, JevVersion, SpeechmaticsModel,
+)
 
 from .http import ProviderError
 
@@ -47,7 +49,9 @@ class Settings:
     def validate(self, provider):
         if not self.external_enabled:
             raise ProviderError("Procesamiento externo deshabilitado; configura PSYCODE_EXTERNAL_PROCESSING_ENABLED=1")
-        if self.region not in {"eu1", "us1", "au1"} or self.model not in SpeechmaticsModel.values:
+        if (self.region not in {"eu1", "us1", "au1"} or not isinstance(self.model, str)
+                or len(self.model) > SPEECHMATICS_MODEL_ID_MAX_LENGTH
+                or not re.fullmatch(SPEECHMATICS_MODEL_ID_PATTERN, self.model)):
             raise ProviderError("Región o modelo de Speechmatics inválido")
         if not 1 <= self.timeout <= 540 or not .1 <= self.poll_interval <= 30:
             raise ProviderError("Plazos de proveedor inválidos")

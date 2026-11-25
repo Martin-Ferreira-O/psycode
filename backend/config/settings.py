@@ -114,6 +114,7 @@ DATABASES = {"default": {
     "OPTIONS": {"timeout": 10, "transaction_mode": "IMMEDIATE"},
 }}
 DATABASES["default"]["NAME"].parent.mkdir(parents=True, exist_ok=True)
+SPEECHMATICS_CATALOG_PATH = DATABASES["default"]["NAME"].parent / "speechmatics-catalog.json"
 LANGUAGE_CODE = "es-cl"
 TIME_ZONE = "America/Santiago"
 USE_I18N = True

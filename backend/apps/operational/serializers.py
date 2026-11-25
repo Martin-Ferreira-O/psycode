@@ -9,7 +9,8 @@ from backend.apps.accounts.serializers import StrictSerializer, StrictStringFiel
 from backend.apps.agenda.models import SmileRoom
 from backend.apps.capture.models import AgentRegistration
 from backend.common.boxes import is_box, registrable_boxes
-from .models import AudioChunkMode, JevVersion, NotificationMode, SMILE_FIELDS, SMILE_TIMEZONE, SmileFormat, SpeechmaticsModel
+from backend.common.processing_models import SPEECHMATICS_MODEL_ID_MAX_LENGTH, SPEECHMATICS_MODEL_ID_PATTERN
+from .models import AudioChunkMode, JevVersion, NotificationMode, SMILE_FIELDS, SMILE_TIMEZONE, SmileFormat
 
 
 class AgentRegistrationRenameSerializer(StrictSerializer):
@@ -59,7 +60,7 @@ class OperationalConfigSerializer(StrictSerializer):
     backup_email = StrictStringField(max_length=254, allow_blank=True, required=False)
     jev_model = StrictChoiceField(choices=JevVersion.values, required=False)
     jev_threshold = ThresholdField(min_value=0, max_value=1, required=False)
-    speechmatics_model = StrictChoiceField(choices=SpeechmaticsModel.values, required=False)
+    speechmatics_model = StrictStringField(max_length=SPEECHMATICS_MODEL_ID_MAX_LENGTH, trim_whitespace=False, required=False)
     smile_collector_id = StrictStringField(max_length=36, allow_null=True, required=False)
     smile_source = StrictStringField(max_length=64, required=False)
     smile_url = StrictStringField(max_length=2048, allow_blank=True, required=False)
@@ -68,6 +69,11 @@ class OperationalConfigSerializer(StrictSerializer):
     smile_request_timeout = StrictIntegerField(min_value=1, max_value=300, required=False)
     smile_format = serializers.ChoiceField(choices=SmileFormat.values, required=False)
     smile_timezone = StrictChoiceField(choices=[SMILE_TIMEZONE], required=False)
+
+    def validate_speechmatics_model(self, value):
+        if not re.fullmatch(SPEECHMATICS_MODEL_ID_PATTERN, value):
+            raise serializers.ValidationError("Selecciona un identificador de modelo válido de Speechmatics.")
+        return value
     smile_boxes = serializers.ListField(child=StrictStringField(max_length=16), max_length=500, required=False)
 
     def validate_smile_collector_id(self, value):

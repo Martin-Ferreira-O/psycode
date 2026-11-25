@@ -411,6 +411,268 @@
     font-size: 13px;
 }
 
+.umbral-jev-panel {
+    display: grid;
+    gap: 10px;
+    min-width: 0;
+    padding: 12px 14px;
+    border: 1px solid var(--borde);
+    border-radius: 10px;
+    background: var(--fondo);
+}
+
+.umbral-jev-escala {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 2px 8px;
+    color: var(--texto-secundario);
+    font-size: 13px;
+}
+
+.umbral-jev-panel .nota-configuracion {
+    background: var(--blanco);
+}
+
+.umbral-jev-panel .nota-configuracion p {
+    margin: 0;
+}
+
+.umbral-jev-panel .nota-configuracion p:first-child {
+    margin-bottom: 4px;
+    color: var(--azul-oscuro);
+    font-weight: 650;
+}
+
+.configuracion-speechmatics {
+    container-type: inline-size;
+    display: grid;
+    gap: 14px;
+    min-width: 0;
+}
+
+.estimacion-speechmatics-escenario {
+    min-width: 0;
+    margin: 0 0 12px;
+    padding: 0;
+    border: 0;
+}
+
+.estimacion-speechmatics-escenario legend {
+    margin-bottom: 6px;
+    padding: 0;
+    color: var(--azul-oscuro);
+    font-weight: 700;
+}
+
+.configuracion-speechmatics .estimacion-speechmatics-campos {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 165px), 1fr));
+    gap: 8px 14px;
+}
+
+:is(.configuracion-speechmatics, .umbral-jev) .campo-configuracion input[type="range"] {
+    min-height: 24px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    accent-color: var(--azul);
+}
+
+.estimacion-speechmatics-total {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px 12px;
+    margin: 10px 0 0;
+    padding-top: 10px;
+    border-top: 1px solid var(--borde);
+    color: var(--texto-secundario);
+}
+
+.estimacion-speechmatics-horas {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 2px 12px;
+}
+
+.estimacion-speechmatics-total strong {
+    color: var(--azul-oscuro);
+    font-size: 17px;
+    font-variant-numeric: tabular-nums;
+}
+
+.seleccion-speechmatics {
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+}
+
+.seleccion-speechmatics legend {
+    margin-bottom: 4px;
+    padding: 0;
+}
+
+.seleccion-speechmatics h3 {
+    margin: 0;
+    color: var(--azul-oscuro);
+    font-size: 19px;
+}
+
+.seleccion-speechmatics > .ayuda-configuracion {
+    margin-bottom: 10px;
+}
+
+.estimacion-speechmatics-modelos {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.estimacion-speechmatics-modelo {
+    position: relative;
+    display: grid;
+    align-content: start;
+    gap: 8px;
+    min-width: 0;
+    padding: 12px 14px;
+    border: 1px solid var(--borde);
+    border-radius: 10px;
+    overflow-wrap: anywhere;
+}
+
+.estimacion-speechmatics-modelo:not([data-seleccionado]):has(input:enabled):hover {
+    background: var(--fondo);
+}
+
+.estimacion-speechmatics-modelo:has(input:focus-visible) {
+    outline: 3px solid var(--foco);
+    outline-offset: 2px;
+}
+
+.estimacion-speechmatics-modelo[data-seleccionado] {
+    border-color: var(--azul);
+    box-shadow: inset 3px 0 var(--azul);
+    background: var(--azul-claro);
+}
+
+.estimacion-speechmatics-modelo-cabecera {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 10px;
+}
+
+.estimacion-speechmatics-modelo h4 {
+    margin: 0;
+    color: var(--azul-oscuro);
+    font-size: 17px;
+}
+
+.estimacion-speechmatics-modelo-opcion {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.estimacion-speechmatics-modelo-opcion input {
+    position: relative;
+    z-index: 1;
+    flex: 0 0 auto;
+    margin: 0;
+    accent-color: var(--azul);
+}
+
+.estimacion-speechmatics-modelo:has(input:enabled) label::after {
+    position: absolute;
+    inset: 0;
+    cursor: pointer;
+    content: "";
+}
+
+.estimacion-speechmatics-insignias {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.estimacion-speechmatics-insignias .ui-badge[data-tone="info"] {
+    background: var(--blanco);
+}
+
+.estimacion-speechmatics-beneficio {
+    margin: 0;
+    color: var(--texto-secundario);
+    font-size: 13px;
+}
+
+.estimacion-speechmatics-costos {
+    color: var(--texto-secundario);
+    font-size: 13px;
+}
+
+.estimacion-speechmatics-costos summary {
+    width: fit-content;
+    padding-block: 6px;
+    color: var(--azul);
+    font-weight: 650;
+    cursor: pointer;
+}
+
+.estimacion-speechmatics-costos[open] summary {
+    margin-bottom: 6px;
+}
+
+.ui-table-scroll .estimacion-speechmatics-tabla :is(th, td) {
+    padding: 8px;
+}
+
+.ui-table-scroll .estimacion-speechmatics-tabla tbody th {
+    border-bottom: 1px solid var(--borde);
+    background: transparent;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.ui-table-scroll .estimacion-speechmatics-tabla tbody tr:last-child th {
+    border-bottom: 0;
+}
+
+.ui-table-scroll .estimacion-speechmatics-tabla td {
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.estimacion-speechmatics-tabla small {
+    display: block;
+    color: var(--texto-secundario);
+    white-space: normal;
+}
+
+.estado-tarifas-speechmatics {
+    margin: 0 0 8px;
+}
+
+.estimacion-speechmatics-fuente {
+    margin: 8px 0 0;
+}
+
+.estimacion-speechmatics-fuente a {
+    color: var(--azul);
+}
+
+@container (min-width: 500px) {
+    .estimacion-speechmatics-modelos {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
 @media (min-width: 650px) {
     .configuracion-nav {
         grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));

@@ -31,20 +31,29 @@ function dateTime(value) {
     return value ? `${formatearFecha(value)} · ${formatearHora(value)}` : "No disponible";
 }
 
-function EvidenceMetadata({ evidence }) {
+function EvidenceMetadata({ evidence, compact = false }) {
+    const score = evidence.puntaje == null ? null : (
+        <>
+            Puntaje de la categoría {evidence.puntaje.toLocaleString("es-CL")}
+            {evidence.umbral != null && <> · Umbral {evidence.umbral.toLocaleString("es-CL")}</>}
+        </>
+    );
     return (
         <>
-            <p>Nivel {evidence.nivel_matriz} de la matriz · Intervalo {evidence.inicio}–{evidence.fin} s</p>
+            <p>
+                Nivel {evidence.nivel_matriz} de la matriz
+                {compact ? score && <> · {score}</> : <> · Intervalo {evidence.inicio}–{evidence.fin} s</>}
+            </p>
             {evidence.plazo && <p>Plazo expresado en la frase: {evidence.plazo}</p>}
-            {evidence.puntaje != null && (
-                <p>Puntaje de la categoría {evidence.puntaje.toLocaleString("es-CL")} · Umbral {evidence.umbral?.toLocaleString("es-CL")}</p>
-            )}
+            {!compact && score && <p>{score}</p>}
         </>
     );
 }
 
 function FragmentEvidence({ analysis, alertIsTest, transcriptOpen, toggleTranscript, transcript }) {
-    const evidence = Array.isArray(analysis?.evidencias) ? analysis.evidencias : [];
+    const evidence = Array.isArray(analysis?.evidencias)
+        ? [...analysis.evidencias].sort((a, b) => a.inicio - b.inicio || a.fin - b.fin)
+        : [];
     const pending = Array.isArray(analysis?.evidencias_pendientes) ? analysis.evidencias_pendientes : [];
     return (
         <>
@@ -52,7 +61,6 @@ function FragmentEvidence({ analysis, alertIsTest, transcriptOpen, toggleTranscr
                 <section className="alert-detail-section" aria-label="Evidencia de la señal">
                     <h3>{analysis.categoria}</h3>
                     <EvidenceMetadata evidence={analysis} />
-                    <p>Versión de las preguntas {analysis.version}</p>
                 </section>
             )}
             <section id="seccionTranscripcion" className="alert-detail-section" aria-labelledby="tituloTranscripcion">
@@ -63,17 +71,22 @@ function FragmentEvidence({ analysis, alertIsTest, transcriptOpen, toggleTranscr
                     </Button>
                 )}
                 {evidence.length ? (
-                    <ol id="detalleTranscripcion" className="alert-evidence-list" hidden={alertIsTest && !transcriptOpen}>
+                    <ol id="detalleTranscripcion" className="alert-evidence-list" role="list" hidden={alertIsTest && !transcriptOpen}>
                         {evidence.map((item, index) => (
                             <li key={`${item.inicio}-${item.fin}-${item.nivel_matriz}-${index}`}>
-                                <h4>{item.categoria}</h4>
-                                <EvidenceMetadata evidence={item} />
+                                <div className="alert-evidence-heading">
+                                    <h4>{item.categoria}</h4>
+                                    <span className="alert-evidence-interval">{item.inicio}–{item.fin} s</span>
+                                </div>
+                                <EvidenceMetadata evidence={item} compact />
                                 <blockquote className="alert-detail-transcript">{item.texto}</blockquote>
                                 {(item.contexto_anterior || item.contexto_posterior) && (
                                     <details className="alert-evidence-context">
                                         <summary>Contexto cercano</summary>
-                                        {item.contexto_anterior && <p><strong>Antes:</strong> {item.contexto_anterior}</p>}
-                                        {item.contexto_posterior && <p><strong>Después:</strong> {item.contexto_posterior}</p>}
+                                        <div className="alert-evidence-context-text">
+                                            {item.contexto_anterior && <p><strong>Antes:</strong> {item.contexto_anterior}</p>}
+                                            {item.contexto_posterior && <p><strong>Después:</strong> {item.contexto_posterior}</p>}
+                                        </div>
                                     </details>
                                 )}
                             </li>
@@ -85,7 +98,7 @@ function FragmentEvidence({ analysis, alertIsTest, transcriptOpen, toggleTranscr
                     </p>
                 )}
                 {pending.length > 0 && (
-                    <details className="alert-evidence-context">
+                    <details className="alert-evidence-pending">
                         <summary>Tramos pendientes de verificar ({pending.length})</summary>
                         <ul>
                             {pending.map((item, index) => (
@@ -96,7 +109,6 @@ function FragmentEvidence({ analysis, alertIsTest, transcriptOpen, toggleTranscr
                         </ul>
                     </details>
                 )}
-                {evidence.length > 0 && <p>Versión de las preguntas {analysis.version}</p>}
             </section>
         </>
     );

@@ -148,7 +148,9 @@ class ProcessingConfigurationTests(APITestCase):
         self.assign(self.first)
         revoke_agent(self.second)
         for field, value in (
-            ("jev_model", 1.14), ("jev_model", "latest"), ("speechmatics_model", "unknown"),
+            ("jev_model", 1.14), ("jev_model", "latest"),
+            ("speechmatics_model", "../unknown"), ("speechmatics_model", "a" * 81),
+            ("speechmatics_model", " enhanced"), ("speechmatics_model", 1),
             ("smile_collector_id", str(self.second.pk)), ("smile_url", "https://user@smile.test/index.php/"),
             ("smile_url", "http://smile.test/index.php/"), ("smile_url", ""),
             ("smile_interval", "30"), ("smile_interval", True), ("smile_timeout", 0), ("smile_request_timeout", 301),
@@ -207,23 +209,33 @@ class ProcessingConfigurationTests(APITestCase):
             audio = Path(root) / "synthetic.pcm"
             audio.write_bytes(b"\0\0" * 16000)
 
-            def cycle():
-                fragment = Fragment(str(uuid4()), 0, "box-3", datetime.now(timezone.utc), audio, end=16000)
+            def cycle(analysis_unit="fragment"):
+                fragment = Fragment(str(uuid4()), 0, "box-3", datetime.now(timezone.utc), audio,
+                                    end=16000, analysis_unit=analysis_unit)
                 worker.transcriptor.transcribe(fragment)
                 worker.analyzer.evaluate({}, [])
 
             cycle()
-            for model in ("standard", "melia-1", "oak-1"):
-                self.assertEqual(self.put(jev_model="1.13", speechmatics_model=model).status_code, 200)
+            for model in ("standard", "melia-1", "oak-1", "batch-model-2026"):
+                previous_submissions = len(speech_requests)
+                response = self.put(jev_model="1.13", speechmatics_model=model)
+                self.assertEqual(response.status_code, 200, response.data)
+                self.assertIn(model, response.data["data"]["options"]["speechmatics_models"])
+                self.assertEqual(len(speech_requests), previous_submissions)
                 cycle()
-            self.assertEqual(jev_requests, ["jev-1.14.0", *["jev-1.13.0"] * 3])
-            self.assertEqual([item["model"] for item in speech_requests], ["enhanced", "standard", "melia-1", "oak-1"])
+            self.assertEqual(jev_requests, ["jev-1.14.0", *["jev-1.13.0"] * 4])
+            self.assertEqual([item["model"] for item in speech_requests],
+                             ["enhanced", "standard", "melia-1", "oak-1", "batch-model-2026"])
             self.assertEqual(speech_requests[0]["domain"], "medical")
             self.assertIn("additional_vocab", speech_requests[1])
-            for item in speech_requests[2:]:
+            for item in speech_requests[2:4]:
                 self.assertEqual((item["language"], item["language_hints"]), ("multi", ["es"]))
                 self.assertNotIn("additional_vocab", item)
                 self.assertNotIn("domain", item)
+            expected = {"model": "batch-model-2026", "language": "es", "diarization": "none"}
+            self.assertEqual(speech_requests[-1], expected)
+            cycle(analysis_unit="utterance")
+            self.assertEqual(speech_requests[-1], {**expected, "diarization": "speaker"})
 
 
 class SmileMigrationTests(TransactionTestCase):
@@ -258,9 +270,11 @@ class SmileMigrationTests(TransactionTestCase):
         custom_url = "https://custom-smile.example.test/index.php/"
         legacy.objects.update_or_create(pk=1, defaults={
             "smile_url": custom_url, "smile_timezone": "UTC", "smile_collector_id": collector.pk, "smile_revision": 4,
+            "speechmatics_model": "oak-1",
         })
 
         MigrationExecutor(connection).migrate(latest)
 
         config = OperationalConfiguration.objects.get(pk=1)
         self.assertEqual((config.smile_url, config.smile_revision), (custom_url, 5))
+        self.assertEqual(config.speechmatics_model, "oak-1")

@@ -39,6 +39,7 @@ from backend.apps.capture.agent_events import BoundedJSONParser
 
 from .serializers import AgentRegistrationRenameSerializer
 from .services import OperationalService
+from .speechmatics_catalog import batch_catalog
 
 
 class IsActiveAdmin(BasePermission):
@@ -81,6 +82,13 @@ class OperationalConfigView(APIView):
             data,
             "Configuración operativa actualizada",
         )
+
+
+class SpeechmaticsCatalogView(APIView):
+    permission_classes = [IsAuthenticated, IsActiveAdmin]
+
+    def get(self, request):
+        return success_response(batch_catalog(), "Catálogo público de Speechmatics")
 
 
 class AgentRegistrationListCreateView(APIView):

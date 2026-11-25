@@ -9,6 +9,7 @@ from .views import (
     AgentConnectivityHistoryView,
     SmileRoomListView,
     SmileCollectorCheckView,
+    SpeechmaticsCatalogView,
 )
 from backend.apps.capture.storage_views import StorageStatusView, StoragePreviewView, StorageCleanupView
 from .windows_installer import WindowsInstallerView
@@ -26,6 +27,7 @@ urlpatterns = [
     path("almacenamiento/vista-previa", StoragePreviewView.as_view(), name="storage_preview"),
     path("almacenamiento/liberar", StorageCleanupView.as_view(), name="storage_cleanup"),
     path("configuracion-operativa", OperationalConfigView.as_view(), name="configuracion_operativa"),
+    path("configuracion-operativa/speechmatics", SpeechmaticsCatalogView.as_view(), name="speechmatics_catalog"),
     path("pcs", AgentRegistrationListCreateView.as_view(), name="pcs"),
     path("pcs/<uuid:agent_id>/nombre", AgentRegistrationRenameView.as_view(), name="pcs_rename"),
     path("pcs/<uuid:agent_id>/revocar",AgentRegistrationRevokeView.as_view(),name="pcs_revoke",),

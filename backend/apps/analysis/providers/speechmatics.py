@@ -193,13 +193,13 @@ class BatchClient:
                     "model": settings.model,
                     "diarization": diarization,
                 }
-                if diarization == "speaker":
+                if diarization == "speaker" and settings.model in SpeechmaticsModel.values:
                     transcription_config["speaker_diarization_config"] = {
                         "speaker_sensitivity": 0.5, "prefer_current_speaker": False,
                     }
                 if settings.transcription_language == "multi":
                     transcription_config["language_hints"] = ["es"]
-                else:
+                elif settings.model in {SpeechmaticsModel.ENHANCED, SpeechmaticsModel.STANDARD}:
                     transcription_config["additional_vocab"] = [{"content": term} for term in PSYCHOLOGY_VOCABULARY]
                 if settings.model == SpeechmaticsModel.ENHANCED:
                     transcription_config["domain"] = "medical"

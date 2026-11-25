@@ -118,8 +118,10 @@ Las variables y sus valores predeterminados también están en la [sección del 
 | `OPENROUTER_API_KEY` | Sin valor; necesaria si se elige OpenRouter. |
 | `PSYCODE_REDACT_TERMS` | `[]`, lista JSON de nombres/direcciones conocidos localmente. |
 
-En **Configuración operativa** se eligen Jev (1.14 por defecto o 1.13) y
-Speechmatics Batch (Enhanced por defecto, Standard, Melia 1 u Oak 1 Medical).
+En **Configuración operativa** se eligen Jev (1.14 por defecto o 1.13) y el
+modelo de Speechmatics Batch (Enhanced por defecto). Los modelos del catálogo
+público se pueden seleccionar directamente. Las solicitudes Batch usan español
+(`es`) por defecto. Melia 1 y Oak 1 requieren `multi` y reciben `es` como pista.
 El trabajador consulta la selección al iniciar cada operación de proveedor.
 Los trabajos de Speechmatics ya enviados conservan su modelo.
 
