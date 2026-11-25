@@ -216,38 +216,71 @@ dialog.alert-detail-dialog {
 }
 
 .alert-evidence-list {
-    margin: 10px 0;
-    padding-inline-start: 24px;
+    margin: 10px 0 0;
+    padding: 0;
+    list-style: none;
 }
 
-.alert-evidence-list > li + li {
-    margin-top: 16px;
+.alert-evidence-list > li {
+    padding-block: 12px;
+    border-top: 1px solid var(--borde);
+}
+
+.alert-evidence-heading {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 2px 16px;
 }
 
 .alert-evidence-list h4 {
-    margin: 0 0 4px;
+    margin: 0;
     font-size: 15px;
+    overflow-wrap: anywhere;
 }
 
-.alert-evidence-list p,
-.alert-evidence-context p {
-    margin: 4px 0;
+.alert-evidence-interval {
     color: var(--texto-secundario);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.alert-evidence-list p {
+    margin: 4px 0 0;
+    color: var(--texto-secundario);
+    font-size: 13px;
     overflow-wrap: anywhere;
 }
 
 .alert-evidence-list blockquote {
     min-height: 0;
     margin-top: 8px;
+    margin-inline-start: 16px;
+    padding: 12px 16px;
 }
 
 .alert-evidence-context {
-    margin-top: 8px;
+    margin-top: 6px;
+    margin-inline-start: 16px;
 }
 
-.alert-evidence-context summary {
+.alert-evidence-context summary,
+.alert-evidence-pending summary {
     min-height: 24px;
     cursor: pointer;
+}
+
+.alert-evidence-context-text {
+    margin-inline-start: 12px;
+    padding-inline-start: 12px;
+    border-inline-start: 2px solid var(--borde);
+}
+
+.alert-evidence-pending {
+    padding-block: 8px;
+    border-block: 1px solid var(--borde);
 }
 
 .alert-detail-options {
@@ -300,4 +333,6 @@ dialog.alert-detail-dialog {
     .alert-detail-header, .alert-detail-body { padding: 14px 16px; }
     .alert-detail-grid { grid-template-columns: 1fr; }
     .alert-detail-transcript { min-height: 0; padding: 12px; font-size: 14px; }
+    .alert-evidence-list blockquote { padding: 12px; }
+    .alert-evidence-list blockquote, .alert-evidence-context { margin-inline-start: 0; }
 }
