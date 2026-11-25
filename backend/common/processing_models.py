@@ -1,6 +1,8 @@
 from django.db.models import TextChoices
 
 JEV_DEFAULT_THRESHOLD = 0.55
+SPEECHMATICS_MODEL_ID_MAX_LENGTH = 80
+SPEECHMATICS_MODEL_ID_PATTERN = r"\A[a-z0-9]+(?:[._-][a-z0-9]+)*\Z"
 
 
 class JevVersion(TextChoices):

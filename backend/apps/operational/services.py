@@ -46,7 +46,7 @@ class OperationalService:
             "smile_legacy_active": bool(config.smile_legacy_sources),
             "options": {
                 "jev_models": JevVersion.values,
-                "speechmatics_models": SpeechmaticsModel.values,
+                "speechmatics_models": list(dict.fromkeys([*SpeechmaticsModel.values, config.speechmatics_model])),
                 "smile_formats": dict(SmileFormat.choices),
                 "smile_timezones": [SMILE_TIMEZONE],
                 "smile_collectors": collector_options(),

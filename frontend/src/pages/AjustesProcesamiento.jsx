@@ -1,6 +1,8 @@
-import { Icon } from "../ui.jsx";
+import { useEffect, useState } from "react";
+import { apiGetDatos } from "../api.js";
+import { Badge, DataTable, Icon } from "../ui.jsx";
 
-export const CAMPOS_MODELOS = ["jev_model", "jev_threshold", "speechmatics_model"];
+export const CAMPOS_MODELOS = ["jev_threshold", "speechmatics_model"];
 export const CAMPOS_SMILE = [
     "smile_collector_id", "smile_source", "smile_url", "smile_interval", "smile_timeout",
     "smile_request_timeout", "smile_format", "smile_boxes",
@@ -13,11 +15,52 @@ const LIMITES = {
 };
 
 const MODELOS = {
-    enhanced: ["Enhanced (predeterminado)", "Mayor precisión con acentos, ruido de fondo y terminología clínica en español. Tiene el costo por minuto más alto de estas opciones."],
-    standard: ["Standard", "Procesamiento más ligero y menor costo por minuto que Enhanced. Adecuado para grabaciones limpias y transcripción general."],
-    "melia-1": ["Melia 1", "Detecta cambios de idioma dentro de la conversación y cuesta menos que Standard según la tarifa pública de Batch. El diccionario personalizado y las puntuaciones de confianza no están disponibles."],
-    "oak-1": ["Oak 1 Medical", "Reconoce terminología clínica en conversaciones multilingües y cuesta menos que Enhanced según la tarifa pública de Batch. El diccionario personalizado y las puntuaciones de confianza no están disponibles."],
+    enhanced: {
+        nombre: "Enhanced", recomendado: true,
+        beneficio: "Prioriza la precisión al transcribir el diálogo terapéutico. Usa el diccionario de términos de psicología de Psycode.",
+    },
+    standard: {
+        nombre: "Standard",
+        beneficio: "Para transcribir más rápido sesiones con voces claras y poco ruido de fondo.",
+    },
+    "melia-1": {
+        nombre: "Melia 1",
+        beneficio: "Para sesiones en las que predomina el relato del paciente en lenguaje cotidiano.",
+    },
+    "oak-1": {
+        nombre: "Oak 1 Medical",
+        beneficio: "Para sesiones en las que se mencionan diagnósticos, medicamentos o abreviaturas clínicas.",
+    },
 };
+
+const USD = new Intl.NumberFormat("es-CL", { style: "currency", currency: "USD", currencyDisplay: "code", useGrouping: "always" });
+const USD_HORA = new Intl.NumberFormat("es-CL", { style: "currency", currency: "USD", currencyDisplay: "code", maximumFractionDigits: 4 });
+const FECHA_TARIFAS = new Intl.DateTimeFormat("es-CL", { dateStyle: "medium", timeZone: "America/Santiago" });
+const NUMERO = new Intl.NumberFormat("es-CL", { useGrouping: "always", maximumFractionDigits: 2 });
+const PUNTAJE_JEV = new Intl.NumberFormat("es-CL", { minimumFractionDigits: 2, maximumFractionDigits: 20 });
+const UMBRAL_INICIAL_JEV = 0.55;
+const PASOS_UMBRAL_JEV = 20;
+const MINUTOS_POR_SESION = 45;
+const HORAS_POR_SESION = MINUTOS_POR_SESION / 60;
+const BOXES_SPEECHMATICS = 5;
+const MAX_SESIONES_POR_BOX = 9;
+const MAX_DIAS_HABILES = 23;
+const UMBRAL_DESCUENTO = 500;
+const PORCENTAJE_DESCUENTO = 20;
+
+function explicarUmbralJev(umbral) {
+    if (umbral === 0) return "Todos los puntajes pasan este filtro, incluso los que están en cero.";
+    if (umbral <= 0.15) return "Pasan incluso señales muy débiles. Pueden aparecer muchas alertas por frases ambiguas.";
+    if (umbral <= 0.25) return "Deja pasar señales débiles. Puede ayudar a captar alusiones indirectas y también generar alertas por frases ambiguas.";
+    if (umbral <= 0.35) return "Filtra las señales más débiles y todavía deja pasar indicios sutiles.";
+    if (umbral <= 0.45) return "Exige un indicio más claro. Algunas alusiones muy sutiles pueden quedar fuera.";
+    if (umbral < UMBRAL_INICIAL_JEV) return "Queda cerca del ajuste inicial y deja pasar algunas señales adicionales.";
+    if (umbral === UMBRAL_INICIAL_JEV) return "Umbral inicial de Psycode.";
+    if (umbral <= 0.65) return "Sube un poco la exigencia. Algunas señales que pasaban con el ajuste inicial quedan fuera.";
+    if (umbral <= 0.75) return "Solo pasan señales con puntajes altos. Pueden quedar fuera indicios reales con puntajes intermedios.";
+    if (umbral === 1) return "Solo pasan las señales que reciben el puntaje máximo.";
+    return "Exige un puntaje muy alto. Incluso algunas señales en frases explícitas pueden quedar fuera.";
+}
 
 export function prepararAjustes(formulario, vigente) {
     const opciones = formulario.options;
@@ -29,19 +72,11 @@ export function prepararAjustes(formulario, vigente) {
 
     const errores = {};
     const payload = Object.fromEntries(campos.map((campo) => [campo, formulario[campo]]));
-    if (campos.includes("jev_model") && !opciones.jev_models.includes(payload.jev_model)) {
-        errores.jev_model = ["Selecciona una versión disponible de Jev."];
-    }
     if (campos.includes("jev_threshold")) {
-        const entrada = String(payload.jev_threshold).trim().replace(",", ".");
-        const valor = Number(entrada);
-        if (!/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(entrada) || valor < 0 || valor > 1) {
-            errores.jev_threshold = ["Ingresa un número entre 0 y 1."];
+        const valor = payload.jev_threshold;
+        if (!Number.isFinite(valor) || valor < 0 || valor > 1) {
+            errores.jev_threshold = ["Selecciona un valor entre 0 y 1."];
         }
-        payload.jev_threshold = valor;
-    }
-    if (campos.includes("speechmatics_model") && !opciones.speechmatics_models.includes(payload.speechmatics_model)) {
-        errores.speechmatics_model = ["Selecciona un modelo disponible de Speechmatics."];
     }
     if (!campos.includes("smile_collector_id")) return { payload, errores };
 
@@ -203,35 +238,177 @@ export function AjustesSmile({ formulario, vigente, actualizar, errores }) {
     );
 }
 
-export function AjustesModelos({ formulario, vigente, actualizar, errores }) {
-    const { options } = formulario;
-    if (!options) return null;
+function ComparadorSpeechmatics({ modelos, modeloSeleccionado, modeloActivo, seleccionar, error, activa }) {
+    const [sesionesPorBox, setSesionesPorBox] = useState(String(MAX_SESIONES_POR_BOX));
+    const [dias, setDias] = useState("22");
+    const [catalogo, setCatalogo] = useState(null);
+    useEffect(() => {
+        if (!activa) return;
+        const controlador = new AbortController();
+        apiGetDatos("/api/v1/configuracion-operativa/speechmatics", { signal: controlador.signal })
+            .then((datos) => {
+                if (!Array.isArray(datos.models)) throw new Error("Catálogo inválido");
+                if (!controlador.signal.aborted) setCatalogo(datos);
+            })
+            .catch(() => {
+                if (!controlador.signal.aborted) {
+                    setCatalogo((anterior) => anterior?.models.length ? { ...anterior, status: "stale" }
+                        : { status: "unavailable", models: [] });
+                }
+            });
+        return () => controlador.abort();
+    }, [activa]);
+
+    const publicados = new Map((catalogo?.models ?? []).map((modelo) => [modelo.id, modelo]));
+    const ids = new Set([...modelos, ...publicados.keys(), modeloActivo, modeloSeleccionado].filter(Boolean));
+    const filas = Array.from(ids, (id) => publicados.get(id) ?? { id, name: MODELOS[id]?.nombre ?? id });
+    let estadoTarifas = "Consultando el catálogo de Speechmatics…";
+    if (catalogo?.fetched_at) {
+        const fecha = FECHA_TARIFAS.format(new Date(catalogo.fetched_at));
+        estadoTarifas = catalogo.status === "stale"
+            ? `No se pudieron actualizar las tarifas. Se muestran las últimas verificadas el ${fecha}.`
+            : `Tarifas consultadas el ${fecha}.`;
+    } else if (catalogo) {
+        estadoTarifas = "No se pudieron verificar las tarifas de Speechmatics. Puedes seguir eligiendo el modelo.";
+    }
+    const diasHabiles = Number(dias);
+    const diasValidos = dias !== "" && Number.isInteger(diasHabiles) && diasHabiles >= 0 && diasHabiles <= MAX_DIAS_HABILES;
+    const errores = diasValidos ? {} : { estimacionDias: [`Ingresa entre 0 y ${MAX_DIAS_HABILES} días hábiles.`] };
+    const horasDiarias = Number(sesionesPorBox) * BOXES_SPEECHMATICS * HORAS_POR_SESION;
+    const horasMensuales = diasValidos ? horasDiarias * diasHabiles : null;
+    const descuento = horasMensuales > UMBRAL_DESCUENTO ? PORCENTAJE_DESCUENTO : 0;
+
     return (
-        <fieldset className="grupo-configuracion">
-            <legend>Transcripción y análisis</legend>
-            <div className="campos-configuracion">
-                <Campo campo="jev_model" titulo="Modelo de Jev" errores={errores} ayuda={`Versión activa de Jev ${vigente.jev_model}.`}>
-                    {(props) => <select {...props} value={formulario.jev_model}
-                        onChange={(evento) => actualizar("jev_model", evento.target.value)}>
-                        {options.jev_models.map((version) => <option key={version} value={version}>Jev {version}</option>)}
-                    </select>}
-                </Campo>
-                <Campo campo="speechmatics_model" titulo="Modelo de Speechmatics" errores={errores}
-                    ayuda={`Modelo activo: ${MODELOS[vigente.speechmatics_model]?.[0] ?? vigente.speechmatics_model}. ${MODELOS[formulario.speechmatics_model]?.[1] ?? ""}`}>
-                    {(props) => <select {...props} value={formulario.speechmatics_model}
-                        onChange={(evento) => actualizar("speechmatics_model", evento.target.value)}>
-                        {options.speechmatics_models.map((modelo) => <option key={modelo} value={modelo}>{MODELOS[modelo]?.[0] ?? modelo}</option>)}
-                    </select>}
-                </Campo>
-                {formulario.jev_threshold != null && (
-                    <Campo campo="jev_threshold" titulo="Umbral de JEV" errores={errores}
-                        ayuda="Puntaje mínimo de JEV para considerar una señal del modelo. Un umbral más bajo admite más señales, que se verifican según su contexto y evidencia. El valor inicial es 0,55 (rango de 0 a 1).">
-                        {(props) => <input {...props} type="text" inputMode="decimal" value={formulario.jev_threshold}
-                            onChange={(evento) => actualizar("jev_threshold", evento.target.value)} />}
+        <div className="configuracion-speechmatics">
+            <fieldset className="seleccion-speechmatics" id="speechmatics_model" tabIndex={-1}
+                aria-invalid={error ? true : undefined} aria-describedby={error ? "speechmatics_model-error" : undefined}>
+                <legend><h3>Modelo de Speechmatics</h3></legend>
+                {error && <p className="error-configuracion" id="speechmatics_model-error">{error}</p>}
+                {filas.length > 0 ? <>
+                    <p className="ayuda-configuracion">Elige un modelo para transcribir las sesiones de psicología en español chileno.</p>
+                    <ul className="estimacion-speechmatics-modelos" role="list">
+                        {filas.map(({ id: modelo, name }) => {
+                            const { beneficio, recomendado } = MODELOS[modelo] ?? {};
+                            const seleccionado = modelo === modeloSeleccionado;
+                            const activo = modelo === modeloActivo;
+                            const campo = `modelo-speechmatics-${modelo}`;
+                            return (
+                                <li key={modelo} className="estimacion-speechmatics-modelo"
+                                    data-seleccionado={seleccionado || undefined}>
+                                    <div className="estimacion-speechmatics-modelo-cabecera">
+                                        <div className="estimacion-speechmatics-modelo-opcion">
+                                            <input id={campo} name="speechmatics_model" type="radio" value={modelo}
+                                                checked={seleccionado} onChange={() => seleccionar(modelo)}
+                                                aria-describedby={[beneficio && `${campo}-beneficio`, (activo || seleccionado || recomendado) && `${campo}-estado`].filter(Boolean).join(" ") || undefined} />
+                                            <h4><label htmlFor={campo}>{name}</label></h4>
+                                        </div>
+                                        {(activo || seleccionado || recomendado) && <div className="estimacion-speechmatics-insignias" id={`${campo}-estado`}>
+                                            {activo && <Badge tone="info">Modelo activo</Badge>}
+                                            {seleccionado && !activo && <Badge tone="warning">Selección sin guardar</Badge>}
+                                            {recomendado && <Badge tone="success">Recomendado</Badge>}
+                                        </div>}
+                                    </div>
+                                    {beneficio && <p className="estimacion-speechmatics-beneficio" id={`${campo}-beneficio`}>{beneficio}</p>}
+                                </li>
+                            );
+                        })}
+                    </ul>
+                </> : <p className="nota-configuracion">No hay modelos de Speechmatics disponibles.</p>}
+            </fieldset>
+            {filas.length > 0 && (
+                <details className="estimacion-speechmatics-costos">
+                    <summary>Ver costos estimados por modelo</summary>
+                    <fieldset className="estimacion-speechmatics-escenario" onKeyDown={(evento) => {
+                        if (evento.key === "Enter") evento.preventDefault();
+                    }}>
+                        <legend>Escenario mensual · {BOXES_SPEECHMATICS} boxes</legend>
+                        <div className="campos-configuracion estimacion-speechmatics-campos">
+                            <Campo campo="estimacionSesiones" errores={errores}
+                                ayuda={`Hasta ${MAX_SESIONES_POR_BOX} sesiones por box, de ${MINUTOS_POR_SESION} minutos cada una.`}
+                                titulo={<>Sesiones diarias por box <span aria-hidden="true">· {sesionesPorBox}</span></>}>
+                                {(props) => <input {...props} type="range" min={0} max={MAX_SESIONES_POR_BOX} step={1} value={sesionesPorBox}
+                                    onChange={(evento) => setSesionesPorBox(evento.target.value)} />}
+                            </Campo>
+                            <Campo campo="estimacionDias" titulo="Días hábiles al mes" errores={errores} ayuda="De lunes a viernes.">
+                                {(props) => <input {...props} type="number" min={0} max={MAX_DIAS_HABILES} step={1} value={dias}
+                                    onChange={(evento) => setDias(evento.target.value)} />}
+                            </Campo>
+                        </div>
+                        <div className="estimacion-speechmatics-total" role="status">
+                            {horasMensuales === null ? <span>Revisa los días hábiles para ver la estimación.</span>
+                                : <div className="estimacion-speechmatics-horas">
+                                    <span><strong>{NUMERO.format(horasMensuales)} h</strong> de audio al mes</span>
+                                    <span>Eso equivale a {NUMERO.format(diasHabiles ? horasDiarias : 0)} h de audio por día hábil entre todos los boxes.</span>
+                                </div>}
+                            {descuento > 0 && <Badge tone="success">
+                                {descuento} % de descuento estimado
+                            </Badge>}
+                        </div>
+                    </fieldset>
+                    <p className="estado-tarifas-speechmatics" role="status">{estadoTarifas}</p>
+                    {catalogo?.models.length > 0 && <DataTable label="Costos estimados de Speechmatics" className="estimacion-speechmatics-tabla">
+                        <thead><tr>
+                            <th scope="col">Modelo</th><th scope="col">Por hora</th><th scope="col">Al mes</th>
+                        </tr></thead>
+                        <tbody>{filas.map(({ id, name, usd_per_hour: tarifa }) => {
+                            const subtotal = horasMensuales !== null && tarifa != null ? horasMensuales * tarifa : null;
+                            return <tr key={id}>
+                                <th scope="row">{name}</th>
+                                <td>{tarifa == null ? "Sin tarifa" : USD_HORA.format(tarifa)}</td>
+                                <td>{subtotal === null ? "—" : USD.format(subtotal * (100 - descuento) / 100)}
+                                    {descuento > 0 && subtotal !== null && <small>Sin descuento: {USD.format(subtotal)}</small>}
+                                </td>
+                            </tr>;
+                        })}</tbody>
+                    </DataTable>}
+                    <p className="estimacion-speechmatics-fuente">
+                        La proyección supone que se transcribe todo el audio con tarifas Batch en USD antes de impuestos.
+                        Si el escenario supera {UMBRAL_DESCUENTO} h al mes, se estima un {PORCENTAJE_DESCUENTO} % de descuento. Su aplicación a la factura depende del contrato.
+                        {" "}<a href="https://www.speechmatics.com/pricing.md" target="_blank" rel="noreferrer">Tarifas públicas de Speechmatics</a>
+                    </p>
+                </details>
+            )}
+        </div>
+    );
+}
+
+export function AjustesModelos({ formulario, vigente, actualizar, errores, activa }) {
+    const { options, jev_threshold: umbral } = formulario;
+    if (!options) return null;
+    const umbralSelector = Math.round(umbral * PASOS_UMBRAL_JEV) / PASOS_UMBRAL_JEV;
+    const ayudaUmbral = `Versión activa ${vigente.jev_model} · Umbral guardado ${PUNTAJE_JEV.format(vigente.jev_threshold)}`;
+    return (
+        <>
+            <ComparadorSpeechmatics modelos={options.speechmatics_models} modeloSeleccionado={formulario.speechmatics_model}
+                modeloActivo={vigente.speechmatics_model} seleccionar={(modelo) => actualizar("speechmatics_model", modelo)}
+                error={errores.speechmatics_model?.join(" ")} activa={activa} />
+            {umbral != null && <fieldset className="grupo-configuracion umbral-jev">
+                <legend>Análisis con JEV</legend>
+                <div className="umbral-jev-panel">
+                    <Campo campo="jev_threshold" errores={errores}
+                        titulo={<>Umbral de JEV <span aria-hidden="true">· {PUNTAJE_JEV.format(umbral)}</span></>}
+                        ayuda={umbral === umbralSelector ? ayudaUmbral
+                            : `${ayudaUmbral}. El selector se mueve en pasos de 0,05. El valor guardado se conserva hasta que ajustes el selector y guardes.`}>
+                        {(props) => <div>
+                            <input {...props} type="range" min={0} max={1} step={1 / PASOS_UMBRAL_JEV} value={umbralSelector}
+                                aria-valuetext={PUNTAJE_JEV.format(umbralSelector)}
+                                onChange={(evento) => actualizar("jev_threshold", evento.target.valueAsNumber)} />
+                            <div className="umbral-jev-escala" aria-hidden="true">
+                                <span>0 · Más sensible</span>
+                                <span>1 · Más estricto</span>
+                            </div>
+                        </div>}
                     </Campo>
-                )}
-            </div>
-        </fieldset>
+                    <div className="nota-configuracion">
+                        <Icon name="info" />
+                        <div>
+                            <p role="status">{explicarUmbralJev(umbral)}</p>
+                            <p>Para pasar el filtro, el puntaje debe ser {PUNTAJE_JEV.format(umbral)} o más. El sistema también verifica la evidencia y el contexto.</p>
+                        </div>
+                    </div>
+                </div>
+            </fieldset>}
+        </>
     );
 }
 

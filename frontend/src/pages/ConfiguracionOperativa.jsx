@@ -32,7 +32,6 @@ function seccionDesdeURL() {
 function formularioDesdeConfiguracion(configuracion) {
     return {
         ...configuracion,
-        jev_threshold: configuracion.jev_threshold?.toLocaleString("es-CL", { maximumSignificantDigits: 17 }),
         enabled_days: (configuracion.enabled_days ?? []).map(Number),
         open_time: configuracion.open_time ?? "",
         close_time: configuracion.close_time ?? "",
@@ -396,7 +395,8 @@ export default function ConfiguracionOperativa() {
                                         </div>
                                     </header>
                                     <div className="configuracion-seccion-cuerpo">
-                                        <Contenido formulario={formulario} vigente={vigente} actualizar={actualizar} errores={errores} />
+                                        <Contenido formulario={formulario} vigente={vigente} actualizar={actualizar} errores={errores}
+                                            activa={id === activa} />
                                     </div>
                                 </section>
                             ))}

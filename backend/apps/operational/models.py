@@ -1,8 +1,10 @@
 from django.conf import settings
-from django.core.validators import MaxValueValidator, MinValueValidator
+from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
 from django.db import models
 
-from backend.common.processing_models import JEV_DEFAULT_THRESHOLD, JevVersion, SpeechmaticsModel
+from backend.common.processing_models import (
+    JEV_DEFAULT_THRESHOLD, SPEECHMATICS_MODEL_ID_MAX_LENGTH, SPEECHMATICS_MODEL_ID_PATTERN, JevVersion, SpeechmaticsModel,
+)
 
 
 class NotificationMode(models.TextChoices):
@@ -46,7 +48,8 @@ class OperationalConfiguration(models.Model):
         default=JEV_DEFAULT_THRESHOLD, validators=[MinValueValidator(0), MaxValueValidator(1)],
     )
     speechmatics_model = models.CharField(
-        max_length=8, choices=SpeechmaticsModel.choices, default=SpeechmaticsModel.ENHANCED,
+        max_length=SPEECHMATICS_MODEL_ID_MAX_LENGTH, default=SpeechmaticsModel.ENHANCED,
+        validators=[RegexValidator(SPEECHMATICS_MODEL_ID_PATTERN)],
     )
     smile_collector = models.ForeignKey("capture.AgentRegistration", on_delete=models.SET_NULL, null=True, blank=True)
     smile_source = models.CharField(max_length=64, default="smile")
@@ -81,8 +84,8 @@ class OperationalConfiguration(models.Model):
                 condition=models.Q(jev_threshold__range=(0, 1)), name="operational_valid_jev_threshold",
             ),
             models.CheckConstraint(
-                condition=models.Q(speechmatics_model__in=SpeechmaticsModel.values),
-                name="operational_valid_speechmatics_model",
+                condition=models.Q(speechmatics_model__regex=SPEECHMATICS_MODEL_ID_PATTERN),
+                name="operational_valid_speechmatics_model_id",
             ),
             models.CheckConstraint(
                 condition=(models.Q(smile_format__in=SmileFormat.values, smile_interval__range=(1, 86400),

@@ -464,8 +464,14 @@ El trabajador lee `jev_threshold` al iniciar cada fragmento y conserva ese
 valor si el fragmento se reintenta. Se mantienen las verificaciones de
 contexto y evidencia.
 
-Incluye `jev_model` (`1.14` o `1.13`) y `speechmatics_model`
-(`enhanced`, `standard`, `melia-1` u `oak-1`). El perfil de Smile incluye
+Incluye `jev_model` (`1.14` o `1.13`) y `speechmatics_model`, el identificador
+Batch seleccionado. Se admiten hasta 80 caracteres ASCII con letras minúsculas
+y números, separados opcionalmente por `-`, `_` o `.`. Guardar el identificador
+no hace una solicitud de transcripción. `options.speechmatics_models` incluye
+los modelos iniciales y el activo. El catálogo público se consulta en
+`GET /api/v1/configuracion-operativa/speechmatics`.
+
+El perfil de Smile incluye
 `smile_collector_id` (UUID registrado o `null` para desactivar), `smile_source`,
 `smile_url`, `smile_interval`, `smile_timeout`, `smile_request_timeout`,
 `smile_format`, `smile_timezone` y `smile_boxes`. Smile usa la zona fija
